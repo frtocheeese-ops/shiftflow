@@ -10,14 +10,14 @@ service cloud.firestore {
 
     match /users/{userId} {
       allow read: if isAuth();
-      allow create: if isAuth() && request.auth.uid == userId;
+      allow create: if isAuth();
       allow update: if isAuth() && (request.auth.uid == userId || isAdmin());
       allow delete: if isAdmin();
     }
 
     match /schedules/{weekId} {
       allow read: if isAuth();
-      allow write: if isAdmin();
+      allow write: if isAuth();
     }
 
     match /swapRequests/{requestId} {

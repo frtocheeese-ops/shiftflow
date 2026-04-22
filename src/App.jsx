@@ -189,10 +189,11 @@ export default function App() {
 
   const moveEmp = async (eid,fd,fs,td,ts) => { const s=dc(curSched);const from=s[fd]?.[fs];if(!from)return;const i=from.findIndex(e=>e.empId===eid);if(i===-1)return;const[en]=from.splice(i,1);en.isDefault=false;if(!s[td])s[td]={};if(!s[td][ts])s[td][ts]=[];s[td][ts].push(en);await saveSched(s);const emp=getEmp(eid);const msg=`${emp?.name}: ${fd} ${fs} → ${td} ${ts}`;notify(msg);log(msg);emailNotif(emp,msg); };
   const toggleHO = async (day,sh,eid) => { const s=dc(curSched);const en=s[day]?.[sh]?.find(e=>e.empId===eid);if(en){en.ho=!en.ho;en.isDefault=false;}await saveSched(s);const emp=getEmp(eid);const msg=`${emp?.name}: HO ${en?.ho?"✓":"✗"} (${day} ${sh})`;notify(msg);log(msg);emailNotif(emp,msg); };
-  const addAbsence = async (eid,day,type) => { const s=dc(curSched);SHIFTS.forEach(sh=>{if(s[day]?.[sh])s[day][sh]=s[day][sh].filter(e=>e.empId!==eid);});await saveSched(s);await setDoc(doc(db,"schedules",wk),{[`absences.${eid}-${day}`]:type},{merge:true});const emp=getEmp(eid);if(emp){const field=type==="sick"?"sickUsed":type==="vacation"?"vacationUsed":type==="whatever"?"whateverUsed":null;if(field)await updateDoc(doc(db,"users",eid),{[field]:(emp[field]||0)+1});}const al=ABSENCE_TYPES.find(a=>a.id===type)?.label;const msg=`${emp?.name}: ${al} (${day})`;notify(msg);log(msg);emailNotif(emp,msg); };
+  const addAbsence = async (eid,day,type) => { if(!isAdmin && eid!==profile.id) return; const s=dc(curSched);SHIFTS.forEach(sh=>{if(s[day]?.[sh])s[day][sh]=s[day][sh].filter(e=>e.empId!==eid);});await saveSched(s);await setDoc(doc(db,"schedules",wk),{[`absences.${eid}-${day}`]:type},{merge:true});const emp=getEmp(eid);if(emp){const field=type==="sick"?"sickUsed":type==="vacation"?"vacationUsed":type==="whatever"?"whateverUsed":null;if(field)await updateDoc(doc(db,"users",eid),{[field]:(emp[field]||0)+1});}const al=ABSENCE_TYPES.find(a=>a.id===type)?.label;const msg=`${emp?.name}: ${al} (${day})`;notify(msg);log(msg);emailNotif(emp,msg); };
   const addEvent = async (day,eventType,note) => { await setDoc(doc(db,"schedules",wk),{[`events.${day}`]:{type:eventType,note,title:EVENT_TYPES.find(e=>e.id===eventType)?.label}},{merge:true});const msg=`Událost: ${EVENT_TYPES.find(e=>e.id===eventType)?.label} — ${day}`;notify(msg);log(msg); };
   const createSwap = async (rid,day,sh) => { await addDoc(collection(db,"swapRequests"),{rid,day,sh,week:wk,status:"open",created:new Date().toISOString()});notify(`Výměna: ${getEmp(rid)?.name} – ${day} ${sh}`);log(`Swap: ${getEmp(rid)?.name} – ${day} ${sh}`); };
   const acceptSwap = async (swId,aid) => { const sw=swaps.find(s=>s.id===swId);if(!sw)return;await updateDoc(doc(db,"swapRequests",swId),{status:"done",aid,resolvedAt:new Date().toISOString()});const s=dc(curSched);let aDay,aSh;DAYS.forEach(d=>SHIFTS.forEach(sh=>{if(s[d]?.[sh]?.some(e=>e.empId===aid)&&!aDay){aDay=d;aSh=sh;}}));if(aDay&&aSh&&s[sw.day]?.[sw.sh]){const ri=s[sw.day][sw.sh].findIndex(e=>e.empId===sw.rid);const ai=s[aDay][aSh].findIndex(e=>e.empId===aid);if(ri!==-1&&ai!==-1){const rE=s[sw.day][sw.sh][ri];const aE=s[aDay][aSh][ai];s[sw.day][sw.sh][ri]={...aE,isDefault:false};s[aDay][aSh][ai]={...rE,isDefault:false};await saveSched(s);}}const re=getEmp(sw.rid);const ae=getEmp(aid);const msg=`Výměna: ${re?.name} ↔ ${ae?.name}`;notify(msg);log(msg);emailNotif(re,msg);emailNotif(ae,msg); };
+  const deleteUser = async (eid) => { if(!isAdmin) return; if(!confirm(`Opravdu smazat ${getEmp(eid)?.name}?`)) return; await deleteDoc(doc(db,"users",eid)); notify(`Zaměstnanec smazán`); log(`Smazán: ${getEmp(eid)?.name}`); };
   const exportCSV = () => { let csv="\ufeffDen,Směna,Zaměstnanec,Tým,HO\n";DAYS.forEach(day=>{SHIFTS.forEach(sh=>{(curSched[day]?.[sh]||[]).forEach(en=>{const e=getEmp(en.empId);if(e)csv+=`${day},${sh},${e.name},${e.team},${en.ho?"Ano":"Ne"}\n`;});});});const b=new Blob([csv],{type:"text/csv;charset=utf-8;"});const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.download=`rozvrh_${wk}.csv`;a.click();URL.revokeObjectURL(u); };
 
   if (authUser===undefined) return <div style={{ minHeight:"100vh", background:"#080818", display:"flex", alignItems:"center", justifyContent:"center", color:"#64748b", fontFamily:"'DM Sans',sans-serif" }}><div style={{ textAlign:"center" }}><div style={{ fontSize:48, marginBottom:12, animation:"pulse 1.5s infinite" }}>📅</div>Načítání…</div></div>;
@@ -228,7 +229,7 @@ export default function App() {
               <Pill active={teamFilter==="L1"} onClick={()=>setTeamFilter("L1")} color="#6366f1" count={employees.filter(e=>e.team==="L1"&&e.setupDone).length}>L1</Pill>
               <Pill active={teamFilter==="SD"} onClick={()=>setTeamFilter("SD")} color="#06b6d4" count={employees.filter(e=>e.team==="SD"&&e.setupDone).length}>SD</Pill>
             </div>
-            <div style={{ display:"flex", gap:6 }}>{isAdmin&&<><Btn small onClick={()=>setModal("absence")}>+ Nepřít.</Btn><Btn small onClick={()=>setModal("event")}>+ Událost</Btn></>}<Btn small ghost onClick={exportCSV}>📥 CSV</Btn></div>
+            <div style={{ display:"flex", gap:6 }}>{isAdmin&&<><Btn small onClick={()=>setModal("absence")}>+ Nepřít.</Btn><Btn small onClick={()=>setModal("event")}>+ Událost</Btn></>}{!isAdmin&&<Btn small onClick={()=>setModal("myabsence")}>📋 Moje nepřítomnost</Btn>}<Btn small ghost onClick={exportCSV}>📥 CSV</Btn></div>
           </div>
           {allWarn.length>0&&<Card style={{ marginBottom:14,borderColor:"rgba(239,68,68,0.25)",background:"rgba(239,68,68,0.04)",padding:12 }}><div style={{ fontSize:12,fontWeight:700,color:"#fca5a5",marginBottom:4 }}>⚠️ Porušení ({allWarn.length})</div>{allWarn.map((w,i)=><div key={i} style={{ fontSize:11,color:"#fca5a5",padding:"1px 0" }}>• {w}</div>)}</Card>}
           <div style={{ overflowX:"auto", borderRadius:14, border:"1px solid rgba(255,255,255,0.06)" }}>
@@ -241,7 +242,7 @@ export default function App() {
                   return<div key={`${day}-${shift}`} style={{ background:"rgba(255,255,255,0.015)",padding:4,minHeight:62,borderLeft:"1px solid rgba(255,255,255,0.03)",borderBottom:"1px solid rgba(255,255,255,0.04)" }}
                     onDragOver={e=>{if(isAdmin){e.preventDefault();e.currentTarget.style.background="rgba(99,102,241,0.08)";}}} onDragLeave={e=>{e.currentTarget.style.background="rgba(255,255,255,0.015)";}} onDrop={e=>{e.currentTarget.style.background="rgba(255,255,255,0.015)";if(!isAdmin)return;try{const d=JSON.parse(e.dataTransfer.getData("text/plain"));if(d.day!==day||d.shift!==shift)moveEmp(d.empId,d.day,d.shift,day,shift);}catch{}}}>
                     {entries.map(en=>{const emp=getEmp(en.empId);if(!emp)return null;const ch=isChanged(day,shift,en.empId);const tc=emp.team==="L1"?"#6366f1":"#06b6d4";
-                      return<div key={en.empId} className={`ent ${ch?"chg":""}`} draggable={isAdmin} onDragStart={e=>isAdmin&&e.dataTransfer.setData("text/plain",JSON.stringify({empId:en.empId,day,shift}))} onClick={()=>isAdmin?setSelectedCell({day,shift,empId:en.empId}):profile.id===en.empId&&setModal({type:"swap",day,shift})} style={{ display:"flex",alignItems:"center",gap:4,padding:"3px 6px",borderRadius:7,marginBottom:2,background:ch?"rgba(99,102,241,0.1)":"rgba(255,255,255,0.03)",border:`1px solid ${ch?"rgba(99,102,241,0.25)":"rgba(255,255,255,0.05)"}`,fontSize:11 }}>
+                      return<div key={en.empId} className={`ent ${ch?"chg":""}`} draggable={isAdmin} onDragStart={e=>isAdmin&&e.dataTransfer.setData("text/plain",JSON.stringify({empId:en.empId,day,shift}))} onClick={()=>isAdmin?setSelectedCell({day,shift,empId:en.empId}):profile.id===en.empId&&setModal({type:"myshift",day,shift})} style={{ display:"flex",alignItems:"center",gap:4,padding:"3px 6px",borderRadius:7,marginBottom:2,background:ch?"rgba(99,102,241,0.1)":"rgba(255,255,255,0.03)",border:`1px solid ${ch?"rgba(99,102,241,0.25)":"rgba(255,255,255,0.05)"}`,fontSize:11 }}>
                         <span style={{ width:5,height:5,borderRadius:"50%",background:tc,flexShrink:0 }}/><span style={{ fontWeight:600,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>{emp.name?.split(" ").pop()}</span>{en.ho&&<Badge small color="#22c55e">HO</Badge>}{ch&&<span style={{ fontSize:8,color:"#a5b4fc" }}>✦</span>}
                       </div>;})}
                   </div>;})}
@@ -268,10 +269,19 @@ export default function App() {
         </div>}
 
         {view==="people"&&<div style={{ animation:"fadeIn .3s" }}>
-          <h2 style={{ fontSize:20,fontWeight:800,marginBottom:18 }}>👥 Tým</h2>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:18 }}>
+            <h2 style={{ fontSize:20,fontWeight:800,margin:0 }}>👥 Tým</h2>
+            {isAdmin&&<Btn primary onClick={()=>setModal("addMember")}>+ Přidat člena</Btn>}
+          </div>
           {["L1","SD"].map(team=><div key={team} style={{ marginBottom:24 }}><h3 style={{ fontSize:14,fontWeight:700,color:team==="L1"?"#a5b4fc":"#67e8f9",marginBottom:10 }}>{TEAMS[team]}</h3>
             <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:10 }}>{employees.filter(e=>e.team===team&&e.role!=="admin").map(emp=><Card key={emp.id}>
-              <div style={{ display:"flex",justifyContent:"space-between",alignItems:"start" }}><div><div style={{ fontWeight:700,fontSize:14 }}>{emp.name}</div><div style={{ display:"flex",gap:4,marginTop:3 }}><Badge small color={team==="L1"?"#6366f1":"#06b6d4"}>{team}</Badge>{emp.notify&&<Badge small color="#22c55e">📧</Badge>}{!emp.setupDone&&<Badge small color="#f59e0b">Bez rozvrhu</Badge>}</div></div><div style={{ width:34,height:34,borderRadius:"50%",background:`linear-gradient(135deg,${team==="L1"?"#6366f1,#8b5cf6":"#06b6d4,#22d3ee"})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700 }}>{(emp.name||"?").charAt(0)}</div></div>
+              <div style={{ display:"flex",justifyContent:"space-between",alignItems:"start" }}>
+                <div><div style={{ fontWeight:700,fontSize:14 }}>{emp.name}</div><div style={{ display:"flex",gap:4,marginTop:3 }}><Badge small color={team==="L1"?"#6366f1":"#06b6d4"}>{team}</Badge>{emp.notify&&<Badge small color="#22c55e">📧</Badge>}{!emp.setupDone&&<Badge small color="#f59e0b">Bez rozvrhu</Badge>}</div></div>
+                <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                  {isAdmin&&<button onClick={()=>deleteUser(emp.id)} title="Smazat" style={{ background:"none",border:"none",color:"#ef4444",cursor:"pointer",fontSize:14,padding:2,opacity:0.6 }}>🗑️</button>}
+                  <div style={{ width:34,height:34,borderRadius:"50%",background:`linear-gradient(135deg,${team==="L1"?"#6366f1,#8b5cf6":"#06b6d4,#22d3ee"})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700 }}>{(emp.name||"?").charAt(0)}</div>
+                </div>
+              </div>
               {emp.setupDone&&emp.defaultSchedule&&<div style={{ marginTop:10, display:"flex", gap:4, flexWrap:"wrap" }}>{DAYS.map(d=><div key={d} style={{ textAlign:"center", padding:"3px 6px", borderRadius:6, background:"rgba(255,255,255,0.03)", fontSize:10 }}><div style={{ color:"#64748b", fontWeight:600 }}>{d}</div><div style={{ color:"#a5b4fc", fontFamily:"'JetBrains Mono',monospace" }}>{emp.defaultSchedule[d]||"—"}</div></div>)}</div>}
               <div style={{ marginTop:10,display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6 }}>{[{l:"Dovolená",v:(emp.vacationTotal||20)-(emp.vacationUsed||0),c:"#06b6d4"},{l:"Sick",v:(emp.sickTotal||5)-(emp.sickUsed||0),c:"#ef4444"},{l:"Whatever",v:(emp.whateverTotal||3)-(emp.whateverUsed||0),c:"#8b5cf6"}].map(b=><div key={b.l} style={{ textAlign:"center",padding:5,borderRadius:8,background:b.c+"0d" }}><div style={{ fontSize:17,fontWeight:800,color:b.c }}>{b.v}</div><div style={{ fontSize:9,color:"#475569" }}>{b.l}</div></div>)}</div>
             </Card>)}</div></div>)}
@@ -302,6 +312,29 @@ export default function App() {
       <Modal open={modal==="absence"} onClose={()=>setModal(null)} title="Nepřítomnost"><AbsForm emps={employees.filter(e=>e.role!=="admin"&&(teamFilter==="all"||e.team===teamFilter))} onSubmit={(eid,day,t)=>{addAbsence(eid,day,t);setModal(null);}}/></Modal>
       <Modal open={modal==="event"} onClose={()=>setModal(null)} title="Událost"><EvForm onSubmit={(d,t,n)=>{addEvent(d,t,n);setModal(null);}}/></Modal>
       <Modal open={modal?.type==="swap"} onClose={()=>setModal(null)} title="Žádost o výměnu"><SwForm dDay={modal?.day} dShift={modal?.shift} onSubmit={(d,s)=>{createSwap(profile.id,d,s);setModal(null);}}/></Modal>
+
+      {/* Employee: my shift actions */}
+      <Modal open={modal?.type==="myshift"} onClose={()=>setModal(null)} title="Moje směna">
+        <div>
+          <p style={{ fontSize:13, color:"#94a3b8", marginBottom:16 }}>{modal?.day} · {modal?.shift}</p>
+          <div style={{ fontSize:12, color:"#64748b", marginBottom:6, fontWeight:600 }}>Zadat nepřítomnost</div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6, marginBottom:16 }}>
+            {ABSENCE_TYPES.map(a => <Btn key={a.id} small onClick={()=>{addAbsence(profile.id,modal.day,a.id);setModal(null);}}>{a.icon} {a.label}</Btn>)}
+          </div>
+          <div style={{ fontSize:12, color:"#64748b", marginBottom:6, fontWeight:600 }}>Nebo</div>
+          <Btn primary onClick={()=>setModal({type:"swap",day:modal?.day,shift:modal?.shift})} style={{ width:"100%" }}>🔄 Požádat o výměnu</Btn>
+        </div>
+      </Modal>
+
+      {/* Employee: self-service absence (from toolbar) */}
+      <Modal open={modal==="myabsence"} onClose={()=>setModal(null)} title="Moje nepřítomnost">
+        <MyAbsenceForm profile={profile} onSubmit={(day,type)=>{addAbsence(profile.id,day,type);setModal(null);}} />
+      </Modal>
+
+      {/* Admin: add member */}
+      <Modal open={modal==="addMember"} onClose={()=>setModal(null)} title="Přidat člena">
+        <AddMemberForm onDone={(msg)=>{notify(msg);log(msg);setModal(null);}} />
+      </Modal>
     </div>
   );
 }
@@ -309,3 +342,33 @@ export default function App() {
 function AbsForm({emps,onSubmit}){const[eid,setEid]=useState(emps[0]?.id||"");const[day,setDay]=useState(DAYS[0]);const[t,setT]=useState(ABSENCE_TYPES[0].id);return<div><Select label="Zaměstnanec" value={eid} onChange={e=>setEid(e.target.value)} options={emps.map(e=>({value:e.id,label:e.name}))}/><Select label="Den" value={day} onChange={e=>setDay(e.target.value)} options={DAYS.map((d,i)=>({value:d,label:DAYS_FULL[i]}))}/><Select label="Typ" value={t} onChange={e=>setT(e.target.value)} options={ABSENCE_TYPES.map(a=>({value:a.id,label:`${a.icon} ${a.label}`}))}/><Btn primary onClick={()=>onSubmit(eid,day,t)} style={{marginTop:8}}>Přidat</Btn></div>;}
 function EvForm({onSubmit}){const[day,setDay]=useState(DAYS[0]);const[t,setT]=useState(EVENT_TYPES[0].id);const[n,setN]=useState("");return<div><Select label="Den" value={day} onChange={e=>setDay(e.target.value)} options={DAYS.map((d,i)=>({value:d,label:DAYS_FULL[i]}))}/><Select label="Typ" value={t} onChange={e=>setT(e.target.value)} options={EVENT_TYPES.map(e=>({value:e.id,label:`${e.icon} ${e.label}`}))}/><Input label="Poznámka" value={n} onChange={e=>setN(e.target.value)}/><Btn primary onClick={()=>onSubmit(day,t,n)} style={{marginTop:8}}>Přidat</Btn></div>;}
 function SwForm({dDay,dShift,onSubmit}){const[day,setDay]=useState(dDay||DAYS[0]);const[sh,setSh]=useState(dShift||SHIFTS[0]);return<div><p style={{fontSize:13,color:"#94a3b8",margin:"0 0 12px"}}>Kdokoliv ji může přijmout – směny se automaticky prohodí.</p><Select label="Den" value={day} onChange={e=>setDay(e.target.value)} options={DAYS.map((d,i)=>({value:d,label:DAYS_FULL[i]}))}/><Select label="Směna" value={sh} onChange={e=>setSh(e.target.value)} options={SHIFTS.map(s=>({value:s,label:s}))}/><Btn primary onClick={()=>onSubmit(day,sh)} style={{marginTop:8,width:"100%"}}>Odeslat žádost</Btn></div>;}
+
+function MyAbsenceForm({profile,onSubmit}){const[day,setDay]=useState(DAYS[0]);const[t,setT]=useState(ABSENCE_TYPES[0].id);
+  const remaining = {sick:(profile.sickTotal||5)-(profile.sickUsed||0),vacation:(profile.vacationTotal||20)-(profile.vacationUsed||0),whatever:(profile.whateverTotal||3)-(profile.whateverUsed||0)};
+  return<div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:16}}>{[{l:"Dovolená",v:remaining.vacation,c:"#06b6d4"},{l:"Sick",v:remaining.sick,c:"#ef4444"},{l:"Whatever",v:remaining.whatever,c:"#8b5cf6"}].map(b=><div key={b.l} style={{textAlign:"center",padding:8,borderRadius:8,background:b.c+"0d"}}><div style={{fontSize:20,fontWeight:800,color:b.c}}>{b.v}</div><div style={{fontSize:10,color:"#475569"}}>{b.l}</div></div>)}</div>
+    <Select label="Den" value={day} onChange={e=>setDay(e.target.value)} options={DAYS.map((d,i)=>({value:d,label:DAYS_FULL[i]}))}/>
+    <Select label="Typ nepřítomnosti" value={t} onChange={e=>setT(e.target.value)} options={ABSENCE_TYPES.map(a=>({value:a.id,label:`${a.icon} ${a.label}`}))}/>
+    {(t==="sick"&&remaining.sick<=0)||(t==="vacation"&&remaining.vacation<=0)||(t==="whatever"&&remaining.whatever<=0)?<p style={{color:"#fca5a5",fontSize:12,margin:"0 0 8px"}}>⚠️ Nemáte zbývající dny tohoto typu</p>:null}
+    <Btn primary onClick={()=>onSubmit(day,t)} style={{marginTop:8,width:"100%"}}>Zadat nepřítomnost</Btn>
+  </div>;}
+
+function AddMemberForm({onDone}){const[name,setName]=useState("");const[email,setEmail]=useState("");const[pass,setPass]=useState("");const[team,setTeam]=useState("L1");const[loading,setLoading]=useState(false);const[err,setErr]=useState("");
+  const submit=async()=>{setErr("");if(!name.trim()||!email||!pass){setErr("Vyplňte všechna pole");return;}if(pass.length<6){setErr("Heslo min. 6 znaků");return;}setLoading(true);
+    try{
+      // Create via secondary auth to not log out admin
+      const resp=await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${import.meta.env.VITE_FIREBASE_API_KEY}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email,password:pass,displayName:name.trim(),returnSecureToken:false})});
+      const data=await resp.json();
+      if(data.error){setErr(data.error.message);setLoading(false);return;}
+      await setDoc(doc(db,"users",data.localId),{name:name.trim(),email,team,role:"employee",notify:false,notifyEmail:"",fcmToken:null,defaultSchedule:null,setupDone:false,vacationTotal:20,sickTotal:5,whateverTotal:3,vacationUsed:0,sickUsed:0,whateverUsed:0,createdAt:new Date().toISOString()});
+      onDone(`Přidán: ${name.trim()}`);
+    }catch(e){setErr(e.message);}setLoading(false);};
+  return<div>
+    <Input label="Jméno *" value={name} onChange={e=>setName(e.target.value)} placeholder="Jan Novák"/>
+    <Input label="Email *" value={email} onChange={e=>setEmail(e.target.value)} placeholder="jan@firma.cz"/>
+    <Input label="Heslo * (min. 6 znaků)" type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="Počáteční heslo"/>
+    <Select label="Tým *" value={team} onChange={e=>setTeam(e.target.value)} options={[{value:"L1",label:"L1 Support"},{value:"SD",label:"Service Desk"}]}/>
+    {err&&<p style={{color:"#fca5a5",fontSize:12,margin:"0 0 8px",padding:"6px 10px",borderRadius:8,background:"rgba(239,68,68,0.1)"}}>{err}</p>}
+    <Btn primary disabled={loading} onClick={submit} style={{width:"100%",marginTop:4}}>{loading?"Vytvářím...":"Přidat zaměstnance"}</Btn>
+    <p style={{fontSize:11,color:"#475569",marginTop:8}}>Zaměstnanec se přihlásí svým emailem a heslem. Při prvním přihlášení si nastaví stálý rozvrh.</p>
+  </div>;}
