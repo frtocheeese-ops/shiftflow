@@ -19,12 +19,14 @@ import { getFirestore, doc, setDoc } from 'firebase/firestore';
 // VYPLŇTE SVÉ FIREBASE HODNOTY:
 // ══════════════════════════════════════
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyB1ZgDlnSVsB3Iu_e0dUAyHg5E9Qbe9zD0",
+  authDomain: "shifts-79d6c.firebaseapp.com",
+  databaseURL: "https://shifts-79d6c-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "shifts-79d6c",
+  storageBucket: "shifts-79d6c.firebasestorage.app",
+  messagingSenderId: "355126494464",
+  appId: "1:355126494464:web:d12d8341a4b2b49dbd9fe5",
+  measurementId: "G-0ZG5L6QJP7"
 };
 
 const ADMIN_EMAIL = "admin@shiftflow.app";
