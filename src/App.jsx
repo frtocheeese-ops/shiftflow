@@ -28,14 +28,15 @@ const CSS=`
 /* LIGHT THEME (Starfield character creation) */
 :root, [data-theme="light"] {
   --bg: #bec4d0;
-  --bg2: rgba(195,200,212,.55);
-  --bg3: rgba(185,192,208,.45);
-  --bg4: rgba(175,182,200,.5);
-  --panel: rgba(200,206,218,.65);
-  --card: rgba(190,198,214,.5);
-  --card-h: rgba(180,188,206,.65);
-  --brd: rgba(90,100,125,.18);
-  --brd2: rgba(70,80,105,.25);
+  --bg2: rgba(195,200,212,.6);
+  --bg3: rgba(185,192,208,.5);
+  --bg4: rgba(175,182,200,.55);
+  --panel: rgba(200,206,218,.72);
+  --card: rgba(190,198,214,.55);
+  --card-h: rgba(180,188,206,.7);
+  --brd: rgba(50,60,85,.35);
+  --brd2: rgba(40,50,75,.45);
+  --brd-thick: rgba(35,45,70,.55);
   --tx: #2e3440;
   --tx2: #555e70;
   --tx3: #7a8290;
@@ -51,7 +52,8 @@ const CSS=`
   --sel: #2e3848;
   --sel-tx: #e8eaf0;
   --blur: blur(20px);
-  --glass: rgba(200,206,218,.7);
+  --glass: rgba(200,206,218,.75);
+  --moon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='800'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='.012' numOctaves='8' seed='3' type='fractalNoise'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='.18' intercept='.68'/%3E%3CfeFuncG type='linear' slope='.18' intercept='.7'/%3E%3CfeFuncB type='linear' slope='.18' intercept='.76'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3Ccircle cx='120' cy='180' r='45' fill='rgba(0,0,0,.06)' /%3E%3Ccircle cx='380' cy='100' r='70' fill='rgba(0,0,0,.05)' /%3E%3Ccircle cx='550' cy='300' r='85' fill='rgba(0,0,0,.045)' /%3E%3Ccircle cx='250' cy='420' r='55' fill='rgba(0,0,0,.055)' /%3E%3Ccircle cx='650' cy='550' r='40' fill='rgba(0,0,0,.04)' /%3E%3Ccircle cx='80' cy='600' r='60' fill='rgba(0,0,0,.05)' /%3E%3Ccircle cx='450' cy='650' r='35' fill='rgba(0,0,0,.035)' /%3E%3Ccircle cx='700' cy='150' r='50' fill='rgba(0,0,0,.04)' /%3E%3Ccircle cx='300' cy='250' r='25' fill='rgba(0,0,0,.045)' /%3E%3Ccircle cx='180' cy='700' r='30' fill='rgba(0,0,0,.04)' /%3E%3C/svg%3E");
 }
 
 /* DARK THEME */
@@ -81,10 +83,12 @@ const CSS=`
   --sel-tx: #e8eaf0;
   --blur: blur(16px);
   --glass: rgba(16,16,26,.8);
+  --brd-thick: rgba(255,255,255,.1);
+  --moon: none;
 }
 
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-body{background:var(--bg);transition:background .4s}
+body{background:var(--bg);background-image:var(--moon);background-size:cover;background-attachment:fixed;transition:background .4s;min-height:100vh}
 ::-webkit-scrollbar{width:4px;height:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--brd2)}
 
 /* Starfield-style transitions */
@@ -113,7 +117,7 @@ const Input=({label,...p})=><div style={{marginBottom:18}}>{label&&<label style=
 const Select=({label,options,...p})=><div style={{marginBottom:18}}>{label&&<label style={{fontSize:12,color:"var(--tx3)",display:"block",marginBottom:6,fontFamily:"'Barlow Condensed',sans-serif",textTransform:"uppercase",letterSpacing:1.5}}>{label}</label>}<select {...p} style={{width:"100%",padding:"12px 14px",border:"1px solid var(--brd2)",background:"var(--bg)",color:"var(--w)",fontSize:16,fontFamily:"'Barlow',sans-serif",outline:"none",minHeight:48}}>{options.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}</select></div>;
 const Toggle=({checked,onChange,label})=><label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",fontSize:15,color:"var(--tx)",marginBottom:14,minHeight:44}}><div onClick={()=>onChange(!checked)} style={{width:40,height:20,border:`1px solid ${checked?"var(--acc2)":"var(--brd2)"}`,position:"relative",transition:"all .25s",cursor:"pointer",flexShrink:0,background:checked?"rgba(212,120,32,.15)":"transparent"}}><div style={{width:16,height:16,background:checked?"var(--acc2)":"var(--tx3)",position:"absolute",top:1,left:checked?21:1,transition:"all .25s"}}/></div>{label}</label>;
 const Modal=({open,onClose,title,children})=>{if(!open)return null;return<div style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.35)",backdropFilter:"blur(4px)",display:"flex",alignItems:"flex-end",justifyContent:"center",animation:"fadeIn .2s"}} onClick={onClose}><div onClick={e=>e.stopPropagation()} style={{background:"var(--glass)",backdropFilter:"var(--blur)",border:"1px solid var(--brd2)",borderBottom:"none",padding:"28px 24px 36px",width:"100%",maxWidth:520,maxHeight:"85vh",overflowY:"auto",animation:"modalUp .3s cubic-bezier(.22,.68,.36,1)"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24,borderBottom:"1px solid var(--brd)",paddingBottom:16}}><h3 style={{margin:0,fontSize:18,color:"var(--w)",fontFamily:"'Barlow Condensed',sans-serif",fontWeight:600,textTransform:"uppercase",letterSpacing:2}}>{title}</h3><button onClick={onClose} style={{background:"none",border:"1px solid var(--brd2)",color:"var(--tx3)",width:40,height:40,cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button></div>{children}</div></div>};
-const Card=({children,style:sx,className:cn})=><div className={cn} style={{background:"var(--card)",backdropFilter:"var(--blur)",border:"1px solid var(--brd)",padding:20,transition:"all .2s",...sx}}>{children}</div>;
+const Card=({children,style:sx,className:cn})=><div className={cn} style={{background:"var(--card)",backdropFilter:"var(--blur)",border:"2px solid var(--brd-thick)",padding:20,transition:"all .2s",...sx}}>{children}</div>;
 
 // ═══ SCHEDULE SETUP ═══
 function Setup({profile,onDone}){
@@ -261,16 +265,16 @@ export default function App(){
   if(!isA&&!profile.setupDone)return<Setup profile={profile} onDone={()=>setProfile(p=>({...p,setupDone:true}))}/>;
 
   const openSw=swaps.filter(s=>s.status==="open"&&s.week===wk);
-  const NAV=[{id:"schedule",l:"Rozvrh",i:"📋"},{id:"swaps",l:"Výměny",i:"🔄",b:openSw.length},{id:"people",l:"Tým",i:"👥"},{id:"stats",l:"Stats",i:"📊"},{id:"log",l:"Log",i:"📜"},...(isA?[{id:"defaults",l:"Default",i:"📐"},{id:"settings",l:"Config",i:"⚙️"}]:[])];
+  const NAV=[{id:"schedule",l:"Rozvrh",i:"📋"},{id:"swaps",l:"Výměny",i:"🔄",b:openSw.length},...(isA?[{id:"people",l:"Tým",i:"👥"}]:[]),{id:"stats",l:"Stats",i:"📊"},{id:"log",l:"Log",i:"📜"},...(isA?[{id:"defaults",l:"Default",i:"📐"},{id:"settings",l:"Config",i:"⚙️"}]:[])];
 
-  return<div style={{minHeight:"100vh",background:"var(--bg)",fontFamily:"'Barlow',sans-serif",color:"var(--tx)",paddingBottom:68,transition:"all .3s"}} data-theme={theme}>
+  return<div style={{minHeight:"100vh",background:"var(--bg)",backgroundImage:"var(--moon)",backgroundSize:"cover",backgroundAttachment:"fixed",fontFamily:"'Barlow',sans-serif",color:"var(--tx)",paddingBottom:68,transition:"all .3s"}} data-theme={theme}>
     <style>{CSS}</style>
 
     {/* TOASTS */}
     <div style={{position:"fixed",top:0,left:0,right:0,zIndex:9999,padding:"8px 12px"}}>{notifs.map(n=><div key={n.id} style={{background:"var(--glass)",backdropFilter:"var(--blur)",border:"1px solid var(--acc2)",padding:"14px 16px",fontSize:15,color:"var(--acc2)",display:"flex",gap:10,alignItems:"center",marginBottom:6,animation:"slideToast .3s ease-out"}}><span style={{flex:1}}>{n.msg}</span><span style={{fontSize:12,color:"var(--tx3)",fontFamily:"'IBM Plex Mono',monospace"}}>{n.time}</span></div>)}</div>
 
     {/* HEADER */}
-    <header style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderBottom:"1px solid var(--brd)",background:"var(--panel)",backdropFilter:"var(--blur)"}}>
+    <header style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderBottom:"2px solid var(--brd-thick)",background:"var(--panel)",backdropFilter:"var(--blur)"}}>
       <div style={{fontSize:18,fontWeight:600,color:"var(--w)",letterSpacing:3,fontFamily:"'Barlow Condensed',sans-serif"}}>SHIFTFLOW</div>
       <div style={{display:"flex",alignItems:"center",gap:8}}>
         <button onClick={()=>setTheme(t=>t==="light"?"dark":"light")} style={{background:"none",border:"1px solid var(--brd2)",width:40,height:40,cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",color:"var(--tx2)"}} title="Přepnout téma">{theme==="light"?"🌙":"☀️"}</button>
@@ -300,18 +304,18 @@ export default function App(){
         </div>
         {aw.length>0&&<div style={{border:"1px solid var(--red)",padding:14,marginBottom:14}}><div style={{fontSize:14,fontWeight:600,color:"var(--red)",fontFamily:"'Barlow Condensed',sans-serif",textTransform:"uppercase",letterSpacing:1}}>⚠ Porušení ({aw.length})</div>{aw.map((w,i)=><div key={i} style={{fontSize:13,color:"var(--red)",marginTop:4}}>· {w}</div>)}</div>}
 
-        <div style={{border:"1px solid var(--brd)",overflow:"hidden",background:"var(--card)",backdropFilter:"var(--blur)"}}>
+        <div style={{border:"2px solid var(--brd-thick)",overflow:"hidden",background:"var(--card)",backdropFilter:"var(--blur)"}}>
           <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
             <table style={{width:"100%",minWidth:700,borderCollapse:"collapse"}}>
               <thead><tr>
-                <th style={{position:"sticky",left:0,zIndex:10,background:"var(--panel)",backdropFilter:"var(--blur)",padding:"10px 8px",borderBottom:"1px solid var(--brd)",borderRight:"2px solid var(--brd2)",width:64,fontFamily:"'IBM Plex Mono',monospace",fontSize:13,color:"var(--tx3)"}}>⏱</th>
-                {DAYS.map((d,i)=>{const ev=events[d];return<th key={d} style={{padding:"10px 6px",borderBottom:"1px solid var(--brd)",background:"var(--bg3)",backdropFilter:"var(--blur)",textAlign:"center",minWidth:115}}><div style={{fontSize:15,fontWeight:600,color:"var(--w)",fontFamily:"'Barlow Condensed',sans-serif"}}>{DAYS_F[i]}</div>{ev&&<div style={{marginTop:4}}><Badge small color="var(--acc2)">{EVTS.find(e=>e.id===ev.type)?.icon} {ev.note||ev.title}</Badge></div>}</th>})}
+                <th style={{position:"sticky",left:0,zIndex:10,background:"var(--panel)",backdropFilter:"var(--blur)",padding:"10px 8px",borderBottom:"2px solid var(--brd-thick)",borderRight:"2px solid var(--brd-thick)",width:64,fontFamily:"'IBM Plex Mono',monospace",fontSize:13,color:"var(--tx3)"}}>⏱</th>
+                {DAYS.map((d,i)=>{const ev=events[d];return<th key={d} style={{padding:"10px 6px",borderBottom:"2px solid var(--brd-thick)",borderLeft:"2px solid var(--brd-thick)",background:"var(--bg3)",backdropFilter:"var(--blur)",textAlign:"center",minWidth:115}}><div style={{fontSize:15,fontWeight:600,color:"var(--w)",fontFamily:"'Barlow Condensed',sans-serif"}}>{DAYS_F[i]}</div>{ev&&<div style={{marginTop:4}}><Badge small color="var(--acc2)">{EVTS.find(e=>e.id===ev.type)?.icon} {ev.note||ev.title}</Badge></div>}</th>})}
               </tr></thead>
               <tbody>
                 {SHIFTS.map(shift=><tr key={shift}>
-                  <td style={{position:"sticky",left:0,zIndex:10,background:"var(--panel)",backdropFilter:"var(--blur)",padding:"8px 6px",borderBottom:"1px solid var(--brd)",borderRight:"2px solid var(--brd2)",textAlign:"center",fontFamily:"'IBM Plex Mono',monospace",fontSize:17,fontWeight:500,color:"var(--acc2)"}}>{shift}</td>
+                  <td style={{position:"sticky",left:0,zIndex:10,background:"var(--panel)",backdropFilter:"var(--blur)",padding:"8px 6px",borderBottom:"2px solid var(--brd-thick)",borderRight:"2px solid var(--brd-thick)",textAlign:"center",fontFamily:"'IBM Plex Mono',monospace",fontSize:17,fontWeight:500,color:"var(--acc2)"}}>{shift}</td>
                   {DAYS.map(day=>{const entries=(cs[day]?.[shift]||[]).filter(e=>{const emp=ge(e.empId);return emp&&(tf==="all"||emp.team===tf)});
-                    return<td key={`${day}-${shift}`} style={{padding:4,borderBottom:"1px solid var(--brd)",borderLeft:"1px solid var(--brd)",verticalAlign:"top",background:"transparent"}}
+                    return<td key={`${day}-${shift}`} style={{padding:4,borderBottom:"2px solid var(--brd-thick)",borderLeft:"2px solid var(--brd-thick)",verticalAlign:"top",background:"transparent"}}
                       onDragOver={e=>{if(isA){e.preventDefault();e.currentTarget.style.background="var(--bg4)"}}} onDragLeave={e=>{e.currentTarget.style.background="transparent"}} onDrop={e=>{e.currentTarget.style.background="transparent";if(!isA)return;try{const d=JSON.parse(e.dataTransfer.getData("text/plain"));if(d.day!==day||d.shift!==shift)moveE(d.empId,d.day,d.shift,day,shift)}catch{}}}>
                       {entries.map(en=>{const emp=ge(en.empId);if(!emp)return null;const ch=isCh(day,shift,en.empId);const tc=emp.team==="L1"?"var(--l1)":"var(--sd)";
                         return<div key={en.empId} className={`ent ${ch?"chg":""}`} draggable={isA} onDragStart={e=>isA&&e.dataTransfer.setData("text/plain",JSON.stringify({empId:en.empId,day,shift}))} onClick={()=>isA?setSelCell({day,shift,empId:en.empId}):profile.id===en.empId&&setModal({type:"myshift",day,shift})}
@@ -322,9 +326,9 @@ export default function App(){
                         </div>})}
                     </td>})}
                 </tr>)}
-                <tr><td style={{position:"sticky",left:0,zIndex:10,background:"var(--panel)",backdropFilter:"var(--blur)",padding:8,borderRight:"2px solid var(--brd2)",fontSize:12,color:"var(--tx3)",textAlign:"center",fontWeight:500}}>N/A</td>
+                <tr><td style={{position:"sticky",left:0,zIndex:10,background:"var(--panel)",backdropFilter:"var(--blur)",padding:8,borderRight:"2px solid var(--brd-thick)",borderTop:"2px solid var(--brd-thick)",fontSize:12,color:"var(--tx3)",textAlign:"center",fontWeight:500}}>N/A</td>
                   {DAYS.map(day=>{const da=Object.entries(absences).filter(([k])=>k.endsWith(`-${day}`)).map(([k,t])=>({empId:k.replace(`-${day}`,""),type:t})).filter(a=>{const e=ge(a.empId);return e&&(tf==="all"||e.team===tf)});
-                    return<td key={`a-${day}`} style={{padding:4,borderLeft:"1px solid var(--brd)"}}>{da.map(a=>{const e=ge(a.empId);const at=ABS.find(t=>t.id===a.type);return e&&<div key={a.empId} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 8px",marginBottom:2,border:`1px solid ${at?.color}`,fontSize:13,minHeight:36,background:"var(--bg3)"}}><span>{at?.icon}</span><span style={{fontWeight:500}}>{e.name?.split(" ").pop()}</span></div>})}</td>})}</tr>
+                    return<td key={`a-${day}`} style={{padding:4,borderLeft:"2px solid var(--brd-thick)",borderTop:"2px solid var(--brd-thick)"}}>{da.map(a=>{const e=ge(a.empId);const at=ABS.find(t=>t.id===a.type);return e&&<div key={a.empId} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 8px",marginBottom:2,border:`1px solid ${at?.color}`,fontSize:13,minHeight:36,background:"var(--bg3)"}}><span>{at?.icon}</span><span style={{fontWeight:500}}>{e.name?.split(" ").pop()}</span></div>})}</td>})}</tr>
               </tbody>
             </table>
           </div>
@@ -370,6 +374,22 @@ export default function App(){
       {/* STATS */}
       {view==="stats"&&<div>
         <div style={{fontSize:20,fontWeight:600,color:"var(--w)",fontFamily:"'Barlow Condensed',sans-serif",textTransform:"uppercase",letterSpacing:2,marginBottom:20,borderBottom:"1px solid var(--brd)",paddingBottom:12}}>Status</div>
+
+        {/* Employee: own balance */}
+        {!isA&&profile&&<Card className="card-i" style={{marginBottom:20,borderColor:"var(--brd-thick)"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+            <div style={{fontSize:16,fontWeight:600,color:"var(--w)",fontFamily:"'Barlow Condensed',sans-serif",textTransform:"uppercase",letterSpacing:1}}>Moje dny</div>
+            <Btn small onClick={()=>setModal({type:"editDays",emp:profile})}>✏️ Upravit</Btn>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+            {[{l:"Dovolená",v:(profile.vacationTotal||20)-(profile.vacationUsed||0),t:profile.vacationTotal||20,c:"var(--sd)"},{l:"Sick Days",v:(profile.sickTotal||5)-(profile.sickUsed||0),t:profile.sickTotal||5,c:"var(--red)"},{l:"Whatever",v:(profile.whateverTotal||3)-(profile.whateverUsed||0),t:profile.whateverTotal||3,c:"var(--amb)"}].map(b=><div key={b.l} style={{textAlign:"center",padding:14,border:"2px solid var(--brd-thick)",background:"var(--bg3)",backdropFilter:"var(--blur)"}}>
+              <div style={{fontSize:32,fontWeight:600,color:b.c,fontFamily:"'IBM Plex Mono',monospace"}}>{b.v}</div>
+              <div style={{fontSize:11,color:"var(--tx3)",textTransform:"uppercase",marginTop:2}}>{b.l}</div>
+              <div style={{fontSize:10,color:"var(--tx3)",marginTop:2}}>z {b.t}</div>
+            </div>)}
+          </div>
+        </Card>}
+
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:12,marginBottom:24}}>
           {[{l:"Crew",v:employees.filter(e=>e.role!=="admin").length,c:"var(--l1)"},{l:"Active",v:employees.filter(e=>e.setupDone).length,c:"var(--sd)"},{l:"HO",v:Object.values(cs).flatMap(d=>Object.values(d).flat()).filter(e=>e.ho).length,c:"var(--grn)"},{l:"Swaps",v:openSw.length,c:"var(--amb)"},{l:"Alerts",v:aw.length,c:aw.length?"var(--red)":"var(--grn)"}].map((s,i)=><Card key={s.l} className="card-i"><div style={{fontSize:32,fontWeight:600,color:s.c,fontFamily:"'IBM Plex Mono',monospace"}}>{s.v}</div><div style={{fontSize:12,color:"var(--tx3)",textTransform:"uppercase",letterSpacing:1,marginTop:4}}>{s.l}</div></Card>)}
         </div>
@@ -389,7 +409,7 @@ export default function App(){
     </main>
 
     {/* BOTTOM NAV */}
-    <nav style={{position:"fixed",bottom:0,left:0,right:0,display:"flex",background:"var(--panel)",backdropFilter:"var(--blur)",borderTop:"1px solid var(--brd)",zIndex:100,overflowX:"auto"}}>
+    <nav style={{position:"fixed",bottom:0,left:0,right:0,display:"flex",background:"var(--panel)",backdropFilter:"var(--blur)",borderTop:"2px solid var(--brd-thick)",zIndex:100,overflowX:"auto"}}>
       {NAV.map(t=><button key={t.id} onClick={()=>switchView(t.id)} style={{flex:"1 0 auto",padding:"8px 6px",border:"none",borderTop:view===t.id?`2px solid var(--acc2)`:"2px solid transparent",background:"transparent",color:view===t.id?"var(--acc2)":"var(--tx3)",fontSize:11,fontWeight:500,fontFamily:"'Barlow Condensed',sans-serif",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2,minWidth:52,textTransform:"uppercase",transition:"all .2s",position:"relative"}}>
         <span style={{fontSize:20}}>{t.i}</span>{t.l}
         {t.b>0&&<span style={{position:"absolute",top:2,right:"50%",marginRight:-14,background:"var(--acc3)",color:"#fff",padding:"0 5px",fontSize:10}}>{t.b}</span>}
