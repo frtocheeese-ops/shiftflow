@@ -25,18 +25,18 @@ async function initPush(u){try{const m=await getMsg();if(!m)return;if((await Not
 const CSS=`
 @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;500;600;700&family=Barlow:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
-/* LIGHT THEME (Starfield character creation) */
+/* LIGHT THEME (Starfield + Nothing Phone transparent plastic) */
 :root, [data-theme="light"] {
   --bg: #bec4d0;
-  --bg2: rgba(195,200,212,.6);
-  --bg3: rgba(185,192,208,.5);
-  --bg4: rgba(175,182,200,.55);
-  --panel: rgba(200,206,218,.72);
-  --card: rgba(190,198,214,.55);
-  --card-h: rgba(180,188,206,.7);
-  --brd: rgba(50,60,85,.35);
-  --brd2: rgba(40,50,75,.45);
-  --brd-thick: rgba(35,45,70,.55);
+  --bg2: rgba(210,215,225,.45);
+  --bg3: rgba(200,208,222,.38);
+  --bg4: rgba(190,198,215,.48);
+  --panel: rgba(215,220,230,.6);
+  --card: rgba(220,225,235,.42);
+  --card-h: rgba(210,218,230,.55);
+  --brd: rgba(50,60,85,.3);
+  --brd2: rgba(40,50,75,.4);
+  --brd-thick: rgba(35,45,70,.5);
   --tx: #2e3440;
   --tx2: #555e70;
   --tx3: #7a8290;
@@ -51,8 +51,10 @@ const CSS=`
   --amb: #c87020;
   --sel: #2e3848;
   --sel-tx: #e8eaf0;
-  --blur: blur(20px);
-  --glass: rgba(200,206,218,.75);
+  --blur: blur(24px);
+  --glass: rgba(215,220,230,.6);
+  --plastic-sheen: linear-gradient(135deg, rgba(255,255,255,.18) 0%, rgba(255,255,255,.02) 40%, rgba(255,255,255,.08) 70%, rgba(255,255,255,.15) 100%);
+  --plastic-grid: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cdefs%3E%3Cpattern id='g' width='40' height='40' patternUnits='userSpaceOnUse'%3E%3Cpath d='M40 0H0v40' fill='none' stroke='rgba(80,90,120,.07)' stroke-width='.5'/%3E%3Ccircle cx='0' cy='0' r='1' fill='rgba(80,90,120,.06)'/%3E%3C/pattern%3E%3C/defs%3E%3Crect width='200' height='200' fill='url(%23g)'/%3E%3Crect x='20' y='60' width='60' height='.5' fill='rgba(80,90,120,.05)'/%3E%3Crect x='120' y='30' width='40' height='.5' fill='rgba(80,90,120,.04)'/%3E%3Crect x='80' y='140' width='80' height='.5' fill='rgba(80,90,120,.05)'/%3E%3Crect x='150' y='100' width='.5' height='50' fill='rgba(80,90,120,.04)'/%3E%3Crect x='50' y='160' width='.5' height='30' fill='rgba(80,90,120,.04)'/%3E%3Ccircle cx='80' cy='60' r='2' fill='none' stroke='rgba(80,90,120,.05)' stroke-width='.5'/%3E%3Ccircle cx='155' cy='105' r='2' fill='none' stroke='rgba(80,90,120,.05)' stroke-width='.5'/%3E%3C/svg%3E");
   --moon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='800'%3E%3Cfilter id='n'%3E%3CfeTurbulence baseFrequency='.012' numOctaves='8' seed='3' type='fractalNoise'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='.18' intercept='.68'/%3E%3CfeFuncG type='linear' slope='.18' intercept='.7'/%3E%3CfeFuncB type='linear' slope='.18' intercept='.76'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3Ccircle cx='120' cy='180' r='45' fill='rgba(0,0,0,.06)' /%3E%3Ccircle cx='380' cy='100' r='70' fill='rgba(0,0,0,.05)' /%3E%3Ccircle cx='550' cy='300' r='85' fill='rgba(0,0,0,.045)' /%3E%3Ccircle cx='250' cy='420' r='55' fill='rgba(0,0,0,.055)' /%3E%3Ccircle cx='650' cy='550' r='40' fill='rgba(0,0,0,.04)' /%3E%3Ccircle cx='80' cy='600' r='60' fill='rgba(0,0,0,.05)' /%3E%3Ccircle cx='450' cy='650' r='35' fill='rgba(0,0,0,.035)' /%3E%3Ccircle cx='700' cy='150' r='50' fill='rgba(0,0,0,.04)' /%3E%3Ccircle cx='300' cy='250' r='25' fill='rgba(0,0,0,.045)' /%3E%3Ccircle cx='180' cy='700' r='30' fill='rgba(0,0,0,.04)' /%3E%3C/svg%3E");
 }
 
@@ -108,6 +110,28 @@ body{background:var(--bg);background-image:var(--moon);background-size:cover;bac
 .chg{box-shadow:inset 2px 0 0 var(--acc2)}
 .ent{transition:all .15s;cursor:pointer;min-height:48px;display:flex;align-items:center}
 .ent:hover,.ent:active{background:var(--card-h)!important}
+
+/* Nothing Phone transparent plastic effect (light mode only) */
+[data-theme="light"] .plastic{
+  background-image: var(--plastic-sheen), var(--plastic-grid);
+  background-size: 100% 100%, 200px 200px;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.35),
+    inset 0 -1px 0 rgba(0,0,0,.04),
+    0 1px 4px rgba(0,0,0,.06);
+}
+[data-theme="light"] .plastic-cell{
+  background-image: var(--plastic-grid);
+  background-size: 200px 200px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.2);
+}
+[data-theme="light"] .plastic-header{
+  background-image: var(--plastic-sheen);
+  background-size: 100% 100%;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.4),
+    inset 0 -1px 0 rgba(0,0,0,.05);
+}
 `;
 
 // ═══ UI COMPONENTS ═══
@@ -117,7 +141,7 @@ const Input=({label,...p})=><div style={{marginBottom:18}}>{label&&<label style=
 const Select=({label,options,...p})=><div style={{marginBottom:18}}>{label&&<label style={{fontSize:12,color:"var(--tx3)",display:"block",marginBottom:6,fontFamily:"'Barlow Condensed',sans-serif",textTransform:"uppercase",letterSpacing:1.5}}>{label}</label>}<select {...p} style={{width:"100%",padding:"12px 14px",border:"1px solid var(--brd2)",background:"var(--bg)",color:"var(--w)",fontSize:16,fontFamily:"'Barlow',sans-serif",outline:"none",minHeight:48}}>{options.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}</select></div>;
 const Toggle=({checked,onChange,label})=><label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",fontSize:15,color:"var(--tx)",marginBottom:14,minHeight:44}}><div onClick={()=>onChange(!checked)} style={{width:40,height:20,border:`1px solid ${checked?"var(--acc2)":"var(--brd2)"}`,position:"relative",transition:"all .25s",cursor:"pointer",flexShrink:0,background:checked?"rgba(212,120,32,.15)":"transparent"}}><div style={{width:16,height:16,background:checked?"var(--acc2)":"var(--tx3)",position:"absolute",top:1,left:checked?21:1,transition:"all .25s"}}/></div>{label}</label>;
 const Modal=({open,onClose,title,children})=>{if(!open)return null;return<div style={{position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,.35)",backdropFilter:"blur(4px)",display:"flex",alignItems:"flex-end",justifyContent:"center",animation:"fadeIn .2s"}} onClick={onClose}><div onClick={e=>e.stopPropagation()} style={{background:"var(--glass)",backdropFilter:"var(--blur)",border:"1px solid var(--brd2)",borderBottom:"none",padding:"28px 24px 36px",width:"100%",maxWidth:520,maxHeight:"85vh",overflowY:"auto",animation:"modalUp .3s cubic-bezier(.22,.68,.36,1)"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:24,borderBottom:"1px solid var(--brd)",paddingBottom:16}}><h3 style={{margin:0,fontSize:18,color:"var(--w)",fontFamily:"'Barlow Condensed',sans-serif",fontWeight:600,textTransform:"uppercase",letterSpacing:2}}>{title}</h3><button onClick={onClose} style={{background:"none",border:"1px solid var(--brd2)",color:"var(--tx3)",width:40,height:40,cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button></div>{children}</div></div>};
-const Card=({children,style:sx,className:cn})=><div className={cn} style={{background:"var(--card)",backdropFilter:"var(--blur)",border:"2px solid var(--brd-thick)",padding:20,transition:"all .2s",...sx}}>{children}</div>;
+const Card=({children,style:sx,className:cn})=><div className={`plastic ${cn||""}`} style={{background:"var(--card)",backdropFilter:"var(--blur)",border:"2px solid var(--brd-thick)",padding:20,transition:"all .2s",...sx}}>{children}</div>;
 
 // ═══ SCHEDULE SETUP ═══
 function Setup({profile,onDone}){
@@ -274,7 +298,7 @@ export default function App(){
     <div style={{position:"fixed",top:0,left:0,right:0,zIndex:9999,padding:"8px 12px"}}>{notifs.map(n=><div key={n.id} style={{background:"var(--glass)",backdropFilter:"var(--blur)",border:"1px solid var(--acc2)",padding:"14px 16px",fontSize:15,color:"var(--acc2)",display:"flex",gap:10,alignItems:"center",marginBottom:6,animation:"slideToast .3s ease-out"}}><span style={{flex:1}}>{n.msg}</span><span style={{fontSize:12,color:"var(--tx3)",fontFamily:"'IBM Plex Mono',monospace"}}>{n.time}</span></div>)}</div>
 
     {/* HEADER */}
-    <header style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderBottom:"2px solid var(--brd-thick)",background:"var(--panel)",backdropFilter:"var(--blur)"}}>
+    <header className="plastic-header" style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"14px 16px",borderBottom:"2px solid var(--brd-thick)",background:"var(--panel)",backdropFilter:"var(--blur)"}}>
       <div style={{fontSize:18,fontWeight:600,color:"var(--w)",letterSpacing:3,fontFamily:"'Barlow Condensed',sans-serif"}}>SHIFTFLOW</div>
       <div style={{display:"flex",alignItems:"center",gap:8}}>
         <button onClick={()=>setTheme(t=>t==="light"?"dark":"light")} style={{background:"none",border:"1px solid var(--brd2)",width:40,height:40,cursor:"pointer",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",color:"var(--tx2)"}} title="Přepnout téma">{theme==="light"?"🌙":"☀️"}</button>
@@ -304,7 +328,7 @@ export default function App(){
         </div>
         {aw.length>0&&<div style={{border:"1px solid var(--red)",padding:14,marginBottom:14}}><div style={{fontSize:14,fontWeight:600,color:"var(--red)",fontFamily:"'Barlow Condensed',sans-serif",textTransform:"uppercase",letterSpacing:1}}>⚠ Porušení ({aw.length})</div>{aw.map((w,i)=><div key={i} style={{fontSize:13,color:"var(--red)",marginTop:4}}>· {w}</div>)}</div>}
 
-        <div style={{border:"2px solid var(--brd-thick)",overflow:"hidden",background:"var(--card)",backdropFilter:"var(--blur)"}}>
+        <div className="plastic" style={{border:"2px solid var(--brd-thick)",overflow:"hidden",background:"var(--card)",backdropFilter:"var(--blur)"}}>
           <div style={{overflowX:"auto",WebkitOverflowScrolling:"touch"}}>
             <table style={{width:"100%",minWidth:700,borderCollapse:"collapse"}}>
               <thead><tr>
@@ -315,7 +339,7 @@ export default function App(){
                 {SHIFTS.map(shift=><tr key={shift}>
                   <td style={{position:"sticky",left:0,zIndex:10,background:"var(--panel)",backdropFilter:"var(--blur)",padding:"8px 6px",borderBottom:"2px solid var(--brd-thick)",borderRight:"2px solid var(--brd-thick)",textAlign:"center",fontFamily:"'IBM Plex Mono',monospace",fontSize:17,fontWeight:500,color:"var(--acc2)"}}>{shift}</td>
                   {DAYS.map(day=>{const entries=(cs[day]?.[shift]||[]).filter(e=>{const emp=ge(e.empId);return emp&&(tf==="all"||emp.team===tf)});
-                    return<td key={`${day}-${shift}`} style={{padding:4,borderBottom:"2px solid var(--brd-thick)",borderLeft:"2px solid var(--brd-thick)",verticalAlign:"top",background:"transparent"}}
+                    return<td key={`${day}-${shift}`} className="plastic-cell" style={{padding:4,borderBottom:"2px solid var(--brd-thick)",borderLeft:"2px solid var(--brd-thick)",verticalAlign:"top",background:"var(--bg3)"}}
                       onDragOver={e=>{if(isA){e.preventDefault();e.currentTarget.style.background="var(--bg4)"}}} onDragLeave={e=>{e.currentTarget.style.background="transparent"}} onDrop={e=>{e.currentTarget.style.background="transparent";if(!isA)return;try{const d=JSON.parse(e.dataTransfer.getData("text/plain"));if(d.day!==day||d.shift!==shift)moveE(d.empId,d.day,d.shift,day,shift)}catch{}}}>
                       {entries.map(en=>{const emp=ge(en.empId);if(!emp)return null;const ch=isCh(day,shift,en.empId);const tc=emp.team==="L1"?"var(--l1)":"var(--sd)";
                         return<div key={en.empId} className={`ent ${ch?"chg":""}`} draggable={isA} onDragStart={e=>isA&&e.dataTransfer.setData("text/plain",JSON.stringify({empId:en.empId,day,shift}))} onClick={()=>isA?setSelCell({day,shift,empId:en.empId}):profile.id===en.empId&&setModal({type:"myshift",day,shift})}
@@ -409,7 +433,7 @@ export default function App(){
     </main>
 
     {/* BOTTOM NAV */}
-    <nav style={{position:"fixed",bottom:0,left:0,right:0,display:"flex",background:"var(--panel)",backdropFilter:"var(--blur)",borderTop:"2px solid var(--brd-thick)",zIndex:100,overflowX:"auto"}}>
+    <nav className="plastic-header" style={{position:"fixed",bottom:0,left:0,right:0,display:"flex",background:"var(--panel)",backdropFilter:"var(--blur)",borderTop:"2px solid var(--brd-thick)",zIndex:100,overflowX:"auto"}}>
       {NAV.map(t=><button key={t.id} onClick={()=>switchView(t.id)} style={{flex:"1 0 auto",padding:"8px 6px",border:"none",borderTop:view===t.id?`2px solid var(--acc2)`:"2px solid transparent",background:"transparent",color:view===t.id?"var(--acc2)":"var(--tx3)",fontSize:11,fontWeight:500,fontFamily:"'Barlow Condensed',sans-serif",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2,minWidth:52,textTransform:"uppercase",transition:"all .2s",position:"relative"}}>
         <span style={{fontSize:20}}>{t.i}</span>{t.l}
         {t.b>0&&<span style={{position:"absolute",top:2,right:"50%",marginRight:-14,background:"var(--acc3)",color:"#fff",padding:"0 5px",fontSize:10}}>{t.b}</span>}
