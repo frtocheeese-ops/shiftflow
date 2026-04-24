@@ -8,8 +8,13 @@ const TEAMS={L1:"L1 Support",SD:"Service Desk"};
 const SHIFTS=["08:00","09:00","10:00"];
 const DAYS=["Po","Út","St","Čt","Pá"];
 const DAYS_F=["Pondělí","Úterý","Středa","Čtvrtek","Pátek"];
-const ABS=[{id:"sick",label:"Sick Day",icon:"🤒",color:"#c04040"},{id:"doctor",label:"Lékař",icon:"🏥",color:"#d48020"},{id:"vacation",label:"Dovolená",icon:"🏖️",color:"#4080b0"},{id:"whatever",label:"Whatever Day",icon:"☕",color:"#8070b0"}];
+const ABS=[{id:"sick",label:"Sick Day",icon:"🤒",color:"#c04040"},{id:"doctor",label:"Lékař",icon:"🏥",color:"#d48020"},{id:"vacation",label:"Dovolená",icon:"🏖️",color:"#4080b0"},{id:"whatever",label:"Whatever Day",icon:"☕",color:"#8070b0"},{id:"training",label:"Školení",icon:"📚",color:"#5090a0"}];
 const EVTS=[{id:"training",label:"Školení",icon:"📚"},{id:"dinner",label:"Večeře",icon:"🍽️"},{id:"teambuilding",label:"Teambuilding",icon:"🎯"},{id:"meeting",label:"Porada",icon:"💬"},{id:"other",label:"Jiné",icon:"📌"}];
+// Czech public holidays (month is 0-indexed)
+const CZ_HOLIDAYS=[[0,1],[3,1],[4,1],[4,8],[6,5],[6,6],[8,28],[9,28],[10,17],[11,24],[11,25],[11,26]]; // Nový rok,Velikonoční po,Svátek práce,Den vítězství,Cyril+Metoděj,Hus,Den státnosti,Den vzniku,Den boje,Štědrý,1.svátek,2.svátek
+const HOLIDAY_NAMES={0:{1:"Nový rok"},3:{1:"Velikonoční pondělí"},4:{1:"Svátek práce",8:"Den vítězství"},6:{5:"Cyril a Metoděj",6:"Jan Hus"},8:{28:"Den české státnosti"},9:{28:"Den vzniku ČSR"},10:{17:"Den boje za svobodu"},11:{24:"Štědrý den",25:"1. svátek vánoční",26:"2. svátek vánoční"}};
+function isHoliday(date){const m=date.getMonth(),d=date.getDate();return CZ_HOLIDAYS.some(([hm,hd])=>hm===m&&hd===d)}
+function getHolidayName(date){const m=date.getMonth(),d=date.getDate();return HOLIDAY_NAMES[m]?.[d]||null}
 const AE="admin@shiftflow.app",AP="ShiftFlowAdmin2026!";
 const dc=o=>JSON.parse(JSON.stringify(o));
 const uid=()=>"u"+Math.random().toString(36).slice(2,9);
@@ -116,22 +121,53 @@ body{background:var(--bg);background-image:var(--moon);background-size:cover;bac
   background-image: var(--plastic-sheen), var(--plastic-grid);
   background-size: 100% 100%, 200px 200px;
   box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.35),
-    inset 0 -1px 0 rgba(0,0,0,.04),
-    0 1px 4px rgba(0,0,0,.06);
+    inset 0 1px 0 rgba(255,255,255,.55),
+    inset 0 -1px 0 rgba(0,0,0,.08),
+    0 2px 8px rgba(0,0,0,.08);
+  position: relative;
+}
+[data-theme="light"] .plastic::after{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(
+    115deg,
+    rgba(255,255,255,0) 0%,
+    rgba(255,255,255,.12) 25%,
+    rgba(255,255,255,.28) 47%,
+    rgba(255,255,255,.12) 53%,
+    rgba(255,255,255,0) 75%
+  );
+  mix-blend-mode:overlay;
 }
 [data-theme="light"] .plastic-cell{
   background-image: var(--plastic-grid);
   background-size: 200px 200px;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.2);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.35), inset 0 -1px 0 rgba(0,0,0,.03);
 }
 [data-theme="light"] .plastic-header{
   background-image: var(--plastic-sheen);
   background-size: 100% 100%;
   box-shadow:
-    inset 0 1px 0 rgba(255,255,255,.4),
-    inset 0 -1px 0 rgba(0,0,0,.05);
+    inset 0 1px 0 rgba(255,255,255,.55),
+    inset 0 -1px 0 rgba(0,0,0,.06);
+  position:relative;
 }
+[data-theme="light"] .plastic-header::after{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(100deg,rgba(255,255,255,0) 30%,rgba(255,255,255,.2) 50%,rgba(255,255,255,0) 70%);
+}
+
+/* Today column highlight */
+.today-col{background:rgba(212,120,32,.06)!important}
+[data-theme="dark"] .today-col{background:rgba(212,120,32,.08)!important}
+.today-header{border-bottom:3px solid var(--acc2)!important}
+
+/* Holiday column */
+.holiday-col{background:rgba(80,144,160,.06)!important;opacity:.6}
+[data-theme="dark"] .holiday-col{background:rgba(80,144,160,.1)!important}
+
+/* Parallax background layer */
+#parallax-bg{position:fixed;inset:0;z-index:0;pointer-events:none;will-change:transform;transition:transform .1s ease-out}
+#app-content{position:relative;z-index:1}
 `;
 
 // ═══ UI COMPONENTS ═══
@@ -247,6 +283,37 @@ export default function App(){
   const[logs,setLogs]=useState([]);const[rules,setRules]=useState({L1_max:2,SD_max8:2,SD_maxHO:2,SD_noHO8:true,SD_noHO10:true});
   const[theme,setTheme]=useState(()=>localStorage.getItem("sf_theme")||"light");
   const viewKey=useRef(0);
+  const parallaxRef=useRef(null);
+
+  // Parallax effect
+  useEffect(()=>{
+    const el=parallaxRef.current;if(!el)return;
+    // Mouse parallax (desktop)
+    const onMouse=e=>{const x=(e.clientX/window.innerWidth-.5)*20;const y=(e.clientY/window.innerHeight-.5)*12;el.style.transform=`translate(${-x}px,${-y}px) scale(1.05)`};
+    // Gyroscope parallax (mobile)
+    let gyroOk=false;
+    const onGyro=e=>{if(!gyroOk)gyroOk=true;const x=(e.gamma||0)*0.6;const y=((e.beta||0)-40)*0.4;el.style.transform=`translate(${-x}px,${-y}px) scale(1.05)`};
+    window.addEventListener("mousemove",onMouse,{passive:true});
+    if(window.DeviceOrientationEvent){
+      if(typeof DeviceOrientationEvent.requestPermission==="function"){
+        // iOS 13+ needs permission
+        document.addEventListener("click",function iosGyro(){DeviceOrientationEvent.requestPermission().then(r=>{if(r==="granted")window.addEventListener("deviceorientation",onGyro,{passive:true})}).catch(()=>{});document.removeEventListener("click",iosGyro)},{once:true});
+      } else {
+        window.addEventListener("deviceorientation",onGyro,{passive:true});
+      }
+    }
+    return()=>{window.removeEventListener("mousemove",onMouse);window.removeEventListener("deviceorientation",onGyro)};
+  },[]);
+
+  // Today detection
+  const today=new Date();
+  const todayDay=today.getDay(); // 0=Sun,1=Mon...
+  const todayIdx=todayDay>=1&&todayDay<=5?todayDay-1:-1; // 0=Po,...,4=Pá
+  const isTodayWeek=wo===0;
+  const getTodayClass=(dayIdx)=>isTodayWeek&&dayIdx===todayIdx?"today-col":"";
+
+  // Holiday detection for current week
+  const weekDates=useMemo(()=>{const m=getMon(cw);return DAYS.map((_,i)=>{const d=new Date(m);d.setDate(d.getDate()+i);return d})},[cw]);
 
   const switchView=v=>{setPrevView(view);viewKey.current++;setView(v)};
 
@@ -276,10 +343,25 @@ export default function App(){
 
   const moveE=async(eid,fd,fs,td,ts)=>{const s=dc(cs);const f=s[fd]?.[fs];if(!f)return;const i=f.findIndex(e=>e.empId===eid);if(i===-1)return;const[en]=f.splice(i,1);en.isDefault=false;if(!s[td])s[td]={};if(!s[td][ts])s[td][ts]=[];s[td][ts].push(en);await saveS(s);const emp=ge(eid);const msg=`${emp?.name}: ${fd} ${fs} → ${td} ${ts}`;notify(msg);log(msg);eN(emp,msg)};
   const togHO=async(day,sh,eid)=>{const s=dc(cs);const en=s[day]?.[sh]?.find(e=>e.empId===eid);if(en){en.ho=!en.ho;en.isDefault=false}await saveS(s);const emp=ge(eid);notify(`${emp?.name}: HO ${en?.ho?"ON":"OFF"}`);log(`HO: ${emp?.name}`);eN(emp,`HO ${en?.ho?"ON":"OFF"}`)};
-  const addAbs=async(eid,day,type)=>{if(!isA&&eid!==profile.id)return;const s=dc(cs);SHIFTS.forEach(sh=>{if(s[day]?.[sh])s[day][sh]=s[day][sh].filter(e=>e.empId!==eid)});await saveS(s);await setDoc(doc(db,"schedules",wk),{[`absences.${eid}-${day}`]:type},{merge:true});const emp=ge(eid);if(emp){const f=type==="sick"?"sickUsed":type==="vacation"?"vacationUsed":type==="whatever"?"whateverUsed":null;if(f)await updateDoc(doc(db,"users",eid),{[f]:(emp[f]||0)+1})}const al=ABS.find(a=>a.id===type)?.label;notify(`${emp?.name}: ${al}`);log(`${emp?.name}: ${al} ${day}`);eN(emp,`${al} (${day})`)};
+  const addAbs=async(eid,day,type)=>{if(!isA&&eid!==profile.id)return;const s=dc(cs);SHIFTS.forEach(sh=>{if(s[day]?.[sh])s[day][sh]=s[day][sh].filter(e=>e.empId!==eid)});await setDoc(doc(db,"schedules",wk),{entries:s,weekStart:wk,modifiedAt:new Date().toISOString(),modifiedBy:profile?.id,[`absences.${eid}-${day}`]:type},{merge:true});const emp=ge(eid);if(emp&&type!=="doctor"&&type!=="training"){const f=type==="sick"?"sickUsed":type==="vacation"?"vacationUsed":type==="whatever"?"whateverUsed":null;if(f)await updateDoc(doc(db,"users",eid),{[f]:(emp[f]||0)+1})}const al=ABS.find(a=>a.id===type)?.label;notify(`${emp?.name}: ${al}`);log(`${emp?.name}: ${al} ${day}`);eN(emp,`${al} (${day})`)};
   const addEv=async(day,et,note)=>{await setDoc(doc(db,"schedules",wk),{[`events.${day}`]:{type:et,note,title:EVTS.find(e=>e.id===et)?.label}},{merge:true});notify("Událost přidána");log(`Event: ${day}`)};
   const mkSwap=async(rid,day,sh)=>{await addDoc(collection(db,"swapRequests"),{rid,day,sh,week:wk,status:"open",created:new Date().toISOString()});notify("Žádost odeslána");log(`Swap: ${ge(rid)?.name}`)};
-  const doSwap=async(swId,aid)=>{const sw=swaps.find(s=>s.id===swId);if(!sw)return;await updateDoc(doc(db,"swapRequests",swId),{status:"done",aid,resolvedAt:new Date().toISOString()});const s=dc(cs);let aD,aS;DAYS.forEach(d=>SHIFTS.forEach(sh=>{if(s[d]?.[sh]?.some(e=>e.empId===aid)&&!aD){aD=d;aS=sh}}));if(aD&&aS&&s[sw.day]?.[sw.sh]){const ri=s[sw.day][sw.sh].findIndex(e=>e.empId===sw.rid);const ai=s[aD][aS].findIndex(e=>e.empId===aid);if(ri!==-1&&ai!==-1){const rE=s[sw.day][sw.sh][ri];const aE=s[aD][aS][ai];s[sw.day][sw.sh][ri]={...aE,isDefault:false};s[aD][aS][ai]={...rE,isDefault:false};await saveS(s)}}notify("Výměna provedena");log(`Swap done`)};
+  const doSwap=async(swId,aid)=>{const sw=swaps.find(s=>s.id===swId);if(!sw)return;await updateDoc(doc(db,"swapRequests",swId),{status:"done",aid,resolvedAt:new Date().toISOString()});
+    // Load or use current schedule for the swap's week
+    const swWk=sw.week;const swDay=sw.day;const swSh=sw.sh;
+    let swSched;if(swWk===wk){swSched=dc(cs)}else{const snap=await getDoc(doc(db,"schedules",swWk));swSched=snap.exists()?dc(snap.data().entries||buildDef(employees)):dc(buildDef(employees))}
+    // Find acceptor's shift on the SAME day
+    let aSh=null;SHIFTS.forEach(sh=>{if(swSched[swDay]?.[sh]?.some(e=>e.empId===aid))aSh=sh});
+    if(aSh&&swSched[swDay]?.[swSh]){
+      const ri=swSched[swDay][swSh].findIndex(e=>e.empId===sw.rid);
+      const ai=swSched[swDay][aSh].findIndex(e=>e.empId===aid);
+      if(ri!==-1&&ai!==-1){
+        const rE={...swSched[swDay][swSh][ri],isDefault:false};const aE={...swSched[swDay][aSh][ai],isDefault:false};
+        swSched[swDay][swSh][ri]=aE;swSched[swDay][aSh][ai]=rE;
+        await setDoc(doc(db,"schedules",swWk),{entries:swSched,modifiedAt:new Date().toISOString()},{merge:true});
+      }
+    }
+    const re=ge(sw.rid);const ae=ge(aid);const msg=`Výměna: ${re?.name} ↔ ${ae?.name} (${swDay})`;notify(msg);log(msg);eN(re,msg);eN(ae,msg)};
   const delUser=async eid=>{if(!confirm(`Smazat ${ge(eid)?.name}?`))return;await deleteDoc(doc(db,"users",eid));notify("Smazán")};
   const exportCSV=()=>{let csv="\ufeffDen,Směna,Jméno,Tým,HO\n";DAYS.forEach(d=>SHIFTS.forEach(sh=>(cs[d]?.[sh]||[]).forEach(en=>{const e=ge(en.empId);if(e)csv+=`${d},${sh},${e.name},${e.team},${en.ho?"Ano":"Ne"}\n`})));const b=new Blob([csv],{type:"text/csv;charset=utf-8;"});const u=URL.createObjectURL(b);Object.assign(document.createElement("a"),{href:u,download:`rozvrh_${wk}.csv`}).click();URL.revokeObjectURL(u)};
 
@@ -291,9 +373,12 @@ export default function App(){
   const openSw=swaps.filter(s=>s.status==="open"&&s.week===wk);
   const NAV=[{id:"schedule",l:"Rozvrh",i:"📋"},{id:"swaps",l:"Výměny",i:"🔄",b:openSw.length},...(isA?[{id:"people",l:"Tým",i:"👥"}]:[]),{id:"stats",l:"Stats",i:"📊"},{id:"log",l:"Log",i:"📜"},...(isA?[{id:"defaults",l:"Default",i:"📐"},{id:"settings",l:"Config",i:"⚙️"}]:[])];
 
-  return<div style={{minHeight:"100vh",background:"var(--bg)",backgroundImage:"var(--moon)",backgroundSize:"cover",backgroundAttachment:"fixed",fontFamily:"'Barlow',sans-serif",color:"var(--tx)",paddingBottom:68,transition:"all .3s"}} data-theme={theme}>
+  return<div style={{minHeight:"100vh",fontFamily:"'Barlow',sans-serif",color:"var(--tx)",paddingBottom:68,transition:"color .3s",position:"relative",overflow:"hidden"}} data-theme={theme}>
     <style>{CSS}</style>
+    {/* Parallax moon background */}
+    <div id="parallax-bg" ref={parallaxRef} style={{position:"fixed",inset:"-30px",zIndex:0,background:"var(--bg)",backgroundImage:"var(--moon)",backgroundSize:"cover"}} />
 
+    <div id="app-content">
     {/* TOASTS */}
     <div style={{position:"fixed",top:0,left:0,right:0,zIndex:9999,padding:"8px 12px"}}>{notifs.map(n=><div key={n.id} style={{background:"var(--glass)",backdropFilter:"var(--blur)",border:"1px solid var(--acc2)",padding:"14px 16px",fontSize:15,color:"var(--acc2)",display:"flex",gap:10,alignItems:"center",marginBottom:6,animation:"slideToast .3s ease-out"}}><span style={{flex:1}}>{n.msg}</span><span style={{fontSize:12,color:"var(--tx3)",fontFamily:"'IBM Plex Mono',monospace"}}>{n.time}</span></div>)}</div>
 
@@ -333,14 +418,15 @@ export default function App(){
             <table style={{width:"100%",minWidth:700,borderCollapse:"collapse"}}>
               <thead><tr>
                 <th style={{position:"sticky",left:0,zIndex:10,background:"var(--panel)",backdropFilter:"var(--blur)",padding:"10px 8px",borderBottom:"2px solid var(--brd-thick)",borderRight:"2px solid var(--brd-thick)",width:64,fontFamily:"'IBM Plex Mono',monospace",fontSize:13,color:"var(--tx3)"}}>⏱</th>
-                {DAYS.map((d,i)=>{const ev=events[d];return<th key={d} style={{padding:"10px 6px",borderBottom:"2px solid var(--brd-thick)",borderLeft:"2px solid var(--brd-thick)",background:"var(--bg3)",backdropFilter:"var(--blur)",textAlign:"center",minWidth:115}}><div style={{fontSize:15,fontWeight:600,color:"var(--w)",fontFamily:"'Barlow Condensed',sans-serif"}}>{DAYS_F[i]}</div>{ev&&<div style={{marginTop:4}}><Badge small color="var(--acc2)">{EVTS.find(e=>e.id===ev.type)?.icon} {ev.note||ev.title}</Badge></div>}</th>})}
+                {DAYS.map((d,i)=>{const ev=events[d];const hol=isHoliday(weekDates[i]);const holN=getHolidayName(weekDates[i]);const isToday=getTodayClass(i);return<th key={d} className={`${isToday} ${hol?"holiday-col":""} ${isToday?"today-header":""}`} style={{padding:"10px 6px",borderBottom:"2px solid var(--brd-thick)",borderLeft:"2px solid var(--brd-thick)",background:"var(--bg3)",backdropFilter:"var(--blur)",textAlign:"center",minWidth:115}}><div style={{fontSize:15,fontWeight:600,color:isToday?"var(--acc2)":"var(--w)",fontFamily:"'Barlow Condensed',sans-serif"}}>{DAYS_F[i]}</div>{hol&&<div style={{marginTop:3}}><Badge small color="var(--grn)">🎄 {holN}</Badge></div>}{ev&&!hol&&<div style={{marginTop:4}}><Badge small color="var(--acc2)">{EVTS.find(e=>e.id===ev.type)?.icon} {ev.note||ev.title}</Badge></div>}</th>})}
               </tr></thead>
               <tbody>
                 {SHIFTS.map(shift=><tr key={shift}>
                   <td style={{position:"sticky",left:0,zIndex:10,background:"var(--panel)",backdropFilter:"var(--blur)",padding:"8px 6px",borderBottom:"2px solid var(--brd-thick)",borderRight:"2px solid var(--brd-thick)",textAlign:"center",fontFamily:"'IBM Plex Mono',monospace",fontSize:17,fontWeight:500,color:"var(--acc2)"}}>{shift}</td>
-                  {DAYS.map(day=>{const entries=(cs[day]?.[shift]||[]).filter(e=>{const emp=ge(e.empId);return emp&&(tf==="all"||emp.team===tf)});
-                    return<td key={`${day}-${shift}`} className="plastic-cell" style={{padding:4,borderBottom:"2px solid var(--brd-thick)",borderLeft:"2px solid var(--brd-thick)",verticalAlign:"top",background:"var(--bg3)"}}
-                      onDragOver={e=>{if(isA){e.preventDefault();e.currentTarget.style.background="var(--bg4)"}}} onDragLeave={e=>{e.currentTarget.style.background="transparent"}} onDrop={e=>{e.currentTarget.style.background="transparent";if(!isA)return;try{const d=JSON.parse(e.dataTransfer.getData("text/plain"));if(d.day!==day||d.shift!==shift)moveE(d.empId,d.day,d.shift,day,shift)}catch{}}}>
+                  {DAYS.map((day,di)=>{const entries=(cs[day]?.[shift]||[]).filter(e=>{const emp=ge(e.empId);return emp&&(tf==="all"||emp.team===tf)});const hol=isHoliday(weekDates[di]);
+                    return<td key={`${day}-${shift}`} className={`plastic-cell ${getTodayClass(di)} ${hol?"holiday-col":""}`} style={{padding:4,borderBottom:"2px solid var(--brd-thick)",borderLeft:"2px solid var(--brd-thick)",verticalAlign:"top",background:"var(--bg3)"}}
+                      onDragOver={e=>{if(isA&&!hol){e.preventDefault();e.currentTarget.style.background="var(--bg4)"}}} onDragLeave={e=>{e.currentTarget.style.background=""}} onDrop={e=>{e.currentTarget.style.background="";if(!isA||hol)return;try{const d=JSON.parse(e.dataTransfer.getData("text/plain"));if(d.day!==day||d.shift!==shift)moveE(d.empId,d.day,d.shift,day,shift)}catch{}}}>
+                      {hol&&entries.length===0&&<div style={{padding:"8px 6px",fontSize:12,color:"var(--grn)",fontWeight:500,textAlign:"center",opacity:.7}}>Svátek</div>}
                       {entries.map(en=>{const emp=ge(en.empId);if(!emp)return null;const ch=isCh(day,shift,en.empId);const tc=emp.team==="L1"?"var(--l1)":"var(--sd)";
                         return<div key={en.empId} className={`ent ${ch?"chg":""}`} draggable={isA} onDragStart={e=>isA&&e.dataTransfer.setData("text/plain",JSON.stringify({empId:en.empId,day,shift}))} onClick={()=>isA?setSelCell({day,shift,empId:en.empId}):profile.id===en.empId&&setModal({type:"myshift",day,shift})}
                           style={{gap:6,padding:"6px 10px",marginBottom:2,background:"var(--bg3)",backdropFilter:"var(--blur)",border:"1px solid var(--brd)",fontSize:14,transition:"all .2s"}}>
@@ -351,8 +437,8 @@ export default function App(){
                     </td>})}
                 </tr>)}
                 <tr><td style={{position:"sticky",left:0,zIndex:10,background:"var(--panel)",backdropFilter:"var(--blur)",padding:8,borderRight:"2px solid var(--brd-thick)",borderTop:"2px solid var(--brd-thick)",fontSize:12,color:"var(--tx3)",textAlign:"center",fontWeight:500}}>N/A</td>
-                  {DAYS.map(day=>{const da=Object.entries(absences).filter(([k])=>k.endsWith(`-${day}`)).map(([k,t])=>({empId:k.replace(`-${day}`,""),type:t})).filter(a=>{const e=ge(a.empId);return e&&(tf==="all"||e.team===tf)});
-                    return<td key={`a-${day}`} style={{padding:4,borderLeft:"2px solid var(--brd-thick)",borderTop:"2px solid var(--brd-thick)"}}>{da.map(a=>{const e=ge(a.empId);const at=ABS.find(t=>t.id===a.type);return e&&<div key={a.empId} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 8px",marginBottom:2,border:`1px solid ${at?.color}`,fontSize:13,minHeight:36,background:"var(--bg3)"}}><span>{at?.icon}</span><span style={{fontWeight:500}}>{e.name?.split(" ").pop()}</span></div>})}</td>})}</tr>
+                  {DAYS.map((day,di)=>{const da=Object.entries(absences).filter(([k])=>k.endsWith(`-${day}`)).map(([k,t])=>({empId:k.replace(`-${day}`,""),type:t})).filter(a=>{const e=ge(a.empId);return e&&(tf==="all"||e.team===tf)});
+                    return<td key={`a-${day}`} className={`${getTodayClass(di)} ${isHoliday(weekDates[di])?"holiday-col":""}`} style={{padding:4,borderLeft:"2px solid var(--brd-thick)",borderTop:"2px solid var(--brd-thick)"}}>{da.map(a=>{const e=ge(a.empId);const at=ABS.find(t=>t.id===a.type);return e&&<div key={a.empId} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 8px",marginBottom:2,border:`1px solid ${at?.color}`,fontSize:13,minHeight:36,background:"var(--bg3)"}}><span>{at?.icon}</span><span style={{fontWeight:500}}>{e.name?.split(" ").pop()}</span></div>})}</td>})}</tr>
               </tbody>
             </table>
           </div>
@@ -439,6 +525,8 @@ export default function App(){
         {t.b>0&&<span style={{position:"absolute",top:2,right:"50%",marginRight:-14,background:"var(--acc3)",color:"#fff",padding:"0 5px",fontSize:10}}>{t.b}</span>}
       </button>)}
     </nav>
+
+    </div>{/* end app-content */}
 
     {/* MODALS */}
     <Modal open={!!selCell} onClose={()=>setSelCell(null)} title="Akce">{selCell&&(()=>{const emp=ge(selCell.empId);if(!emp)return null;return<div>
