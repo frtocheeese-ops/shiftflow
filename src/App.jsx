@@ -30,20 +30,12 @@ const AE = "admin@shiftflow.app", AP = "ShiftFlowAdmin2026!";
 const dc = o => JSON.parse(JSON.stringify(o));
 const uid = () => "u" + Math.random().toString(36).slice(2, 9);
 function getMon(d) { const dt = new Date(d); const dy = dt.getDay(); dt.setDate(dt.getDate() - dy + (dy === 0 ? -6 : 1)); dt.setHours(0, 0, 0, 0); return dt; }
-<<<<<<< HEAD
 function localISO(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; }
 const wKey = d => localISO(getMon(d));
 const fmtW = d => { const m = getMon(d), f = new Date(m); f.setDate(f.getDate() + 4); return `${m.getDate()}.${m.getMonth() + 1}. — ${f.getDate()}.${f.getMonth() + 1}.${f.getFullYear()}`; };
 function buildDef(emps) { const s = {}; DAYS.forEach(day => { s[day] = {}; SHIFTS.forEach(sh => s[day][sh] = []); emps.forEach(emp => { if (!emp.defaultSchedule || !emp.setupDone) return; const shift = emp.defaultSchedule[day]; if (shift && SHIFTS.includes(shift)) s[day][shift].push({ empId: emp.id, ho: emp.defaultSchedule[`${day}_ho`] || false, isDefault: true }); }); }); return s; }
 function getWeekDates(wo) { const d = new Date(); d.setDate(d.getDate() + wo * 7); const mon = getMon(d); return DAYS.map((_, i) => { const x = new Date(mon); x.setDate(mon.getDate() + i); return localISO(x); }); }
 function fmtDate(iso) { const p = iso.split('-'); return `${parseInt(p[2])}.${parseInt(p[1])}.`; }
-=======
-const wKey = d => getMon(d).toISOString().slice(0, 10);
-const fmtW = d => { const m = getMon(d), f = new Date(m); f.setDate(f.getDate() + 4); return `${m.getDate()}.${m.getMonth() + 1}. — ${f.getDate()}.${f.getMonth() + 1}.${f.getFullYear()}`; };
-function buildDef(emps) { const s = {}; DAYS.forEach(day => { s[day] = {}; SHIFTS.forEach(sh => s[day][sh] = []); emps.forEach(emp => { if (!emp.defaultSchedule || !emp.setupDone) return; const shift = emp.defaultSchedule[day]; if (shift && SHIFTS.includes(shift)) s[day][shift].push({ empId: emp.id, ho: emp.defaultSchedule[`${day}_ho`] || false, isDefault: true }); }); }); return s; }
-function getWeekDates(wo) { const d = new Date(); d.setDate(d.getDate() + wo * 7); const dow = d.getDay(); const mon = new Date(d); mon.setDate(d.getDate() - dow + (dow === 0 ? -6 : 1)); mon.setHours(0, 0, 0, 0); return DAYS.map((_, i) => { const x = new Date(mon); x.setDate(mon.getDate() + i); return x.toISOString().slice(0, 10); }); }
-function fmtDate(iso) { const d = new Date(iso + "T00:00:00"); return `${d.getDate()}.${d.getMonth() + 1}.`; }
->>>>>>> 9029e7ec925a3f07fdb5c021b9c0d6e67e013cb5
 const todayIdx = (() => { const d = new Date().getDay(); return d >= 1 && d <= 5 ? d - 1 : 0; })();
 const isTd = (i, wo) => wo === 0 && i === todayIdx;
 const GAS = import.meta.env.VITE_GAS_URL;
@@ -76,11 +68,7 @@ const CSS = `
   --l1:#7c7cf5;--sd:#50a0d0;--red:#c04040;--grn:#50a060;--amb:#c87020;
   --sel:rgba(123,143,173,.15);--stx:#e8eaf0;--blur:blur(16px);--glass:rgba(16,16,26,.82);
   --sheen:linear-gradient(135deg,rgba(255,255,255,.06) 0%,transparent 50%,rgba(255,255,255,.03) 100%);
-<<<<<<< HEAD
   --grid:none;--moon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='600'%3E%3Crect width='600' height='600' fill='%23080810'/%3E%3Ccircle cx='80' cy='120' r='1' fill='rgba(255,255,255,.5)'/%3E%3Ccircle cx='200' cy='60' r='.7' fill='rgba(255,255,255,.35)'/%3E%3Ccircle cx='350' cy='150' r='1.1' fill='rgba(255,255,255,.45)'/%3E%3Ccircle cx='500' cy='80' r='.8' fill='rgba(255,255,255,.4)'/%3E%3Ccircle cx='120' cy='280' r='.6' fill='rgba(255,255,255,.5)'/%3E%3Ccircle cx='300' cy='320' r='1' fill='rgba(255,255,255,.35)'/%3E%3Ccircle cx='450' cy='280' r='.9' fill='rgba(255,255,255,.45)'/%3E%3Ccircle cx='550' cy='400' r='.7' fill='rgba(255,255,255,.3)'/%3E%3Ccircle cx='150' cy='420' r='1' fill='rgba(255,255,255,.4)'/%3E%3Ccircle cx='380' cy='480' r='.8' fill='rgba(255,255,255,.45)'/%3E%3Ccircle cx='520' cy='550' r='1.2' fill='rgba(255,255,255,.3)'/%3E%3Ccircle cx='60' cy='530' r='.6' fill='rgba(255,255,255,.35)'/%3E%3Ccircle cx='250' cy='560' r='1' fill='rgba(255,255,255,.4)'/%3E%3C/svg%3E");
-=======
-  --grid:none;--moon:none;
->>>>>>> 9029e7ec925a3f07fdb5c021b9c0d6e67e013cb5
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 body{background:var(--bg)}
@@ -98,21 +86,10 @@ body{background:var(--bg)}
 .atp{animation:tp 2.5s ease-in-out infinite}
 .chg{box-shadow:inset 3px 0 0 var(--acc2)}
 .ent{transition:all .15s;cursor:pointer;min-height:48px;display:flex;align-items:center}.ent:hover,.ent:active{background:var(--card-h)!important}
-<<<<<<< HEAD
 .gl{background:var(--card);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--bt)}
 .pg{background:var(--panel);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur)}
 .dz{transition:background .15s}.dz.over{background:var(--adim)!important;outline:2px dashed var(--abrd)}
 @media(max-width:768px){.gl,.pg{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}}
-=======
-.gl{background:var(--card);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);border:1px solid var(--bt);position:relative;overflow:hidden}
-.gl::before{content:'';position:absolute;inset:0;background:var(--sheen);pointer-events:none;z-index:1}
-.gl::after{content:'';position:absolute;inset:0;background-image:var(--grid);background-size:200px 200px;opacity:.7;pointer-events:none;z-index:0}
-.gl>*{position:relative;z-index:2}
-.pg{background:var(--panel);backdrop-filter:var(--blur);-webkit-backdrop-filter:var(--blur);position:relative;overflow:hidden}
-.pg::before{content:'';position:absolute;inset:0;background:var(--sheen);pointer-events:none;z-index:1}
-.pg>*{position:relative;z-index:2}
-.dz{transition:background .15s}.dz.over{background:var(--adim)!important;outline:2px dashed var(--abrd)}
->>>>>>> 9029e7ec925a3f07fdb5c021b9c0d6e67e013cb5
 `;
 
 /* ═══ UI ═══ */
@@ -334,7 +311,6 @@ export default function App() {
     } catch (err) { console.error("addAbs:", err); notify("Chyba: " + err.message); }
   };
 
-<<<<<<< HEAD
   const removeAbs = async (eid, day) => {
     const k = fsKey(eid, day);
     const newAbs = { ...absences }; delete newAbs[k];
@@ -342,8 +318,6 @@ export default function App() {
     try { await setDoc(doc(db, "schedules", wk), { absences: newAbs }, { merge: true }); notify("Nepřítomnost odebrána"); } catch { notify("Chyba"); }
   };
 
-=======
->>>>>>> 9029e7ec925a3f07fdb5c021b9c0d6e67e013cb5
   const saveNote = async (eid, day, shift, note) => {
     const key = fsKey(eid, day, shift.replace(":", ""));
     const newNotes = { ...notes, [key]: note };
@@ -395,12 +369,8 @@ export default function App() {
           onClick={() => isA ? setSelCell({ day, shift, empId: en.empId }) : en.empId === profile.id && setModal({ type: "myshift", day, shift })}
           style={{ gap: 10, padding: "12px 14px", borderBottom: idx < entries.length - 1 ? "1px solid var(--brd)" : "none" }}>
           <div style={{ width: 3, height: 24, background: tc }} />
-<<<<<<< HEAD
           <span style={{ fontWeight: 500, color: "var(--w)", flex: 1 }}>{emp.name}</span>
           {note && <span title={note} style={{ color: "var(--acc2)", cursor: "help", fontSize: 15, fontWeight: 700, border: "1px solid var(--acc2)", width: 22, height: 22, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>i</span>}
-=======
-          <div style={{ flex: 1 }}><span style={{ fontWeight: 500, color: "var(--w)" }}>{emp.name}</span>{note && <div style={{ fontSize: 11, color: "var(--tx3)", marginTop: 2 }}>💬 {note}</div>}</div>
->>>>>>> 9029e7ec925a3f07fdb5c021b9c0d6e67e013cb5
           <Badge small color={tc}>{emp.team}</Badge>
           {en.ho && <Badge small color="var(--grn)">HO</Badge>}
         </div>; })}
@@ -484,11 +454,7 @@ export default function App() {
                 {/* Day absences */}
                 {(() => { const da = getDayAbs(DAYS[selDay]); if (!da.length) return null; return <div style={{ marginTop: 16 }}>
                   <div style={{ fontSize: 12, color: "var(--tx3)", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 8, fontFamily: "'Barlow Condensed',sans-serif" }}>Nepřítomnost</div>
-<<<<<<< HEAD
                   {da.map(a => { const e = ge(a.empId); const at = ABS.find(t => t.id === a.type); return e && <div key={a.empId} className="gl" style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", marginBottom: 6, minHeight: 48 }}><span>{at?.icon}</span><span style={{ fontWeight: 500, color: "var(--w)", flex: 1 }}>{e.name}</span><Badge small color={at?.color}>{at?.label}</Badge>{(isA || a.empId === profile.id) && <button onClick={() => removeAbs(a.empId, DAYS[selDay])} style={{ background: "none", border: "1px solid var(--red)", color: "var(--red)", width: 28, height: 28, cursor: "pointer", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>✕</button>}</div>; })}
-=======
-                  {da.map(a => { const e = ge(a.empId); const at = ABS.find(t => t.id === a.type); return e && <div key={a.empId} className="gl" style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", marginBottom: 6, minHeight: 48 }}><span>{at?.icon}</span><span style={{ fontWeight: 500, color: "var(--w)", flex: 1 }}>{e.name}</span><Badge small color={at?.color}>{at?.label}</Badge></div>; })}
->>>>>>> 9029e7ec925a3f07fdb5c021b9c0d6e67e013cb5
                 </div>; })()}
               </div>
             </>}
