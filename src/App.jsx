@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { auth, db, getMsg } from "./firebase";
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile } from "firebase/auth";
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, sendPasswordResetEmail, updatePassword } from "firebase/auth";
 import { doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc, collection, onSnapshot } from "firebase/firestore";
 import { getToken, onMessage } from "firebase/messaging";
 
@@ -178,6 +178,7 @@ function AuthScreen() {
         <Input label="Email" value={login} onChange={e => setLogin(e.target.value)} />
         <Input label="Heslo" type="password" value={pass} onChange={e => setPass(e.target.value)} onKeyDown={e => e.key === "Enter" && doLogin()} />
         <div style={{ display: "flex", gap: 8 }}><Btn warm disabled={loading} onClick={doLogin} style={{ flex: 1 }}>{loading ? "..." : "Přihlásit"}</Btn><Btn ghost onClick={async () => { try { const s = localStorage.getItem("sf_bio_email"), p = localStorage.getItem("sf_bio_token"); if (!s || !p) return setErr("Přihlaste se heslem a povolte biometrii"); await signInWithEmailAndPassword(auth, s, p); } catch (e) { setErr("Bio: " + e.message); } }} style={{ fontSize: 20 }}>🔐</Btn></div>
+        <button onClick={async () => { if (!login || !login.includes("@")) return setErr("Zadejte email"); try { await sendPasswordResetEmail(auth, login); setErr(""); notify && notify("Email odeslán"); alert("Odkaz pro reset hesla odeslán na " + login); } catch (e) { setErr(e.message); } }} style={{ background: "none", border: "none", color: "var(--acc2)", cursor: "pointer", fontSize: 13, fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 1, marginTop: 12, width: "100%", textAlign: "center" }}>Zapomenuté heslo?</button>
       </> : <>
         <Input label="Jméno" value={rn} onChange={e => setRn(e.target.value)} />
         <Input label="Email" value={rEmail} onChange={e => setREmail(e.target.value)} />
@@ -219,11 +220,47 @@ function DefEditor({ employees }) {
 
 function AbsF({ emps, wd, onSubmit }) { const [eid, setEid] = useState(emps[0]?.id || ""); const [dayIdx, setDayIdx] = useState(0); const [t, setT] = useState(ABS[0].id); return <div><Sel label="Zaměstnanec" value={eid} onChange={e => setEid(e.target.value)} options={emps.map(e => ({ value: e.id, label: e.name }))} /><Sel label="Den" value={dayIdx} onChange={e => setDayIdx(+e.target.value)} options={DAYS.map((d, i) => ({ value: i, label: `${DAYS_F[i]} ${fmtDate(wd[i])}` }))} /><Sel label="Typ" value={t} onChange={e => setT(e.target.value)} options={ABS.map(a => ({ value: a.id, label: `${a.icon} ${a.label}` }))} /><Btn warm onClick={() => onSubmit(eid, DAYS[dayIdx], t)} style={{ width: "100%", marginTop: 8 }}>Přidat</Btn></div>; }
 function EvF({ onSubmit }) { const [day, setDay] = useState(DAYS[0]); const [t, setT] = useState(EVTS[0].id); const [n, setN] = useState(""); return <div><Sel label="Den" value={day} onChange={e => setDay(e.target.value)} options={DAYS.map((d, i) => ({ value: d, label: DAYS_F[i] }))} /><Sel label="Typ" value={t} onChange={e => setT(e.target.value)} options={EVTS.map(e => ({ value: e.id, label: `${e.icon} ${e.label}` }))} /><Input label="Poznámka" value={n} onChange={e => setN(e.target.value)} /><Btn warm onClick={() => onSubmit(day, t, n)} style={{ width: "100%", marginTop: 8 }}>Přidat</Btn></div>; }
-function SwF({ dDay, dShift, onSubmit }) { const [day, setDay] = useState(dDay || DAYS[0]); const [sh, setSh] = useState(dShift || SHIFTS[0]); return <div><Sel label="Den" value={day} onChange={e => setDay(e.target.value)} options={DAYS.map((d, i) => ({ value: d, label: DAYS_F[i] }))} /><Sel label="Směna" value={sh} onChange={e => setSh(e.target.value)} options={SHIFTS.map(s => ({ value: s, label: s }))} /><Btn warm onClick={() => onSubmit(day, sh)} style={{ width: "100%", marginTop: 8 }}>Odeslat</Btn></div>; }
+function SwF({ dDay, dShift, onSubmit }) { const [day, setDay] = useState(dDay || DAYS[0]); const [sh, setSh] = useState(dShift || SHIFTS[0]); const [comment, setComment] = useState(""); return <div><Sel label="Den" value={day} onChange={e => setDay(e.target.value)} options={DAYS.map((d, i) => ({ value: d, label: DAYS_F[i] }))} /><Sel label="Směna" value={sh} onChange={e => setSh(e.target.value)} options={SHIFTS.map(s => ({ value: s, label: s }))} /><Input label="Důvod (volitelné)" value={comment} onChange={e => setComment(e.target.value)} placeholder="Např. rodinná záležitost" /><Btn warm onClick={() => onSubmit(day, sh, comment)} style={{ width: "100%", marginTop: 8 }}>Odeslat</Btn></div>; }
 function MyAbsF({ profile, wd, onSubmit }) { const [dayIdx, setDayIdx] = useState(Math.max(0, todayIdx)); const [t, setT] = useState(ABS[0].id); const r = { sick: (profile.sickTotal || 5) - (profile.sickUsed || 0), vacation: (profile.vacationTotal || 20) - (profile.vacationUsed || 0), whatever: (profile.whateverTotal || 3) - (profile.whateverUsed || 0) }; return <div><div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 20 }}>{[{ l: "Dovol.", v: r.vacation, c: "var(--sd)" }, { l: "Sick", v: r.sick, c: "var(--red)" }, { l: "What.", v: r.whatever, c: "var(--amb)" }].map(b => <div key={b.l} style={{ textAlign: "center", padding: 12, border: "1px solid var(--brd)", background: "var(--bg3)" }}><div style={{ fontSize: 28, fontWeight: 600, color: b.c, fontFamily: "'IBM Plex Mono',monospace" }}>{b.v}</div><div style={{ fontSize: 11, color: "var(--tx3)", textTransform: "uppercase" }}>{b.l}</div></div>)}</div><Sel label="Den" value={dayIdx} onChange={e => setDayIdx(+e.target.value)} options={DAYS.map((d, i) => ({ value: i, label: `${DAYS_F[i]} ${fmtDate(wd[i])}` }))} /><Sel label="Typ" value={t} onChange={e => setT(e.target.value)} options={ABS.map(a => ({ value: a.id, label: `${a.icon} ${a.label}` }))} /><Btn warm onClick={() => onSubmit(DAYS[dayIdx], t)} style={{ width: "100%", marginTop: 8 }}>Zadat</Btn></div>; }
 function EditDF({ emp, onDone }) { const [vac, setVac] = useState(emp?.vacationTotal || 20); const [sick, setSick] = useState(emp?.sickTotal || 5); const [what, setWhat] = useState(emp?.whateverTotal || 3); const [l, setL] = useState(false); if (!emp) return null; return <div><Input label="Dovolená" type="number" value={vac} onChange={e => setVac(+e.target.value)} /><Input label="Sick Days" type="number" value={sick} onChange={e => setSick(+e.target.value)} /><Input label="Whatever Days" type="number" value={what} onChange={e => setWhat(+e.target.value)} /><Btn warm disabled={l} onClick={async () => { setL(true); await updateDoc(doc(db, "users", emp.id), { vacationTotal: vac, sickTotal: sick, whateverTotal: what }); setL(false); onDone(); }} style={{ width: "100%", marginTop: 8 }}>Uložit</Btn></div>; }
 function AddF({ onDone }) { const [name, setName] = useState(""); const [email, setEmail] = useState(""); const [pass, setPass] = useState(""); const [team, setTeam] = useState("L1"); const [l, setL] = useState(false); const [err, setErr] = useState(""); return <div><Input label="Jméno" value={name} onChange={e => setName(e.target.value)} /><Input label="Email" value={email} onChange={e => setEmail(e.target.value)} /><Input label="Heslo (min. 6)" type="password" value={pass} onChange={e => setPass(e.target.value)} /><Sel label="Tým" value={team} onChange={e => setTeam(e.target.value)} options={[{ value: "L1", label: "L1 Support" }, { value: "SD", label: "Service Desk" }]} />{err && <p style={{ color: "var(--red)", fontSize: 14, marginBottom: 8, padding: 10, border: "1px solid var(--red)" }}>{err}</p>}<Btn warm disabled={l} onClick={async () => { setErr(""); if (!name.trim() || !email || !pass) return setErr("Vyplňte vše"); if (pass.length < 6) return setErr("Min. 6 znaků"); setL(true); try { const r = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${import.meta.env.VITE_FIREBASE_API_KEY}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password: pass, displayName: name.trim(), returnSecureToken: false }) }); const d = await r.json(); if (d.error) { setErr(d.error.message); setL(false); return; } await setDoc(doc(db, "users", d.localId), { name: name.trim(), email, team, role: "employee", notify: false, notifyEmail: "", fcmToken: null, defaultSchedule: null, setupDone: false, vacationTotal: 20, sickTotal: 5, whateverTotal: 3, vacationUsed: 0, sickUsed: 0, whateverUsed: 0, createdAt: new Date().toISOString() }); onDone(`Přidán: ${name.trim()}`); } catch (e) { setErr(e.message); } setL(false); }} style={{ width: "100%" }}>Přidat</Btn></div>; }
 function NoteInput({ onSubmit }) { const [n, setN] = useState(""); return <div><Input value={n} onChange={e => setN(e.target.value)} placeholder="Přijdu o 20 min později" /><Btn warm onClick={() => onSubmit(n)} style={{ width: "100%", marginTop: 4 }}>Uložit poznámku</Btn></div>; }
+
+function VacRangeF({ onSubmit }) {
+  const [from, setFrom] = useState(""); const [to, setTo] = useState(""); const [type, setType] = useState("vacation");
+  return <div>
+    <Sel label="Typ" value={type} onChange={e => setType(e.target.value)} options={[{ value: "vacation", label: "🏖️ Dovolená" }, { value: "sick", label: "🤒 Sick Day" }, { value: "training", label: "📚 Školení" }]} />
+    <Input label="Od" type="date" value={from} onChange={e => setFrom(e.target.value)} />
+    <Input label="Do" type="date" value={to} onChange={e => setTo(e.target.value)} />
+    <Btn warm onClick={() => { if (!from || !to) return; onSubmit(from, to, type); }} style={{ width: "100%", marginTop: 8 }}>Zadat rozsah</Btn>
+  </div>;
+}
+
+function ChangePassF({ onDone }) {
+  const [np, setNp] = useState(""); const [np2, setNp2] = useState(""); const [l, setL] = useState(false); const [err, setErr] = useState("");
+  return <div>
+    <Input label="Nové heslo (min. 6)" type="password" value={np} onChange={e => setNp(e.target.value)} />
+    <Input label="Nové heslo znovu" type="password" value={np2} onChange={e => setNp2(e.target.value)} />
+    {err && <p style={{ color: "var(--red)", fontSize: 14, marginBottom: 8, padding: 10, border: "1px solid var(--red)" }}>{err}</p>}
+    <Btn warm disabled={l} onClick={async () => {
+      setErr(""); if (np.length < 6) return setErr("Min. 6 znaků"); if (np !== np2) return setErr("Hesla se neshodují");
+      setL(true); try { await updatePassword(auth.currentUser, np); onDone(); } catch (e) { setErr(e.code === "auth/requires-recent-login" ? "Odhlaste se a přihlaste znovu" : e.message); } setL(false);
+    }} style={{ width: "100%", marginTop: 8 }}>Změnit heslo</Btn>
+  </div>;
+}
+
+function ChangeNotifF({ profile, onDone }) {
+  const [email, setEmail] = useState(profile?.notifyEmail || profile?.email || "");
+  const [en, setEn] = useState(profile?.notify || false);
+  const [l, setL] = useState(false);
+  return <div>
+    <Toggle checked={en} onChange={setEn} label="Dostávat email notifikace" />
+    {en && <Input label="Email pro notifikace" type="email" value={email} onChange={e => setEmail(e.target.value)} />}
+    <Btn warm disabled={l} onClick={async () => {
+      setL(true); await updateDoc(doc(db, "users", profile.id), { notify: en, notifyEmail: email }); setL(false); onDone();
+    }} style={{ width: "100%", marginTop: 8 }}>Uložit</Btn>
+  </div>;
+}
 
 /* ═══ MAIN APP ═══ */
 export default function App() {
@@ -311,11 +348,71 @@ export default function App() {
     } catch (err) { console.error("addAbs:", err); notify("Chyba: " + err.message); }
   };
 
+  // Absence for a date range (vacation etc)
+  const addAbsRange = async (fromISO, toISO, type) => {
+    const eid = profile.id;
+    let current = new Date(fromISO + "T00:00:00");
+    const end = new Date(toISO + "T00:00:00");
+    let count = 0;
+    while (current <= end) {
+      const dow = current.getDay();
+      if (dow >= 1 && dow <= 5) { // skip weekends
+        const dayName = DAYS[dow - 1];
+        const dateStr = localISO(current);
+        const weekStart = wKey(current);
+        // Determine which week this day belongs to
+        const s = dc(cs);
+        SHIFTS.forEach(sh => { if (s[dayName]?.[sh]) s[dayName][sh] = s[dayName][sh].filter(e => e.empId !== eid); });
+        const ak = fsKey(eid, dayName);
+        if (weekStart === wk) {
+          // Same week - update local state too
+          const newAbs = { ...absences, [ak]: type };
+          setSchedule(s); setAbsences(newAbs);
+          await setDoc(doc(db, "schedules", wk), { entries: s, absences: newAbs, modifiedAt: new Date().toISOString() }, { merge: true });
+        } else {
+          // Different week - just write to Firestore
+          const snap = await getDoc(doc(db, "schedules", weekStart));
+          const weekData = snap.exists() ? snap.data() : {};
+          const weekEntries = weekData.entries ? dc(weekData.entries) : dc(buildDef(employees));
+          SHIFTS.forEach(sh => { if (weekEntries[dayName]?.[sh]) weekEntries[dayName][sh] = weekEntries[dayName][sh].filter(e => e.empId !== eid); });
+          const weekAbs = { ...(weekData.absences || {}), [ak]: type };
+          await setDoc(doc(db, "schedules", weekStart), { entries: weekEntries, absences: weekAbs, weekStart, modifiedAt: new Date().toISOString() }, { merge: true });
+        }
+        count++;
+      }
+      current.setDate(current.getDate() + 1);
+    }
+    // Update day counter
+    const emp = ge(eid);
+    if (emp && !["doctor", "training"].includes(type)) {
+      const f = type === "sick" ? "sickUsed" : type === "vacation" ? "vacationUsed" : type === "whatever" ? "whateverUsed" : null;
+      if (f) await updateDoc(doc(db, "users", eid), { [f]: (emp[f] || 0) + count });
+    }
+    notify(`${ABS.find(a => a.id === type)?.label}: ${count} dní zadáno`);
+    log(`Rozsah: ${type} ${fromISO} — ${toISO}`);
+  };
+
   const removeAbs = async (eid, day) => {
     const k = fsKey(eid, day);
     const newAbs = { ...absences }; delete newAbs[k];
-    setAbsences(newAbs);
-    try { await setDoc(doc(db, "schedules", wk), { absences: newAbs }, { merge: true }); notify("Nepřítomnost odebrána"); } catch { notify("Chyba"); }
+    // Restore employee to their default shift
+    const emp = ge(eid);
+    const s = dc(cs);
+    if (emp?.defaultSchedule?.[day]) {
+      const shift = emp.defaultSchedule[day];
+      if (SHIFTS.includes(shift)) {
+        if (!s[day]) s[day] = {};
+        if (!s[day][shift]) s[day][shift] = [];
+        if (!s[day][shift].some(e => e.empId === eid)) {
+          s[day][shift].push({ empId: eid, ho: emp.defaultSchedule[`${day}_ho`] || false, isDefault: true });
+        }
+      }
+    }
+    setAbsences(newAbs); setSchedule(s);
+    try {
+      await setDoc(doc(db, "schedules", wk), { entries: s, absences: newAbs, modifiedAt: new Date().toISOString() }, { merge: true });
+      notify("Nepřítomnost odebrána, směna obnovena");
+    } catch { notify("Chyba"); }
   };
 
   const saveNote = async (eid, day, shift, note) => {
@@ -329,7 +426,17 @@ export default function App() {
   };
 
   const addEv = async (day, et, note) => { await setDoc(doc(db, "schedules", wk), { [`events.${day}`]: { type: et, note, title: EVTS.find(e => e.id === et)?.label } }, { merge: true }); notify("Událost přidána"); };
-  const mkSwap = async (rid, day, sh) => { await addDoc(collection(db, "swapRequests"), { rid, day, sh, week: wk, status: "open", created: new Date().toISOString() }); notify("Žádost odeslána"); };
+  const mkSwap = async (rid, day, sh, comment) => {
+    await addDoc(collection(db, "swapRequests"), { rid, day, sh, week: wk, status: "open", comment: comment || "", created: new Date().toISOString() });
+    // Notify same-team members
+    const requester = ge(rid);
+    if (requester) {
+      const teamMembers = employees.filter(e => e.team === requester.team && e.id !== rid && e.role !== "admin" && e.notify);
+      const msg = `${requester.name} žádá o výměnu: ${day} ${sh}${comment ? ` — "${comment}"` : ""}`;
+      teamMembers.forEach(m => callGAS("sendEmail", { to: m.notifyEmail || m.email, employeeName: m.name, changeDescription: msg, weekLabel: fmtW(cw) }));
+    }
+    notify("Žádost odeslána");
+  };
   const doSwap = async (swId, aid) => {
     const sw = swaps.find(s => s.id === swId); if (!sw) return;
     const s = dc(cs); let aSh = null;
@@ -351,7 +458,7 @@ export default function App() {
   if (!isA && !profile.setupDone) return <Setup profile={profile} onDone={() => setProfile(p => ({ ...p, setupDone: true }))} />;
 
   const openSw = swaps.filter(s => s.status === "open" && s.week === wk);
-  const NAV = [{ id: "schedule", l: "Rozvrh", ic: "▦", b: 0 }, { id: "swaps", l: "Výměny", ic: "⇄", b: openSw.length }, ...(isA ? [{ id: "people", l: "Tým", ic: "◉", b: 0 }] : []), { id: "stats", l: "Stats", ic: "◫", b: 0 }, { id: "log", l: "Log", ic: "≡", b: 0 }, ...(isA ? [{ id: "defaults", l: "Default", ic: "⊞", b: 0 }, { id: "settings", l: "Config", ic: "⚙", b: 0 }] : [])];
+  const NAV = [{ id: "schedule", l: "Rozvrh", ic: "▦", b: 0 }, { id: "swaps", l: "Výměny", ic: "⇄", b: openSw.length }, ...(isA ? [{ id: "people", l: "Tým", ic: "◉", b: 0 }] : []), { id: "stats", l: "Stats", ic: "◫", b: 0 }, { id: "log", l: "Log", ic: "≡", b: 0 }, ...(isA ? [{ id: "defaults", l: "Default", ic: "⊞", b: 0 }] : []), { id: "settings", l: "Nastavení", ic: "⚙", b: 0 }];
   const dayHol = wh[selDay];
   const getEntries = (day, shift) => (cs[day]?.[shift] || []).filter(e => { const emp = ge(e.empId); return emp && (tf === "all" || emp.team === tf); });
   const getDayAbs = day => Object.entries(absences).filter(([k]) => k.endsWith(`__${day}`)).map(([k, t]) => ({ empId: k.split("__")[0], type: t })).filter(a => ge(a.empId));
@@ -497,7 +604,7 @@ export default function App() {
           {view === "swaps" && <div>
             <div style={{ fontSize: 20, fontWeight: 600, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 2, marginBottom: 20, borderBottom: "1px solid var(--brd)", paddingBottom: 12 }}>Výměny</div>
             {!isA && <Card style={{ marginBottom: 20 }}><Btn warm onClick={() => setModal({ type: "swap", day: DAYS[selDay], shift: SHIFTS[0] })}>+ Nová žádost</Btn></Card>}
-            {openSw.map(sw => { const re = ge(sw.rid); const me = profile.id === sw.rid; const can = !isA && !me; return <Card key={sw.id} style={{ padding: 16, marginBottom: 8, display: "flex", alignItems: "center", justifyContent: "space-between" }}><div><div style={{ fontWeight: 600, fontSize: 17, color: "var(--w)" }}>{re?.name}</div><Badge small color="var(--acc2)">{sw.day} {sw.sh}</Badge></div>{can && <Btn warm small onClick={() => doSwap(sw.id, profile.id)}>Přijmout</Btn>}{me && <Badge color="var(--amb)">Tvoje</Badge>}</Card>; })}
+            {openSw.map(sw => { const re = ge(sw.rid); const me = profile.id === sw.rid; const can = !isA && !me; return <Card key={sw.id} style={{ padding: 16, marginBottom: 8 }}><div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}><div><div style={{ fontWeight: 600, fontSize: 17, color: "var(--w)" }}>{re?.name}</div><Badge small color="var(--acc2)">{sw.day} {sw.sh}</Badge></div>{can && <Btn warm small onClick={() => doSwap(sw.id, profile.id)}>Přijmout</Btn>}{me && <Badge color="var(--amb)">Tvoje</Badge>}</div>{sw.comment && <div style={{ marginTop: 8, fontSize: 13, color: "var(--tx2)", padding: "6px 10px", border: "1px solid var(--brd)", background: "var(--bg3)" }}>💬 {sw.comment}</div>}</Card>; })}
             {!openSw.length && <p style={{ color: "var(--tx3)" }}>Žádné žádosti.</p>}
           </div>}
 
@@ -526,10 +633,20 @@ export default function App() {
 
           {view === "log" && <div><div style={{ fontSize: 20, fontWeight: 600, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 2, marginBottom: 20, borderBottom: "1px solid var(--brd)", paddingBottom: 12 }}>Log</div>{logs.map(h => <div key={h.id} style={{ display: "flex", gap: 10, padding: "10px 12px", borderBottom: "1px solid var(--brd)", fontSize: 14 }}><span style={{ fontSize: 12, color: "var(--tx3)", fontFamily: "'IBM Plex Mono',monospace", minWidth: 130 }}>{h.time ? new Date(h.time).toLocaleString("cs") : ""}</span><span style={{ flex: 1 }}>{h.msg}</span></div>)}</div>}
           {view === "defaults" && isA && <div><div style={{ fontSize: 20, fontWeight: 600, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 2, marginBottom: 20, borderBottom: "1px solid var(--brd)", paddingBottom: 12 }}>Stálý rozvrh</div><DefEditor employees={employees} /></div>}
-          {view === "settings" && isA && <div style={{ maxWidth: 560 }}>
-            <div style={{ fontSize: 20, fontWeight: 600, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 2, marginBottom: 20, borderBottom: "1px solid var(--brd)", paddingBottom: 12 }}>Konfigurace</div>
-            <Card style={{ marginBottom: 16 }}><Input label="L1 Max/směna" type="number" value={rules.L1_max} onChange={e => setRules(r => ({ ...r, L1_max: +e.target.value }))} /><Input label="SD Max 8:00" type="number" value={rules.SD_max8} onChange={e => setRules(r => ({ ...r, SD_max8: +e.target.value }))} /><Input label="SD Max HO/den" type="number" value={rules.SD_maxHO} onChange={e => setRules(r => ({ ...r, SD_maxHO: +e.target.value }))} /><Toggle checked={rules.SD_noHO8} onChange={v => setRules(r => ({ ...r, SD_noHO8: v }))} label="Zákaz HO 08:00" /><Toggle checked={rules.SD_noHO10} onChange={v => setRules(r => ({ ...r, SD_noHO10: v }))} label="Zákaz HO 10:00" /><Btn warm onClick={async () => { await setDoc(doc(db, "rules", "global"), rules); notify("Uloženo"); }}>Uložit</Btn></Card>
-            <Card><div style={{ display: "flex", gap: 8 }}><Btn danger onClick={async () => { await deleteDoc(doc(db, "schedules", wk)); notify("Reset"); }}>Reset</Btn><Btn ghost onClick={exportCSV}>CSV</Btn></div></Card>
+          {view === "settings" && <div style={{ maxWidth: 560 }}>
+            <div style={{ fontSize: 20, fontWeight: 600, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 2, marginBottom: 20, borderBottom: "1px solid var(--brd)", paddingBottom: 12 }}>Nastavení</div>
+            <Card style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, fontFamily: "'Barlow Condensed',sans-serif" }}>Účet</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <Btn ghost onClick={() => setModal("changePass")}>Změnit heslo</Btn>
+                <Btn ghost onClick={() => setModal("changeNotif")}>Email notifikace</Btn>
+              </div>
+            </Card>
+            {isA && <Card style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, fontFamily: "'Barlow Condensed',sans-serif" }}>Pravidla směn</div>
+              <Input label="L1 Max/směna" type="number" value={rules.L1_max} onChange={e => setRules(r => ({ ...r, L1_max: +e.target.value }))} /><Input label="SD Max 8:00" type="number" value={rules.SD_max8} onChange={e => setRules(r => ({ ...r, SD_max8: +e.target.value }))} /><Input label="SD Max HO/den" type="number" value={rules.SD_maxHO} onChange={e => setRules(r => ({ ...r, SD_maxHO: +e.target.value }))} /><Toggle checked={rules.SD_noHO8} onChange={v => setRules(r => ({ ...r, SD_noHO8: v }))} label="Zákaz HO 08:00" /><Toggle checked={rules.SD_noHO10} onChange={v => setRules(r => ({ ...r, SD_noHO10: v }))} label="Zákaz HO 10:00" /><Btn warm onClick={async () => { await setDoc(doc(db, "rules", "global"), rules); notify("Uloženo"); }}>Uložit pravidla</Btn>
+            </Card>}
+            {isA && <Card><div style={{ display: "flex", gap: 8 }}><Btn danger onClick={async () => { await deleteDoc(doc(db, "schedules", wk)); notify("Reset"); }}>Reset týden</Btn><Btn ghost onClick={exportCSV}>CSV</Btn></div></Card>}
           </div>}
         </div>
       </main>
@@ -551,7 +668,7 @@ export default function App() {
 
     <Modal open={modal === "absence"} onClose={() => setModal(null)} title="Nepřítomnost"><AbsF emps={employees.filter(e => e.role !== "admin")} wd={wd} onSubmit={(e, d, t) => { addAbs(e, d, t); setModal(null); }} /></Modal>
     <Modal open={modal === "event"} onClose={() => setModal(null)} title="Událost"><EvF onSubmit={(d, t, n) => { addEv(d, t, n); setModal(null); }} /></Modal>
-    <Modal open={modal?.type === "swap"} onClose={() => setModal(null)} title="Výměna"><SwF dDay={modal?.day} dShift={modal?.shift} onSubmit={(d, s) => { mkSwap(profile.id, d, s); setModal(null); }} /></Modal>
+    <Modal open={modal?.type === "swap"} onClose={() => setModal(null)} title="Výměna"><SwF dDay={modal?.day} dShift={modal?.shift} onSubmit={(d, s, c) => { mkSwap(profile.id, d, s, c); setModal(null); }} /></Modal>
     <Modal open={modal?.type === "myshift"} onClose={() => setModal(null)} title="Moje směna"><div>
       <p style={{ fontSize: 15, color: "var(--tx2)", marginBottom: 16 }}>{modal?.day} · {modal?.shift}</p>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>{ABS.map(a => <Btn key={a.id} onClick={() => { addAbs(profile.id, modal.day, a.id); setModal(null); }}>{a.icon} {a.label}</Btn>)}</div>
@@ -559,8 +676,16 @@ export default function App() {
       <div style={{ fontSize: 12, color: "var(--tx3)", margin: "8px 0 6px", textTransform: "uppercase" }}>Poznámka</div>
       <NoteInput onSubmit={n => { saveNote(profile.id, modal.day, modal.shift, n); setModal(null); }} />
     </div></Modal>
-    <Modal open={modal === "myabsence"} onClose={() => setModal(null)} title="Nepřítomnost"><MyAbsF profile={profile} wd={wd} onSubmit={(d, t) => { addAbs(profile.id, d, t); setModal(null); }} /></Modal>
+    <Modal open={modal === "myabsence"} onClose={() => setModal(null)} title="Nepřítomnost">
+      <MyAbsF profile={profile} wd={wd} onSubmit={(d, t) => { addAbs(profile.id, d, t); setModal(null); }} />
+      <div style={{ borderTop: "1px solid var(--brd)", marginTop: 16, paddingTop: 16 }}>
+        <Btn ghost onClick={() => setModal("vacrange")} style={{ width: "100%", fontSize: 14 }}>🗓 Dovolená od — do (rozsah)</Btn>
+      </div>
+    </Modal>
+    <Modal open={modal === "vacrange"} onClose={() => setModal(null)} title="Nepřítomnost — rozsah"><VacRangeF onSubmit={(f, t, type) => { addAbsRange(f, t, type); setModal(null); }} /></Modal>
     <Modal open={modal === "addMember"} onClose={() => setModal(null)} title="Nový člen"><AddF onDone={m => { notify(m); log(m); setModal(null); }} /></Modal>
     <Modal open={modal?.type === "editDays"} onClose={() => setModal(null)} title="Upravit dny"><EditDF emp={modal?.emp} onDone={() => { notify("Uloženo"); setModal(null); }} /></Modal>
+    <Modal open={modal === "changePass"} onClose={() => setModal(null)} title="Změna hesla"><ChangePassF onDone={() => { notify("Heslo změněno"); setModal(null); }} /></Modal>
+    <Modal open={modal === "changeNotif"} onClose={() => setModal(null)} title="Notifikace"><ChangeNotifF profile={profile} onDone={() => { notify("Nastavení uloženo"); setModal(null); }} /></Modal>
   </div>;
 }
