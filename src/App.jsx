@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { auth, db, getMsg } from "./firebase";
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, sendPasswordResetEmail, updatePassword } from "firebase/auth";
-import { doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc, collection, onSnapshot } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc, collection, onSnapshot, deleteField } from "firebase/firestore";
 import { getToken, onMessage } from "firebase/messaging";
 
 /* ═══ CONSTANTS ═══ */
@@ -41,6 +41,108 @@ const isTd = (i, wo) => wo === 0 && todayIdx >= 0 && i === todayIdx;
 const GAS = import.meta.env.VITE_GAS_URL;
 async function callGAS(a, d) { if (!GAS) return; try { await fetch(GAS, { method: "POST", headers: { "Content-Type": "text/plain" }, body: JSON.stringify({ action: a, data: d }) }); } catch { } }
 async function initPush(u) { try { const m = await getMsg(); if (!m) return; if ((await Notification.requestPermission()) !== "granted") return; const v = import.meta.env.VITE_FIREBASE_VAPID_KEY; if (!v) return; const t = await getToken(m, { vapidKey: v }); await updateDoc(doc(db, "users", u), { fcmToken: t }); onMessage(m, p => { if (p.notification) new Notification(p.notification.title || "SF", { body: p.notification.body, icon: "/icon-192.png" }); }); } catch { } }
+
+/* ═══ GOOGLE CALENDAR ═══ */
+const GCAL_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || "";
+const GCAL_SCOPES = "https://www.googleapis.com/auth/calendar.events";
+
+function loadGIS() {
+  return new Promise(resolve => {
+    if (window.google?.accounts?.oauth2) return resolve();
+    const s = document.createElement("script");
+    s.src = "https://accounts.google.com/gsi/client";
+    s.onload = () => resolve();
+    s.onerror = () => resolve();
+    document.head.appendChild(s);
+  });
+}
+
+async function gcalAuth() {
+  await loadGIS();
+  if (!window.google?.accounts?.oauth2 || !GCAL_CLIENT_ID) return null;
+  return new Promise((resolve) => {
+    const client = window.google.accounts.oauth2.initTokenClient({
+      client_id: GCAL_CLIENT_ID,
+      scope: GCAL_SCOPES,
+      callback: (resp) => {
+        if (resp.access_token) {
+          const tokenData = { token: resp.access_token, expires: Date.now() + (resp.expires_in || 3600) * 1000 };
+          localStorage.setItem("sf_gcal_token", JSON.stringify(tokenData));
+          resolve(tokenData);
+        } else resolve(null);
+      },
+    });
+    client.requestAccessToken();
+  });
+}
+
+function getGcalToken() {
+  try { const d = JSON.parse(localStorage.getItem("sf_gcal_token")); if (d && d.expires > Date.now() + 60000) return d.token; } catch { }
+  return null;
+}
+
+async function gcalRequest(method, path, body) {
+  let token = getGcalToken();
+  if (!token) { const d = await gcalAuth(); token = d?.token; }
+  if (!token) return null;
+  const url = `https://www.googleapis.com/calendar/v3${path}`;
+  const opts = { method, headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } };
+  if (body) opts.body = JSON.stringify(body);
+  try { const r = await fetch(url, opts); if (r.ok) return r.status === 204 ? {} : r.json(); if (r.status === 401) { localStorage.removeItem("sf_gcal_token"); return null; } return null; } catch { return null; }
+}
+
+// Sync one week of shifts to Google Calendar
+async function syncWeekToGCal(userId, weekDates, schedule, employees, absences) {
+  const emp = employees.find(e => e.id === userId);
+  if (!emp) return { ok: false, msg: "Profil nenalezen" };
+  // First, delete existing ShiftFlow events for this week
+  const weekStart = weekDates[0] + "T00:00:00+02:00";
+  const weekEnd = weekDates[4] + "T23:59:59+02:00";
+  const existing = await gcalRequest("GET", `/calendars/primary/events?timeMin=${encodeURIComponent(weekStart)}&timeMax=${encodeURIComponent(weekEnd)}&q=ShiftFlow&singleEvents=true&maxResults=50`);
+  if (existing?.items) {
+    for (const ev of existing.items) {
+      if (ev.description?.includes("[ShiftFlow]")) await gcalRequest("DELETE", `/calendars/primary/events/${ev.id}`);
+    }
+  }
+  // Create new events for this week
+  let created = 0;
+  for (let i = 0; i < 5; i++) {
+    const day = ["Po", "Út", "St", "Čt", "Pá"][i];
+    const date = weekDates[i];
+    const absKey = `${userId}__${day}`;
+    if (absences[absKey]) {
+      // Create absence event
+      const absType = ABS.find(a => a.id === absences[absKey]);
+      await gcalRequest("POST", "/calendars/primary/events", {
+        summary: `${absType?.icon || "📋"} ${absType?.label || "Nepřítomnost"} — ShiftFlow`,
+        description: `[ShiftFlow] ${absType?.label}`,
+        start: { date },
+        end: { date },
+        colorId: "11", // red
+      });
+      created++;
+      continue;
+    }
+    // Find shift
+    for (const shift of ["08:00", "09:00", "10:00"]) {
+      const entry = schedule[day]?.[shift]?.find(e => e.empId === userId);
+      if (entry) {
+        const endH = parseInt(shift.split(":")[0]) + 8; // 8-hour shift
+        const hoLabel = entry.ho ? " 🏠 HO" : "";
+        await gcalRequest("POST", "/calendars/primary/events", {
+          summary: `${shift} Směna${hoLabel} — ShiftFlow`,
+          description: `[ShiftFlow] ${emp.team} · ${shift}${hoLabel}`,
+          start: { dateTime: `${date}T${shift}:00`, timeZone: "Europe/Prague" },
+          end: { dateTime: `${date}T${String(endH).padStart(2, "0")}:00:00`, timeZone: "Europe/Prague" },
+          colorId: entry.ho ? "10" : emp.team === "L1" ? "9" : "7", // green/blue/cyan
+        });
+        created++;
+        break;
+      }
+    }
+  }
+  return { ok: true, msg: `Synchronizováno: ${created} událostí` };
+}
 // Firestore-safe key: no dots, slashes or special chars
 const fsKey = (...parts) => parts.join("__");
 
@@ -302,7 +404,15 @@ export default function App() {
 
   const notify = msg => { const n = { id: uid(), msg, time: new Date().toLocaleTimeString("cs") }; setNotifs(p => [n, ...p]); setTimeout(() => setNotifs(p => p.filter(x => x.id !== n.id)), 5000); };
   const log = async msg => { try { await addDoc(collection(db, "auditLog"), { msg, time: new Date().toISOString(), week: wk, userId: profile?.id }); } catch { } };
-  const saveS = async en => { await setDoc(doc(db, "schedules", wk), { entries: en, weekStart: wk, modifiedAt: new Date().toISOString(), modifiedBy: profile?.id }, { merge: true }); };
+  const saveS = async en => {
+    await setDoc(doc(db, "schedules", wk), { entries: en, weekStart: wk, modifiedAt: new Date().toISOString(), modifiedBy: profile?.id }, { merge: true });
+    // Auto-sync to Google Calendar if enabled
+    if (profile?.gcalEnabled && getGcalToken()) {
+      setTimeout(async () => {
+        try { await syncWeekToGCal(profile.id, wd, en || cs, employees, absences); } catch { }
+      }, 1500);
+    }
+  };
   const eN = (emp, msg) => { if (emp?.notify) callGAS("sendEmail", { to: emp.notifyEmail || emp.email, employeeName: emp.name, changeDescription: msg, weekLabel: fmtW(cw) }); };
 
   // D&D: admin can move anyone, employee can move self within own team
@@ -345,6 +455,10 @@ export default function App() {
       }
       const al = ABS.find(a => a.id === type)?.label;
       notify(`${emp?.name}: ${al}`); log(`${emp?.name}: ${al} ${day}`);
+      // Auto-sync GCal
+      if (profile?.gcalEnabled && getGcalToken() && eid === profile.id) {
+        setTimeout(() => syncWeekToGCal(profile.id, wd, s, employees, newAbs).catch(() => {}), 1500);
+      }
     } catch (err) { console.error("addAbs:", err); notify("Chyba: " + err.message); }
   };
 
@@ -410,9 +524,18 @@ export default function App() {
     }
     setAbsences(newAbs); setSchedule(s);
     try {
-      await setDoc(doc(db, "schedules", wk), { entries: s, absences: newAbs, modifiedAt: new Date().toISOString() }, { merge: true });
+      // deleteField() explicitly removes the key from Firestore (merge won't do this)
+      await updateDoc(doc(db, "schedules", wk), {
+        entries: s,
+        [`absences.${k}`]: deleteField(),
+        modifiedAt: new Date().toISOString()
+      });
       notify("Nepřítomnost odebrána, směna obnovena");
-    } catch { notify("Chyba"); }
+      // Auto-sync GCal
+      if (profile?.gcalEnabled && getGcalToken() && eid === profile.id) {
+        setTimeout(() => syncWeekToGCal(profile.id, wd, s, employees, newAbs).catch(() => {}), 1500);
+      }
+    } catch (err) { console.error("removeAbs:", err); notify("Chyba"); }
   };
 
   const saveNote = async (eid, day, shift, note) => {
@@ -641,6 +764,31 @@ export default function App() {
                 <Btn ghost onClick={() => setModal("changePass")}>Změnit heslo</Btn>
                 <Btn ghost onClick={() => setModal("changeNotif")}>Email notifikace</Btn>
               </div>
+            </Card>
+            <Card style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, fontFamily: "'Barlow Condensed',sans-serif" }}>Google Calendar</div>
+              {!GCAL_CLIENT_ID ? <p style={{ fontSize: 13, color: "var(--tx3)" }}>Google Calendar integrace není nakonfigurována (chybí VITE_GOOGLE_CLIENT_ID).</p> : <>
+                <Toggle checked={profile.gcalEnabled || false} onChange={async v => {
+                  if (v && !getGcalToken()) {
+                    const t = await gcalAuth();
+                    if (!t) { notify("Autorizace selhala"); return; }
+                  }
+                  await updateDoc(doc(db, "users", profile.id), { gcalEnabled: v });
+                  setProfile(p => ({ ...p, gcalEnabled: v }));
+                  notify(v ? "Google Calendar zapnut" : "Google Calendar vypnut");
+                }} label="Synchronizovat rozvrh do Google Calendar" />
+                {profile.gcalEnabled && <>
+                  <p style={{ fontSize: 12, color: "var(--tx3)", marginBottom: 10 }}>Směny se zapíšou do vašeho primárního Google kalendáře jako události s tagem [ShiftFlow].</p>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <Btn warm onClick={async () => {
+                      notify("Synchronizuji...");
+                      const res = await syncWeekToGCal(profile.id, wd, cs, employees, absences);
+                      notify(res.msg);
+                    }}>Sync tento týden</Btn>
+                    <Btn ghost onClick={() => { localStorage.removeItem("sf_gcal_token"); notify("Token odstraněn — při dalším sync budete znovu autorizovat"); }}>Odpojit</Btn>
+                  </div>
+                </>}
+              </>}
             </Card>
             {isA && <Card style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, fontFamily: "'Barlow Condensed',sans-serif" }}>Pravidla směn</div>
