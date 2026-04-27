@@ -364,6 +364,19 @@ function ChangeNotifF({ profile, onDone }) {
   </div>;
 }
 
+function ChangeNameF({ profile, onDone }) {
+  const [name, setName] = useState(profile?.name || "");
+  const [l, setL] = useState(false); const [err, setErr] = useState("");
+  return <div>
+    <Input label="Celé jméno" value={name} onChange={e => setName(e.target.value)} />
+    {err && <p style={{ color: "var(--red)", fontSize: 14, marginBottom: 8, padding: 10, border: "1px solid var(--red)" }}>{err}</p>}
+    <Btn warm disabled={l} onClick={async () => {
+      setErr(""); if (!name.trim()) return setErr("Jméno nesmí být prázdné");
+      setL(true); try { await updateDoc(doc(db, "users", profile.id), { name: name.trim() }); if (auth.currentUser) await updateProfile(auth.currentUser, { displayName: name.trim() }); onDone(); } catch (e) { setErr(e.message); } setL(false);
+    }} style={{ width: "100%", marginTop: 8 }}>Uložit jméno</Btn>
+  </div>;
+}
+
 /* ═══ MAIN APP ═══ */
 export default function App() {
   const [authUser, setAuthUser] = useState(undefined); const [profile, setProfile] = useState(null);
@@ -391,7 +404,29 @@ export default function App() {
   const wk = wKey(cw); const isA = profile?.role === "admin";
   const ge = id => employees.find(e => e.id === id);
   const ds = useMemo(() => buildDef(employees), [employees]);
-  const cs = schedule || ds;
+  // Merge saved schedule with default schedule for any new employees not yet in saved data
+  const cs = useMemo(() => {
+    if (!schedule) return ds;
+    const merged = dc(schedule);
+    employees.forEach(emp => {
+      if (!emp.defaultSchedule || !emp.setupDone) return;
+      // Check if employee appears anywhere in saved schedule or absences
+      const inSchedule = DAYS.some(day => SHIFTS.some(sh => merged[day]?.[sh]?.some(e => e.empId === emp.id)));
+      const hasAbsence = Object.keys(absences).some(k => k.startsWith(`${emp.id}__`));
+      if (!inSchedule && !hasAbsence) {
+        // Add their default schedule
+        DAYS.forEach(day => {
+          const shift = emp.defaultSchedule[day];
+          if (shift && SHIFTS.includes(shift)) {
+            if (!merged[day]) merged[day] = {};
+            if (!merged[day][shift]) merged[day][shift] = [];
+            merged[day][shift].push({ empId: emp.id, ho: emp.defaultSchedule[`${day}_ho`] || false, isDefault: true });
+          }
+        });
+      }
+    });
+    return merged;
+  }, [schedule, ds, employees, absences]);
   const wd = useMemo(() => getWeekDates(wo), [wo]);
   const wh = wd.map(d => HMAP[d] || null);
 
@@ -509,29 +544,27 @@ export default function App() {
   const removeAbs = async (eid, day) => {
     const k = fsKey(eid, day);
     const newAbs = { ...absences }; delete newAbs[k];
-    // Restore employee to their default shift
     const emp = ge(eid);
     const s = dc(cs);
+    // First, remove employee from ALL shifts on that day to clear duplicates
+    SHIFTS.forEach(sh => { if (s[day]?.[sh]) s[day][sh] = s[day][sh].filter(e => e.empId !== eid); });
+    // Then add them back to their default shift if they have one
     if (emp?.defaultSchedule?.[day]) {
       const shift = emp.defaultSchedule[day];
       if (SHIFTS.includes(shift)) {
         if (!s[day]) s[day] = {};
         if (!s[day][shift]) s[day][shift] = [];
-        if (!s[day][shift].some(e => e.empId === eid)) {
-          s[day][shift].push({ empId: eid, ho: emp.defaultSchedule[`${day}_ho`] || false, isDefault: true });
-        }
+        s[day][shift].push({ empId: eid, ho: emp.defaultSchedule[`${day}_ho`] || false, isDefault: true });
       }
     }
     setAbsences(newAbs); setSchedule(s);
     try {
-      // deleteField() explicitly removes the key from Firestore (merge won't do this)
       await updateDoc(doc(db, "schedules", wk), {
         entries: s,
         [`absences.${k}`]: deleteField(),
         modifiedAt: new Date().toISOString()
       });
       notify("Nepřítomnost odebrána, směna obnovena");
-      // Auto-sync GCal
       if (profile?.gcalEnabled && getGcalToken() && eid === profile.id) {
         setTimeout(() => syncWeekToGCal(profile.id, wd, s, employees, newAbs).catch(() => {}), 1500);
       }
@@ -761,6 +794,7 @@ export default function App() {
             <Card style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, fontFamily: "'Barlow Condensed',sans-serif" }}>Účet</div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <Btn ghost onClick={() => setModal("changeName")}>Změnit jméno</Btn>
                 <Btn ghost onClick={() => setModal("changePass")}>Změnit heslo</Btn>
                 <Btn ghost onClick={() => setModal("changeNotif")}>Email notifikace</Btn>
               </div>
@@ -834,6 +868,7 @@ export default function App() {
     <Modal open={modal === "addMember"} onClose={() => setModal(null)} title="Nový člen"><AddF onDone={m => { notify(m); log(m); setModal(null); }} /></Modal>
     <Modal open={modal?.type === "editDays"} onClose={() => setModal(null)} title="Upravit dny"><EditDF emp={modal?.emp} onDone={() => { notify("Uloženo"); setModal(null); }} /></Modal>
     <Modal open={modal === "changePass"} onClose={() => setModal(null)} title="Změna hesla"><ChangePassF onDone={() => { notify("Heslo změněno"); setModal(null); }} /></Modal>
+    <Modal open={modal === "changeName"} onClose={() => setModal(null)} title="Změna jména"><ChangeNameF profile={profile} onDone={() => { notify("Jméno změněno"); setModal(null); }} /></Modal>
     <Modal open={modal === "changeNotif"} onClose={() => setModal(null)} title="Notifikace"><ChangeNotifF profile={profile} onDone={() => { notify("Nastavení uloženo"); setModal(null); }} /></Modal>
   </div>;
 }
