@@ -92,10 +92,79 @@ async function gcalRequest(method, path, body) {
 }
 
 // Sync one week of shifts to Google Calendar
+// Build events list from schedule for one week — used by week + range sync
+function buildWeekEvents(userId, weekDates, schedule, employees, absences) {
+  const emp = employees.find(e => e.id === userId);
+  if (!emp) return [];
+  const events = [];
+  for (let i = 0; i < 5; i++) {
+    const day = ["Po", "Út", "St", "Čt", "Pá"][i];
+    const date = weekDates[i];
+    const absKey = `${userId}__${day}`;
+    if (absences[absKey]) {
+      const absType = ABS.find(a => a.id === absences[absKey]);
+      // For absence end date in all-day event, end must be next day
+      const endDate = new Date(date + "T00:00:00"); endDate.setDate(endDate.getDate() + 1);
+      const endStr = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, "0")}-${String(endDate.getDate()).padStart(2, "0")}`;
+      events.push({
+        summary: `${absType?.icon || "📋"} ${absType?.label || "Nepřítomnost"} — ShiftFlow`,
+        description: `[ShiftFlow] ${absType?.label}`,
+        start: { date },
+        end: { date: endStr },
+        colorId: "11",
+      });
+      continue;
+    }
+    for (const shift of ["08:00", "09:00", "10:00"]) {
+      const entry = schedule?.[day]?.[shift]?.find(e => e.empId === userId);
+      if (entry) {
+        const endH = parseInt(shift.split(":")[0]) + 8;
+        const hoLabel = entry.ho ? " 🏠 HO" : "";
+        events.push({
+          summary: `${shift} Směna${hoLabel} — ShiftFlow`,
+          description: `[ShiftFlow] ${emp.team} · ${shift}${hoLabel}`,
+          start: { dateTime: `${date}T${shift}:00`, timeZone: "Europe/Prague" },
+          end: { dateTime: `${date}T${String(endH).padStart(2, "0")}:00:00`, timeZone: "Europe/Prague" },
+          colorId: entry.ho ? "10" : emp.team === "L1" ? "9" : "7",
+        });
+        break;
+      }
+    }
+  }
+  return events;
+}
+
+// Generate week dates from Monday ISO string
+function weekDatesFromMonday(mondayISO) {
+  const start = new Date(mondayISO + "T00:00:00");
+  const dates = [];
+  for (let i = 0; i < 5; i++) {
+    const d = new Date(start); d.setDate(start.getDate() + i);
+    dates.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
+  }
+  return dates;
+}
+
+// Get all Monday ISOs for `weeks` weeks starting from offset relative to today
+function getMondaysForRange(weeksAhead = 52, weeksBack = 0) {
+  const today = new Date();
+  const dy = today.getDay();
+  const currentMon = new Date(today);
+  currentMon.setDate(today.getDate() - dy + (dy === 0 ? -6 : 1));
+  currentMon.setHours(0, 0, 0, 0);
+  const mondays = [];
+  for (let w = -weeksBack; w < weeksAhead; w++) {
+    const m = new Date(currentMon);
+    m.setDate(currentMon.getDate() + w * 7);
+    mondays.push(`${m.getFullYear()}-${String(m.getMonth() + 1).padStart(2, "0")}-${String(m.getDate()).padStart(2, "0")}`);
+  }
+  return mondays;
+}
+
+// Sync ONE week (in-memory data already provided)
 async function syncWeekToGCal(userId, weekDates, schedule, employees, absences) {
   const emp = employees.find(e => e.id === userId);
   if (!emp) return { ok: false, msg: "Profil nenalezen" };
-  // First, delete existing ShiftFlow events for this week
   const weekStart = weekDates[0] + "T00:00:00+02:00";
   const weekEnd = weekDates[4] + "T23:59:59+02:00";
   const existing = await gcalRequest("GET", `/calendars/primary/events?timeMin=${encodeURIComponent(weekStart)}&timeMax=${encodeURIComponent(weekEnd)}&q=ShiftFlow&singleEvents=true&maxResults=50`);
@@ -104,44 +173,87 @@ async function syncWeekToGCal(userId, weekDates, schedule, employees, absences) 
       if (ev.description?.includes("[ShiftFlow]")) await gcalRequest("DELETE", `/calendars/primary/events/${ev.id}`);
     }
   }
-  // Create new events for this week
-  let created = 0;
-  for (let i = 0; i < 5; i++) {
-    const day = ["Po", "Út", "St", "Čt", "Pá"][i];
-    const date = weekDates[i];
-    const absKey = `${userId}__${day}`;
-    if (absences[absKey]) {
-      // Create absence event
-      const absType = ABS.find(a => a.id === absences[absKey]);
-      await gcalRequest("POST", "/calendars/primary/events", {
-        summary: `${absType?.icon || "📋"} ${absType?.label || "Nepřítomnost"} — ShiftFlow`,
-        description: `[ShiftFlow] ${absType?.label}`,
-        start: { date },
-        end: { date },
-        colorId: "11", // red
-      });
-      created++;
-      continue;
-    }
-    // Find shift
-    for (const shift of ["08:00", "09:00", "10:00"]) {
-      const entry = schedule[day]?.[shift]?.find(e => e.empId === userId);
-      if (entry) {
-        const endH = parseInt(shift.split(":")[0]) + 8; // 8-hour shift
-        const hoLabel = entry.ho ? " 🏠 HO" : "";
-        await gcalRequest("POST", "/calendars/primary/events", {
-          summary: `${shift} Směna${hoLabel} — ShiftFlow`,
-          description: `[ShiftFlow] ${emp.team} · ${shift}${hoLabel}`,
-          start: { dateTime: `${date}T${shift}:00`, timeZone: "Europe/Prague" },
-          end: { dateTime: `${date}T${String(endH).padStart(2, "0")}:00:00`, timeZone: "Europe/Prague" },
-          colorId: entry.ho ? "10" : emp.team === "L1" ? "9" : "7", // green/blue/cyan
-        });
-        created++;
-        break;
+  const events = buildWeekEvents(userId, weekDates, schedule, employees, absences);
+  for (const evt of events) await gcalRequest("POST", "/calendars/primary/events", evt);
+  return { ok: true, msg: `Synchronizováno: ${events.length} událostí` };
+}
+
+// Sync FULL RANGE (default: 52 weeks ahead) — fetches each week from Firestore
+async function syncRangeToGCal(userId, employees, db, weeksAhead = 52, onProgress) {
+  const { doc, getDoc } = await import("firebase/firestore");
+  const emp = employees.find(e => e.id === userId);
+  if (!emp) return { ok: false, msg: "Profil nenalezen" };
+  const mondays = getMondaysForRange(weeksAhead, 0);
+
+  // Step 1: Delete ALL existing ShiftFlow events in the range (one big query)
+  const startStr = mondays[0] + "T00:00:00+02:00";
+  const endDate = weekDatesFromMonday(mondays[mondays.length - 1])[4];
+  const endStr = endDate + "T23:59:59+02:00";
+  let deleted = 0, pageToken = null;
+  do {
+    const url = `/calendars/primary/events?timeMin=${encodeURIComponent(startStr)}&timeMax=${encodeURIComponent(endStr)}&q=ShiftFlow&singleEvents=true&maxResults=2500${pageToken ? `&pageToken=${pageToken}` : ""}`;
+    const existing = await gcalRequest("GET", url);
+    if (existing?.items) {
+      for (const ev of existing.items) {
+        if (ev.description?.includes("[ShiftFlow]")) {
+          await gcalRequest("DELETE", `/calendars/primary/events/${ev.id}`);
+          deleted++;
+        }
       }
     }
+    pageToken = existing?.nextPageToken;
+  } while (pageToken);
+
+  if (onProgress) onProgress(`Smazáno ${deleted} starých událostí, vytvářím nové...`);
+
+  // Step 2: For each week, fetch from Firestore + create events
+  let created = 0;
+  for (let wi = 0; wi < mondays.length; wi++) {
+    const monISO = mondays[wi];
+    const weekDates = weekDatesFromMonday(monISO);
+    let weekData = null;
+    try {
+      const snap = await getDoc(doc(db, "schedules", monISO));
+      if (snap.exists()) weekData = snap.data();
+    } catch { }
+    // Build effective schedule: saved entries + default fallback
+    let schedule = weekData?.entries || null;
+    if (!schedule) {
+      // Use default schedule from emp
+      schedule = {};
+      ["Po", "Út", "St", "Čt", "Pá"].forEach(day => {
+        schedule[day] = { "08:00": [], "09:00": [], "10:00": [] };
+        if (emp.defaultSchedule?.[day] && emp.setupDone) {
+          const sh = emp.defaultSchedule[day];
+          if (["08:00", "09:00", "10:00"].includes(sh)) {
+            schedule[day][sh].push({ empId: userId, ho: emp.defaultSchedule[`${day}_ho`] || false, isDefault: true });
+          }
+        }
+      });
+    } else {
+      // Merge: if employee not in saved schedule and not in absences, add default
+      const inSched = ["Po", "Út", "St", "Čt", "Pá"].some(d => ["08:00", "09:00", "10:00"].some(sh => schedule[d]?.[sh]?.some(e => e.empId === userId)));
+      const inAbs = Object.keys(weekData.absences || {}).some(k => k.startsWith(`${userId}__`));
+      if (!inSched && !inAbs && emp.defaultSchedule && emp.setupDone) {
+        ["Po", "Út", "St", "Čt", "Pá"].forEach(day => {
+          const sh = emp.defaultSchedule[day];
+          if (sh && ["08:00", "09:00", "10:00"].includes(sh)) {
+            if (!schedule[day]) schedule[day] = {};
+            if (!schedule[day][sh]) schedule[day][sh] = [];
+            schedule[day][sh].push({ empId: userId, ho: emp.defaultSchedule[`${day}_ho`] || false, isDefault: true });
+          }
+        });
+      }
+    }
+    const absences = weekData?.absences || {};
+    const events = buildWeekEvents(userId, weekDates, schedule, employees, absences);
+    for (const evt of events) {
+      await gcalRequest("POST", "/calendars/primary/events", evt);
+      created++;
+    }
+    if (onProgress && wi % 4 === 0) onProgress(`Týden ${wi + 1}/${mondays.length} — ${created} událostí`);
   }
-  return { ok: true, msg: `Synchronizováno: ${created} událostí` };
+  return { ok: true, msg: `Synchronizováno ${created} událostí v ${mondays.length} týdnech (smazáno ${deleted} starých)` };
 }
 // Firestore-safe key: no dots, slashes or special chars
 const fsKey = (...parts) => parts.join("__");
@@ -433,6 +545,35 @@ export default function App() {
   useEffect(() => { const u = onAuthStateChanged(auth, async u => { if (u) { setAuthUser(u); const s = await getDoc(doc(db, "users", u.uid)); if (s.exists()) setProfile({ id: u.uid, ...s.data() }); else setProfile({ id: u.uid, name: u.displayName || u.email, role: "employee", team: "L1", setupDone: false }); initPush(u.uid); } else { setAuthUser(null); setProfile(null); } }); return u; }, []);
   useEffect(() => { const u = onSnapshot(collection(db, "users"), s => { const e = s.docs.map(d => ({ id: d.id, ...d.data() })); setEmployees(e); if (profile) { const m = e.find(x => x.id === profile.id); if (m) setProfile(p => ({ ...p, ...m })); } }); return u; }, [profile?.id]);
   useEffect(() => { const u = onSnapshot(doc(db, "schedules", wk), s => { if (s.exists()) { const d = s.data(); setSchedule(d.entries || null); setAbsences(d.absences || {}); setEvents(d.events || {}); setNotes(d.notes || {}); } else { setSchedule(null); setAbsences({}); setEvents({}); setNotes({}); } }); return u; }, [wk]);
+
+  // Auto-sync GCal when ANY week's schedule changes affecting current user
+  // Listens to schedules collection and syncs the affected week if user has events there
+  const lastSyncRef = useRef({});
+  useEffect(() => {
+    if (!profile?.gcalEnabled || !profile?.id) return;
+    const u = onSnapshot(collection(db, "schedules"), s => {
+      s.docChanges().forEach(change => {
+        if (change.type !== "modified" && change.type !== "added") return;
+        const data = change.doc.data();
+        const weekId = change.doc.id;
+        // Skip if our own change (avoid loop) or modified by us recently
+        const userInvolved = (data.entries && Object.values(data.entries).some(day => Object.values(day).some(arr => arr.some(e => e.empId === profile.id)))) ||
+          (data.absences && Object.keys(data.absences).some(k => k.startsWith(`${profile.id}__`)));
+        if (!userInvolved) return;
+        // Throttle: max once per 10s per week
+        const now = Date.now();
+        if (lastSyncRef.current[weekId] && now - lastSyncRef.current[weekId] < 10000) return;
+        lastSyncRef.current[weekId] = now;
+        // Only sync if token is available — silent
+        if (!getGcalToken()) return;
+        const weekDates = weekDatesFromMonday(weekId);
+        setTimeout(() => {
+          syncWeekToGCal(profile.id, weekDates, data.entries || {}, employees, data.absences || {}).catch(() => { });
+        }, 2000);
+      });
+    });
+    return u;
+  }, [profile?.id, profile?.gcalEnabled, employees]);
   useEffect(() => { const u = onSnapshot(collection(db, "swapRequests"), s => setSwaps(s.docs.map(d => ({ id: d.id, ...d.data() })))); return u; }, []);
   useEffect(() => { const u = onSnapshot(doc(db, "rules", "global"), s => { if (s.exists()) setRules(s.data()); }); return u; }, []);
   useEffect(() => { const u = onSnapshot(collection(db, "auditLog"), s => { const a = s.docs.map(d => ({ id: d.id, ...d.data() })); a.sort((a, b) => (b.time || "").localeCompare(a.time || "")); setLogs(a.slice(0, 100)); }); return u; }, []);
@@ -813,12 +954,18 @@ export default function App() {
                 }} label="Synchronizovat rozvrh do Google Calendar" />
                 {profile.gcalEnabled && <>
                   <p style={{ fontSize: 12, color: "var(--tx3)", marginBottom: 10 }}>Směny se zapíšou do vašeho primárního Google kalendáře jako události s tagem [ShiftFlow].</p>
-                  <div style={{ display: "flex", gap: 8 }}>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <Btn warm onClick={async () => {
-                      notify("Synchronizuji...");
+                      notify("Synchronizuji aktuální týden...");
                       const res = await syncWeekToGCal(profile.id, wd, cs, employees, absences);
                       notify(res.msg);
-                    }}>Sync tento týden</Btn>
+                    }}>Sync týden</Btn>
+                    <Btn warm onClick={async () => {
+                      if (!confirm("Synchronizovat příštích 52 týdnů? Může trvat 1-3 minuty.")) return;
+                      notify("Spouštím sync celého roku...");
+                      const res = await syncRangeToGCal(profile.id, employees, db, 52, msg => notify(msg));
+                      notify(res.msg);
+                    }}>Sync celý rok</Btn>
                     <Btn ghost onClick={() => { localStorage.removeItem("sf_gcal_token"); notify("Token odstraněn — při dalším sync budete znovu autorizovat"); }}>Odpojit</Btn>
                   </div>
                 </>}
