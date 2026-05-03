@@ -434,7 +434,26 @@ function DefEditor({ employees }) {
 
 function AbsF({ emps, wd, onSubmit }) { const [eid, setEid] = useState(emps[0]?.id || ""); const [dayIdx, setDayIdx] = useState(0); const [t, setT] = useState(ABS[0].id); return <div><Sel label="Zaměstnanec" value={eid} onChange={e => setEid(e.target.value)} options={emps.map(e => ({ value: e.id, label: e.name }))} /><Sel label="Den" value={dayIdx} onChange={e => setDayIdx(+e.target.value)} options={DAYS.map((d, i) => ({ value: i, label: `${DAYS_F[i]} ${fmtDate(wd[i])}` }))} /><Sel label="Typ" value={t} onChange={e => setT(e.target.value)} options={ABS.map(a => ({ value: a.id, label: `${a.icon} ${a.label}` }))} /><Btn warm onClick={() => onSubmit(eid, DAYS[dayIdx], t)} style={{ width: "100%", marginTop: 8 }}>Přidat</Btn></div>; }
 function EvF({ onSubmit }) { const [day, setDay] = useState(DAYS[0]); const [t, setT] = useState(EVTS[0].id); const [n, setN] = useState(""); return <div><Sel label="Den" value={day} onChange={e => setDay(e.target.value)} options={DAYS.map((d, i) => ({ value: d, label: DAYS_F[i] }))} /><Sel label="Typ" value={t} onChange={e => setT(e.target.value)} options={EVTS.map(e => ({ value: e.id, label: `${e.icon} ${e.label}` }))} /><Input label="Poznámka" value={n} onChange={e => setN(e.target.value)} /><Btn warm onClick={() => onSubmit(day, t, n)} style={{ width: "100%", marginTop: 8 }}>Přidat</Btn></div>; }
-function SwF({ dDay, dShift, onSubmit }) { const [day, setDay] = useState(dDay || DAYS[0]); const [sh, setSh] = useState(dShift || SHIFTS[0]); const [comment, setComment] = useState(""); return <div><Sel label="Den" value={day} onChange={e => setDay(e.target.value)} options={DAYS.map((d, i) => ({ value: d, label: DAYS_F[i] }))} /><Sel label="Směna" value={sh} onChange={e => setSh(e.target.value)} options={SHIFTS.map(s => ({ value: s, label: s }))} /><Input label="Důvod (volitelné)" value={comment} onChange={e => setComment(e.target.value)} placeholder="Např. rodinná záležitost" /><Btn warm onClick={() => onSubmit(day, sh, comment)} style={{ width: "100%", marginTop: 8 }}>Odeslat</Btn></div>; }
+function SwF({ dDay, dShift, wd, onSubmit }) {
+  const [dateISO, setDateISO] = useState(() => { const idx = dDay ? DAYS.indexOf(dDay) : 0; return wd?.[idx >= 0 ? idx : 0] || ""; });
+  const [sh, setSh] = useState(dShift || SHIFTS[0]);
+  const [comment, setComment] = useState("");
+  // Convert ISO date back to day name
+  const dayFromISO = (iso) => {
+    if (!iso) return DAYS[0];
+    const d = new Date(iso + "T00:00:00");
+    const dow = d.getDay();
+    if (dow >= 1 && dow <= 5) return DAYS[dow - 1];
+    return DAYS[0];
+  };
+  return <div>
+    <Input label="Datum směny" type="date" value={dateISO} onChange={e => setDateISO(e.target.value)} />
+    {dateISO && <p style={{ fontSize: 13, color: "var(--tx2)", marginTop: -10, marginBottom: 14 }}>{(() => { const d = new Date(dateISO + "T00:00:00"); const dow = d.getDay(); if (dow === 0 || dow === 6) return "⚠️ Víkend - směna není"; return DAYS_F[dow - 1]; })()}</p>}
+    <Sel label="Směna" value={sh} onChange={e => setSh(e.target.value)} options={SHIFTS.map(s => ({ value: s, label: s }))} />
+    <Input label="Důvod (volitelné)" value={comment} onChange={e => setComment(e.target.value)} placeholder="Např. rodinná záležitost" />
+    <Btn warm disabled={!dateISO} onClick={() => { const day = dayFromISO(dateISO); onSubmit(day, sh, comment); }} style={{ width: "100%", marginTop: 8 }}>Odeslat</Btn>
+  </div>;
+}
 function MyAbsF({ profile, wd, onSubmit }) { const [dayIdx, setDayIdx] = useState(Math.max(0, todayIdx)); const [t, setT] = useState(ABS[0].id); const r = { sick: (profile.sickTotal || 5) - (profile.sickUsed || 0), vacation: (profile.vacationTotal || 20) - (profile.vacationUsed || 0), whatever: (profile.whateverTotal || 3) - (profile.whateverUsed || 0) }; return <div><div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 20 }}>{[{ l: "Dovol.", v: r.vacation, c: "var(--sd)" }, { l: "Sick", v: r.sick, c: "var(--red)" }, { l: "What.", v: r.whatever, c: "var(--amb)" }].map(b => <div key={b.l} style={{ textAlign: "center", padding: 12, border: "1px solid var(--brd)", background: "var(--bg3)" }}><div style={{ fontSize: 28, fontWeight: 600, color: b.c, fontFamily: "'IBM Plex Mono',monospace" }}>{b.v}</div><div style={{ fontSize: 11, color: "var(--tx3)", textTransform: "uppercase" }}>{b.l}</div></div>)}</div><Sel label="Den" value={dayIdx} onChange={e => setDayIdx(+e.target.value)} options={DAYS.map((d, i) => ({ value: i, label: `${DAYS_F[i]} ${fmtDate(wd[i])}` }))} /><Sel label="Typ" value={t} onChange={e => setT(e.target.value)} options={ABS.map(a => ({ value: a.id, label: `${a.icon} ${a.label}` }))} /><Btn warm onClick={() => onSubmit(DAYS[dayIdx], t)} style={{ width: "100%", marginTop: 8 }}>Zadat</Btn></div>; }
 function EditDF({ emp, onDone }) { const [vac, setVac] = useState(emp?.vacationTotal || 20); const [sick, setSick] = useState(emp?.sickTotal || 5); const [what, setWhat] = useState(emp?.whateverTotal || 3); const [l, setL] = useState(false); if (!emp) return null; return <div><Input label="Dovolená" type="number" value={vac} onChange={e => setVac(+e.target.value)} /><Input label="Sick Days" type="number" value={sick} onChange={e => setSick(+e.target.value)} /><Input label="Whatever Days" type="number" value={what} onChange={e => setWhat(+e.target.value)} /><Btn warm disabled={l} onClick={async () => { setL(true); await updateDoc(doc(db, "users", emp.id), { vacationTotal: vac, sickTotal: sick, whateverTotal: what }); setL(false); onDone(); }} style={{ width: "100%", marginTop: 8 }}>Uložit</Btn></div>; }
 function AddF({ onDone }) { const [name, setName] = useState(""); const [email, setEmail] = useState(""); const [pass, setPass] = useState(""); const [team, setTeam] = useState("L1"); const [l, setL] = useState(false); const [err, setErr] = useState(""); return <div><Input label="Jméno" value={name} onChange={e => setName(e.target.value)} /><Input label="Email" value={email} onChange={e => setEmail(e.target.value)} /><Input label="Heslo (min. 6)" type="password" value={pass} onChange={e => setPass(e.target.value)} /><Sel label="Tým" value={team} onChange={e => setTeam(e.target.value)} options={[{ value: "L1", label: "L1 Support" }, { value: "SD", label: "Service Desk" }]} />{err && <p style={{ color: "var(--red)", fontSize: 14, marginBottom: 8, padding: 10, border: "1px solid var(--red)" }}>{err}</p>}<Btn warm disabled={l} onClick={async () => { setErr(""); if (!name.trim() || !email || !pass) return setErr("Vyplňte vše"); if (pass.length < 6) return setErr("Min. 6 znaků"); setL(true); try { const r = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${import.meta.env.VITE_FIREBASE_API_KEY}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password: pass, displayName: name.trim(), returnSecureToken: false }) }); const d = await r.json(); if (d.error) { setErr(d.error.message); setL(false); return; } await setDoc(doc(db, "users", d.localId), { name: name.trim(), email, team, role: "employee", notify: false, notifyEmail: "", fcmToken: null, defaultSchedule: null, setupDone: false, vacationTotal: 20, sickTotal: 5, whateverTotal: 3, vacationUsed: 0, sickUsed: 0, whateverUsed: 0, createdAt: new Date().toISOString() }); onDone(`Přidán: ${name.trim()}`); } catch (e) { setErr(e.message); } setL(false); }} style={{ width: "100%" }}>Přidat</Btn></div>; }
@@ -808,10 +827,27 @@ export default function App() {
           {/* ═══ SCHEDULE ═══ */}
           {view === "schedule" && <div>
             {/* Week nav */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 16, marginBottom: 16 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
               <button onClick={() => setWo(w => w - 1)} style={{ width: 44, height: 44, border: "1px solid var(--brd2)", background: "transparent", color: "var(--tx)", cursor: "pointer", fontSize: 18 }}>‹</button>
-              <div style={{ textAlign: "center" }}><div style={{ fontSize: 18, fontWeight: 500, color: "var(--w)", fontFamily: "'IBM Plex Mono',monospace" }}>{fmtW(cw)}</div><div style={{ fontSize: 12, color: wo === 0 ? "var(--acc2)" : "var(--tx3)", textTransform: "uppercase", letterSpacing: 1 }}>{wo === 0 ? "Aktuální týden" : `${wo > 0 ? "+" : ""}${wo}`}</div></div>
+              <div style={{ textAlign: "center" }}>
+                <div style={{ fontSize: 18, fontWeight: 500, color: "var(--w)", fontFamily: "'IBM Plex Mono',monospace" }}>{fmtW(cw)}</div>
+                <div style={{ fontSize: 12, color: wo === 0 ? "var(--acc2)" : "var(--tx3)", textTransform: "uppercase", letterSpacing: 1 }}>{wo === 0 ? "Aktuální týden" : `${wo > 0 ? "+" : ""}${wo}`}</div>
+              </div>
               <button onClick={() => setWo(w => w + 1)} style={{ width: 44, height: 44, border: "1px solid var(--brd2)", background: "transparent", color: "var(--tx)", cursor: "pointer", fontSize: 18 }}>›</button>
+              <div style={{ position: "relative" }}>
+                <input type="date" onChange={e => {
+                  if (!e.target.value) return;
+                  const picked = new Date(e.target.value + "T00:00:00");
+                  const today = new Date(); today.setHours(0, 0, 0, 0);
+                  const pickedMon = getMon(picked); const todayMon = getMon(today);
+                  const diffDays = Math.round((pickedMon - todayMon) / (1000 * 60 * 60 * 24));
+                  const newWo = Math.round(diffDays / 7);
+                  setWo(newWo);
+                  // Set day pill to picked day if weekday
+                  const dow = picked.getDay();
+                  if (dow >= 1 && dow <= 5) goDay(dow - 1);
+                }} style={{ width: 44, height: 44, border: "1px solid var(--brd2)", background: "transparent", color: "var(--tx)", cursor: "pointer", fontSize: 14, padding: "0 6px", fontFamily: "'IBM Plex Mono',monospace" }} title="Vyberte datum" />
+              </div>
               {wo !== 0 && <Btn small ghost onClick={() => setWo(0)}>Dnes</Btn>}
             </div>
 
@@ -997,9 +1033,12 @@ export default function App() {
 
     <Modal open={modal === "absence"} onClose={() => setModal(null)} title="Nepřítomnost"><AbsF emps={employees.filter(e => e.role !== "admin")} wd={wd} onSubmit={(e, d, t) => { addAbs(e, d, t); setModal(null); }} /></Modal>
     <Modal open={modal === "event"} onClose={() => setModal(null)} title="Událost"><EvF onSubmit={(d, t, n) => { addEv(d, t, n); setModal(null); }} /></Modal>
-    <Modal open={modal?.type === "swap"} onClose={() => setModal(null)} title="Výměna"><SwF dDay={modal?.day} dShift={modal?.shift} onSubmit={(d, s, c) => { mkSwap(profile.id, d, s, c); setModal(null); }} /></Modal>
+    <Modal open={modal?.type === "swap"} onClose={() => setModal(null)} title="Výměna"><SwF dDay={modal?.day} dShift={modal?.shift} wd={wd} onSubmit={(d, s, c) => { mkSwap(profile.id, d, s, c); setModal(null); }} /></Modal>
     <Modal open={modal?.type === "myshift"} onClose={() => setModal(null)} title="Moje směna"><div>
       <p style={{ fontSize: 15, color: "var(--tx2)", marginBottom: 16 }}>{modal?.day} · {modal?.shift}</p>
+      {(() => { const myEntry = cs[modal?.day]?.[modal?.shift]?.find(e => e.empId === profile.id); const isHO = myEntry?.ho || false;
+        return <Btn warm={!isHO} primary={isHO} onClick={() => { togHO(modal.day, modal.shift, profile.id); setModal(null); }} style={{ width: "100%", marginBottom: 12 }}>{isHO ? "🏠 Zrušit Home Office" : "🏠 Změnit na Home Office"}</Btn>; })()}
+      <div style={{ fontSize: 12, color: "var(--tx3)", margin: "8px 0 6px", textTransform: "uppercase", letterSpacing: 1 }}>Nepřítomnost</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>{ABS.map(a => <Btn key={a.id} onClick={() => { addAbs(profile.id, modal.day, a.id); setModal(null); }}>{a.icon} {a.label}</Btn>)}</div>
       <Btn warm onClick={() => setModal({ type: "swap", day: modal?.day, shift: modal?.shift })} style={{ width: "100%", marginBottom: 10 }}>Požádat o výměnu</Btn>
       <div style={{ fontSize: 12, color: "var(--tx3)", margin: "8px 0 6px", textTransform: "uppercase" }}>Poznámka</div>
