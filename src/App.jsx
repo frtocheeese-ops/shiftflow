@@ -438,20 +438,19 @@ function SwF({ dDay, dShift, wd, onSubmit }) {
   const [dateISO, setDateISO] = useState(() => { const idx = dDay ? DAYS.indexOf(dDay) : 0; return wd?.[idx >= 0 ? idx : 0] || ""; });
   const [sh, setSh] = useState(dShift || SHIFTS[0]);
   const [comment, setComment] = useState("");
-  // Convert ISO date back to day name
-  const dayFromISO = (iso) => {
-    if (!iso) return DAYS[0];
-    const d = new Date(iso + "T00:00:00");
-    const dow = d.getDay();
-    if (dow >= 1 && dow <= 5) return DAYS[dow - 1];
-    return DAYS[0];
-  };
+  const isWeekend = (() => { if (!dateISO) return false; const d = new Date(dateISO + "T00:00:00"); const dow = d.getDay(); return dow === 0 || dow === 6; })();
+  const isPast = (() => { if (!dateISO) return false; const d = new Date(dateISO + "T00:00:00"); const today = new Date(); today.setHours(0, 0, 0, 0); return d < today; })();
   return <div>
     <Input label="Datum směny" type="date" value={dateISO} onChange={e => setDateISO(e.target.value)} />
-    {dateISO && <p style={{ fontSize: 13, color: "var(--tx2)", marginTop: -10, marginBottom: 14 }}>{(() => { const d = new Date(dateISO + "T00:00:00"); const dow = d.getDay(); if (dow === 0 || dow === 6) return "⚠️ Víkend - směna není"; return DAYS_F[dow - 1]; })()}</p>}
+    {dateISO && <p style={{ fontSize: 13, color: isWeekend || isPast ? "var(--red)" : "var(--tx2)", marginTop: -10, marginBottom: 14 }}>{(() => {
+      const d = new Date(dateISO + "T00:00:00"); const dow = d.getDay();
+      if (isPast) return "⚠️ Minulé datum";
+      if (isWeekend) return "⚠️ Víkend - směna není";
+      return DAYS_F[dow - 1];
+    })()}</p>}
     <Sel label="Směna" value={sh} onChange={e => setSh(e.target.value)} options={SHIFTS.map(s => ({ value: s, label: s }))} />
     <Input label="Důvod (volitelné)" value={comment} onChange={e => setComment(e.target.value)} placeholder="Např. rodinná záležitost" />
-    <Btn warm disabled={!dateISO} onClick={() => { const day = dayFromISO(dateISO); onSubmit(day, sh, comment); }} style={{ width: "100%", marginTop: 8 }}>Odeslat</Btn>
+    <Btn warm disabled={!dateISO || isWeekend || isPast} onClick={() => onSubmit(dateISO, sh, comment)} style={{ width: "100%", marginTop: 8 }}>Odeslat</Btn>
   </div>;
 }
 function MyAbsF({ profile, wd, onSubmit }) { const [dayIdx, setDayIdx] = useState(Math.max(0, todayIdx)); const [t, setT] = useState(ABS[0].id); const r = { sick: (profile.sickTotal || 5) - (profile.sickUsed || 0), vacation: (profile.vacationTotal || 20) - (profile.vacationUsed || 0), whatever: (profile.whateverTotal || 3) - (profile.whateverUsed || 0) }; return <div><div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 20 }}>{[{ l: "Dovol.", v: r.vacation, c: "var(--sd)" }, { l: "Sick", v: r.sick, c: "var(--red)" }, { l: "What.", v: r.whatever, c: "var(--amb)" }].map(b => <div key={b.l} style={{ textAlign: "center", padding: 12, border: "1px solid var(--brd)", background: "var(--bg3)" }}><div style={{ fontSize: 28, fontWeight: 600, color: b.c, fontFamily: "'IBM Plex Mono',monospace" }}>{b.v}</div><div style={{ fontSize: 11, color: "var(--tx3)", textTransform: "uppercase" }}>{b.l}</div></div>)}</div><Sel label="Den" value={dayIdx} onChange={e => setDayIdx(+e.target.value)} options={DAYS.map((d, i) => ({ value: i, label: `${DAYS_F[i]} ${fmtDate(wd[i])}` }))} /><Sel label="Typ" value={t} onChange={e => setT(e.target.value)} options={ABS.map(a => ({ value: a.id, label: `${a.icon} ${a.label}` }))} /><Btn warm onClick={() => onSubmit(DAYS[dayIdx], t)} style={{ width: "100%", marginTop: 8 }}>Zadat</Btn></div>; }
@@ -742,28 +741,84 @@ export default function App() {
   };
 
   const addEv = async (day, et, note) => { await setDoc(doc(db, "schedules", wk), { [`events.${day}`]: { type: et, note, title: EVTS.find(e => e.id === et)?.label } }, { merge: true }); notify("Událost přidána"); };
-  const mkSwap = async (rid, day, sh, comment) => {
-    await addDoc(collection(db, "swapRequests"), { rid, day, sh, week: wk, status: "open", comment: comment || "", created: new Date().toISOString() });
+  const mkSwap = async (rid, dateISO, sh, comment) => {
+    // Compute correct week and day from picked date
+    const date = new Date(dateISO + "T00:00:00");
+    const dow = date.getDay();
+    if (dow === 0 || dow === 6) { notify("Víkend nelze"); return; }
+    const day = DAYS[dow - 1];
+    const swWk = wKey(date);
+    await addDoc(collection(db, "swapRequests"), { rid, day, sh, week: swWk, dateISO, status: "open", comment: comment || "", created: new Date().toISOString() });
     // Notify same-team members
     const requester = ge(rid);
     if (requester) {
       const teamMembers = employees.filter(e => e.team === requester.team && e.id !== rid && e.role !== "admin" && e.notify);
-      const msg = `${requester.name} žádá o výměnu: ${day} ${sh}${comment ? ` — "${comment}"` : ""}`;
-      teamMembers.forEach(m => callGAS("sendEmail", { to: m.notifyEmail || m.email, employeeName: m.name, changeDescription: msg, weekLabel: fmtW(cw) }));
+      const msg = `${requester.name} žádá o výměnu: ${day} ${dateISO} ${sh}${comment ? ` — "${comment}"` : ""}`;
+      teamMembers.forEach(m => callGAS("sendEmail", { to: m.notifyEmail || m.email, employeeName: m.name, changeDescription: msg, weekLabel: dateISO }));
     }
     notify("Žádost odeslána");
   };
+
   const doSwap = async (swId, aid) => {
     const sw = swaps.find(s => s.id === swId); if (!sw) return;
-    const s = dc(cs); let aSh = null;
-    SHIFTS.forEach(sh => { if (!aSh && s[sw.day]?.[sh]?.some(e => e.empId === aid)) aSh = sh; });
-    if (aSh && s[sw.day]?.[sw.sh]) {
-      const re = s[sw.day][sw.sh].find(e => e.empId === sw.rid);
-      const ae = s[sw.day][aSh].find(e => e.empId === aid);
-      if (re && ae) { s[sw.day][sw.sh] = s[sw.day][sw.sh].filter(e => e.empId !== sw.rid); s[sw.day][aSh] = s[sw.day][aSh].filter(e => e.empId !== aid); s[sw.day][sw.sh].push({ ...ae, empId: aid, isDefault: false }); s[sw.day][aSh].push({ ...re, empId: sw.rid, isDefault: false }); }
-    } else if (s[sw.day]?.[sw.sh]) { s[sw.day][sw.sh] = s[sw.day][sw.sh].filter(e => e.empId !== sw.rid); s[sw.day][sw.sh].push({ empId: aid, ho: false, isDefault: false }); }
-    setSchedule(s);
-    try { await updateDoc(doc(db, 'swapRequests', swId), { status: 'done', aid, resolvedAt: new Date().toISOString() }); await saveS(s); notify('Výměna OK'); } catch { notify('Chyba'); }
+    try {
+      // Load the correct week's schedule from Firestore (not necessarily current view)
+      let weekSched, weekAbs;
+      if (sw.week === wk) {
+        weekSched = dc(cs); weekAbs = absences;
+      } else {
+        const snap = await getDoc(doc(db, "schedules", sw.week));
+        if (snap.exists()) {
+          const d = snap.data();
+          weekSched = d.entries ? dc(d.entries) : dc(buildDef(employees));
+          weekAbs = d.absences || {};
+        } else {
+          weekSched = dc(buildDef(employees));
+          weekAbs = {};
+        }
+      }
+      // Find acceptor's shift on the same day
+      let aSh = null;
+      SHIFTS.forEach(sh => { if (!aSh && weekSched[sw.day]?.[sh]?.some(e => e.empId === aid)) aSh = sh; });
+      // Verify requester is still in their requested shift
+      const reqShiftEntries = weekSched[sw.day]?.[sw.sh] || [];
+      const re = reqShiftEntries.find(e => e.empId === sw.rid);
+      if (!re) {
+        notify("Žadatel již není v této směně - výměna zrušena");
+        await updateDoc(doc(db, 'swapRequests', swId), { status: 'cancelled', reason: 'requester not in shift', resolvedAt: new Date().toISOString() });
+        return;
+      }
+      // Perform swap
+      if (aSh && aSh !== sw.sh) {
+        // Acceptor has different shift on same day - swap them
+        const ae = weekSched[sw.day][aSh].find(e => e.empId === aid);
+        weekSched[sw.day][sw.sh] = weekSched[sw.day][sw.sh].filter(e => e.empId !== sw.rid);
+        weekSched[sw.day][aSh] = weekSched[sw.day][aSh].filter(e => e.empId !== aid);
+        weekSched[sw.day][sw.sh].push({ ...ae, empId: aid, isDefault: false });
+        weekSched[sw.day][aSh].push({ ...re, empId: sw.rid, isDefault: false });
+      } else if (aSh === sw.sh) {
+        notify("Jste již na stejné směně");
+        return;
+      } else {
+        // Acceptor has no shift on this day - just take requester's place
+        weekSched[sw.day][sw.sh] = weekSched[sw.day][sw.sh].filter(e => e.empId !== sw.rid);
+        weekSched[sw.day][sw.sh].push({ empId: aid, ho: re.ho || false, isDefault: false });
+      }
+      // Write back to correct week
+      await setDoc(doc(db, "schedules", sw.week), { entries: weekSched, weekStart: sw.week, modifiedAt: new Date().toISOString(), modifiedBy: profile?.id }, { merge: true });
+      // If it's the current view, update local state too
+      if (sw.week === wk) setSchedule(weekSched);
+      // Mark request done
+      await updateDoc(doc(db, 'swapRequests', swId), { status: 'done', aid, resolvedAt: new Date().toISOString() });
+      const reqEmp = ge(sw.rid); const accEmp = ge(aid);
+      const msg = `Výměna provedena: ${reqEmp?.name} ↔ ${accEmp?.name} (${sw.day} ${sw.sh})`;
+      notify('Výměna OK'); log(msg);
+      // Email both participants
+      [reqEmp, accEmp].forEach(e => { if (e?.notify) callGAS("sendEmail", { to: e.notifyEmail || e.email, employeeName: e.name, changeDescription: msg, weekLabel: sw.dateISO || sw.week }); });
+    } catch (err) {
+      console.error("doSwap:", err);
+      notify('Chyba: ' + err.message);
+    }
   };
   const delUser = async eid => { if (!confirm(`Smazat ${ge(eid)?.name}?`)) return; await deleteDoc(doc(db, "users", eid)); notify("Smazán"); };
   const exportCSV = () => { let csv = "\ufeffDen,Směna,Jméno,Tým,HO\n"; DAYS.forEach(d => SHIFTS.forEach(sh => (cs[d]?.[sh] || []).forEach(en => { const e = ge(en.empId); if (e) csv += `${d},${sh},${e.name},${e.team},${en.ho ? "Ano" : "Ne"}\n`; }))); const b = new Blob([csv], { type: "text/csv;charset=utf-8;" }); const u = URL.createObjectURL(b); Object.assign(document.createElement("a"), { href: u, download: `rozvrh_${wk}.csv` }).click(); };
@@ -773,7 +828,7 @@ export default function App() {
   if (!profile) return <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--tx3)" }}><style>{CSS}</style>Načítání…</div>;
   if (!isA && !profile.setupDone) return <Setup profile={profile} onDone={() => setProfile(p => ({ ...p, setupDone: true }))} />;
 
-  const openSw = swaps.filter(s => s.status === "open" && s.week === wk);
+  const openSw = swaps.filter(s => s.status === "open").sort((a, b) => (a.dateISO || a.week || "").localeCompare(b.dateISO || b.week || ""));
   const NAV = [{ id: "schedule", l: "Rozvrh", ic: "▦", b: 0 }, { id: "swaps", l: "Výměny", ic: "⇄", b: openSw.length }, ...(isA ? [{ id: "people", l: "Tým", ic: "◉", b: 0 }] : []), { id: "stats", l: "Stats", ic: "◫", b: 0 }, { id: "log", l: "Log", ic: "≡", b: 0 }, ...(isA ? [{ id: "defaults", l: "Default", ic: "⊞", b: 0 }] : []), { id: "settings", l: "Nastavení", ic: "⚙", b: 0 }];
   const dayHol = wh[selDay];
   const getEntries = (day, shift) => (cs[day]?.[shift] || []).filter(e => { const emp = ge(e.empId); return emp && (tf === "all" || emp.team === tf); });
@@ -937,7 +992,7 @@ export default function App() {
           {view === "swaps" && <div>
             <div style={{ fontSize: 20, fontWeight: 600, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 2, marginBottom: 20, borderBottom: "1px solid var(--brd)", paddingBottom: 12 }}>Výměny</div>
             {!isA && <Card style={{ marginBottom: 20 }}><Btn warm onClick={() => setModal({ type: "swap", day: DAYS[selDay], shift: SHIFTS[0] })}>+ Nová žádost</Btn></Card>}
-            {openSw.map(sw => { const re = ge(sw.rid); const me = profile.id === sw.rid; const can = !isA && !me; return <Card key={sw.id} style={{ padding: 16, marginBottom: 8 }}><div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}><div><div style={{ fontWeight: 600, fontSize: 17, color: "var(--w)" }}>{re?.name}</div><Badge small color="var(--acc2)">{sw.day} {sw.sh}</Badge></div>{can && <Btn warm small onClick={() => doSwap(sw.id, profile.id)}>Přijmout</Btn>}{me && <div style={{ display: "flex", gap: 6, alignItems: "center" }}><Badge color="var(--amb)">Tvoje</Badge><Btn small danger onClick={async () => { if (!confirm("Zrušit žádost o výměnu?")) return; try { await deleteDoc(doc(db, "swapRequests", sw.id)); notify("Žádost zrušena"); log(`Zrušena žádost: ${sw.day} ${sw.sh}`); } catch (err) { notify("Chyba: " + err.message); } }}>✕ Zrušit</Btn></div>}{isA && <Btn small danger onClick={async () => { if (!confirm("Smazat žádost?")) return; try { await deleteDoc(doc(db, "swapRequests", sw.id)); notify("Smazáno"); } catch { notify("Chyba"); } }}>✕</Btn>}</div>{sw.comment && <div style={{ marginTop: 8, fontSize: 13, color: "var(--tx2)", padding: "6px 10px", border: "1px solid var(--brd)", background: "var(--bg3)" }}>💬 {sw.comment}</div>}</Card>; })}
+            {openSw.map(sw => { const re = ge(sw.rid); const me = profile.id === sw.rid; const can = !isA && !me && profile?.team === re?.team; const dateLabel = sw.dateISO ? new Date(sw.dateISO + "T00:00:00").toLocaleDateString("cs", { weekday: "short", day: "numeric", month: "numeric" }) : `${sw.day} (týden ${sw.week})`; return <Card key={sw.id} style={{ padding: 16, marginBottom: 8 }}><div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}><div><div style={{ fontWeight: 600, fontSize: 17, color: "var(--w)" }}>{re?.name}</div><div style={{ display: "flex", gap: 6, marginTop: 4, alignItems: "center", flexWrap: "wrap" }}><Badge small color="var(--acc2)">{dateLabel} · {sw.sh}</Badge>{re?.team && <Badge small color={re.team === "L1" ? "var(--l1)" : "var(--sd)"}>{re.team}</Badge>}</div></div><div style={{ display: "flex", gap: 6, alignItems: "center" }}>{can && <Btn warm small onClick={() => doSwap(sw.id, profile.id)}>Přijmout</Btn>}{me && <><Badge color="var(--amb)">Tvoje</Badge><Btn small danger onClick={async () => { if (!confirm("Zrušit žádost?")) return; try { await deleteDoc(doc(db, "swapRequests", sw.id)); notify("Zrušeno"); log(`Zrušena žádost: ${dateLabel}`); } catch (err) { notify("Chyba: " + err.message); } }}>✕ Zrušit</Btn></>}{isA && !me && <Btn small danger onClick={async () => { if (!confirm("Smazat žádost?")) return; try { await deleteDoc(doc(db, "swapRequests", sw.id)); notify("Smazáno"); } catch { notify("Chyba"); } }}>✕</Btn>}</div></div>{sw.comment && <div style={{ marginTop: 8, fontSize: 13, color: "var(--tx2)", padding: "6px 10px", border: "1px solid var(--brd)", background: "var(--bg3)" }}>💬 {sw.comment}</div>}</Card>; })}
             {!openSw.length && <p style={{ color: "var(--tx3)" }}>Žádné žádosti.</p>}
           </div>}
 
