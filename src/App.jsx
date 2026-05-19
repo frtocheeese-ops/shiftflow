@@ -610,14 +610,17 @@ export default function App() {
   const eN = (emp, msg) => { if (emp?.notify) callGAS("sendEmail", { to: emp.notifyEmail || emp.email, employeeName: emp.name, changeDescription: msg, weekLabel: fmtW(cw) }); };
 
   // D&D: admin can move anyone, employee can move self within own team
-  const canDrag = eid => isA || eid === profile?.id;
+  const canDrag = eid => isA || eid === profile?.id || rules?.allowAllDnD === true;
   const handleDrop = (targetDay, targetShift, e) => {
     e.preventDefault(); e.currentTarget.classList.remove("over");
     try {
       const d = JSON.parse(e.dataTransfer.getData("text/plain"));
       if (d.day === targetDay && d.shift === targetShift) return;
-      if (!isA && d.empId !== profile?.id) return;
-      if (!isA) { const emp = ge(d.empId); if (emp?.team !== profile?.team) return; }
+      // Permission: admin OR self OR global flag
+      const allowedAll = rules?.allowAllDnD === true;
+      if (!isA && !allowedAll && d.empId !== profile?.id) return;
+      // Team restriction only applies to non-admin without global flag
+      if (!isA && !allowedAll) { const emp = ge(d.empId); if (emp?.team !== profile?.team) return; }
       const s = dc(cs); const f = s[d.day]?.[d.shift]; if (!f) return;
       const i = f.findIndex(x => x.empId === d.empId); if (i === -1) return;
       const [en] = f.splice(i, 1); en.isDefault = false;
@@ -760,64 +763,76 @@ export default function App() {
   };
 
   const doSwap = async (swId, aid) => {
-    const sw = swaps.find(s => s.id === swId); if (!sw) return;
+    const sw = swaps.find(s => s.id === swId);
+    if (!sw) { console.error("[SWAP] Žádost nenalezena", swId); notify("Žádost nenalezena"); return; }
+    console.log("[SWAP] Start:", { swapId: swId, week: sw.week, day: sw.day, shift: sw.sh, requesterId: sw.rid, acceptorId: aid, currentViewWeek: wk });
     try {
-      // Load the correct week's schedule from Firestore (not necessarily current view)
       let weekSched, weekAbs;
       if (sw.week === wk) {
         weekSched = dc(cs); weekAbs = absences;
+        console.log("[SWAP] Using current view schedule");
       } else {
+        console.log("[SWAP] Loading schedule from Firestore for week:", sw.week);
         const snap = await getDoc(doc(db, "schedules", sw.week));
         if (snap.exists()) {
           const d = snap.data();
           weekSched = d.entries ? dc(d.entries) : dc(buildDef(employees));
           weekAbs = d.absences || {};
+          console.log("[SWAP] Loaded existing doc, has entries:", !!d.entries);
         } else {
           weekSched = dc(buildDef(employees));
           weekAbs = {};
+          console.log("[SWAP] Doc doesnt exist, using buildDef");
         }
       }
-      // Find acceptor's shift on the same day
+      // Print who's where on requested day
+      const dayState = {};
+      SHIFTS.forEach(sh => { dayState[sh] = (weekSched[sw.day]?.[sh] || []).map(e => e.empId); });
+      console.log("[SWAP] Day state for", sw.day, ":", dayState);
+
       let aSh = null;
       SHIFTS.forEach(sh => { if (!aSh && weekSched[sw.day]?.[sh]?.some(e => e.empId === aid)) aSh = sh; });
-      // Verify requester is still in their requested shift
+      console.log("[SWAP] Acceptor shift on this day:", aSh || "(none)");
+
       const reqShiftEntries = weekSched[sw.day]?.[sw.sh] || [];
       const re = reqShiftEntries.find(e => e.empId === sw.rid);
+      console.log("[SWAP] Requester in expected shift:", !!re);
+
       if (!re) {
-        notify("Žadatel již není v této směně - výměna zrušena");
+        console.warn("[SWAP] Requester not in expected shift - cancelling");
+        notify("Žadatel již není v této směně");
         await updateDoc(doc(db, 'swapRequests', swId), { status: 'cancelled', reason: 'requester not in shift', resolvedAt: new Date().toISOString() });
         return;
       }
-      // Perform swap
       if (aSh && aSh !== sw.sh) {
-        // Acceptor has different shift on same day - swap them
+        console.log("[SWAP] Performing swap between shifts:", aSh, "<->", sw.sh);
         const ae = weekSched[sw.day][aSh].find(e => e.empId === aid);
         weekSched[sw.day][sw.sh] = weekSched[sw.day][sw.sh].filter(e => e.empId !== sw.rid);
         weekSched[sw.day][aSh] = weekSched[sw.day][aSh].filter(e => e.empId !== aid);
         weekSched[sw.day][sw.sh].push({ ...ae, empId: aid, isDefault: false });
         weekSched[sw.day][aSh].push({ ...re, empId: sw.rid, isDefault: false });
       } else if (aSh === sw.sh) {
+        console.warn("[SWAP] Both already on same shift");
         notify("Jste již na stejné směně");
         return;
       } else {
-        // Acceptor has no shift on this day - just take requester's place
+        console.log("[SWAP] Acceptor has no shift this day, taking requester's place");
         weekSched[sw.day][sw.sh] = weekSched[sw.day][sw.sh].filter(e => e.empId !== sw.rid);
         weekSched[sw.day][sw.sh].push({ empId: aid, ho: re.ho || false, isDefault: false });
       }
-      // Write back to correct week
+      console.log("[SWAP] Writing to Firestore week:", sw.week);
       await setDoc(doc(db, "schedules", sw.week), { entries: weekSched, weekStart: sw.week, modifiedAt: new Date().toISOString(), modifiedBy: profile?.id }, { merge: true });
-      // If it's the current view, update local state too
+      console.log("[SWAP] Schedule write OK");
       if (sw.week === wk) setSchedule(weekSched);
-      // Mark request done
       await updateDoc(doc(db, 'swapRequests', swId), { status: 'done', aid, resolvedAt: new Date().toISOString() });
+      console.log("[SWAP] Request marked done");
       const reqEmp = ge(sw.rid); const accEmp = ge(aid);
-      const msg = `Výměna provedena: ${reqEmp?.name} ↔ ${accEmp?.name} (${sw.day} ${sw.sh})`;
-      notify('Výměna OK'); log(msg);
-      // Email both participants
+      const msg = `Výměna: ${reqEmp?.name} ↔ ${accEmp?.name} (${sw.day} ${sw.sh})`;
+      notify('Výměna OK ✓'); log(msg);
       [reqEmp, accEmp].forEach(e => { if (e?.notify) callGAS("sendEmail", { to: e.notifyEmail || e.email, employeeName: e.name, changeDescription: msg, weekLabel: sw.dateISO || sw.week }); });
     } catch (err) {
-      console.error("doSwap:", err);
-      notify('Chyba: ' + err.message);
+      console.error("[SWAP] FAILED:", err);
+      notify('Chyba výměny: ' + err.message);
     }
   };
   const delUser = async eid => { if (!confirm(`Smazat ${ge(eid)?.name}?`)) return; await deleteDoc(doc(db, "users", eid)); notify("Smazán"); };
@@ -911,6 +926,11 @@ export default function App() {
               {[{ k: "day", l: "Den" }, { k: "week", l: "Týden" }].map(v => <button key={v.k} onClick={() => setSchedView(v.k)} style={{ padding: "8px 18px", border: "none", background: schedView === v.k ? "var(--sel)" : "transparent", color: schedView === v.k ? "var(--stx)" : "var(--tx3)", cursor: "pointer", fontSize: 13, fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 1, minHeight: 38 }}>{v.l}</button>)}
             </div>
 
+            {/* D&D global flag indicator */}
+            {!isA && rules?.allowAllDnD === true && <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 12px", border: "1px solid var(--abrd)", background: "var(--adim)", marginBottom: 12, fontSize: 12, color: "var(--acc2)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 1 }}>
+              ⤧ D&D povoleno pro všechny - můžeš přesouvat kohokoliv
+            </div>}
+
             {/* Filters + actions */}
             <div style={{ display: "flex", gap: 4, marginBottom: 12, flexWrap: "wrap" }}>
               {[{ k: "all", l: "Vše" }, { k: "L1", l: "L1" }, { k: "SD", l: "SD" }].map(f => <Btn key={f.k} small warm={tf === f.k} onClick={() => setTf(f.k)}>{f.l}</Btn>)}
@@ -992,7 +1012,7 @@ export default function App() {
           {view === "swaps" && <div>
             <div style={{ fontSize: 20, fontWeight: 600, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 2, marginBottom: 20, borderBottom: "1px solid var(--brd)", paddingBottom: 12 }}>Výměny</div>
             {!isA && <Card style={{ marginBottom: 20 }}><Btn warm onClick={() => setModal({ type: "swap", day: DAYS[selDay], shift: SHIFTS[0] })}>+ Nová žádost</Btn></Card>}
-            {openSw.map(sw => { const re = ge(sw.rid); const me = profile.id === sw.rid; const can = !isA && !me && profile?.team === re?.team; const dateLabel = sw.dateISO ? new Date(sw.dateISO + "T00:00:00").toLocaleDateString("cs", { weekday: "short", day: "numeric", month: "numeric" }) : `${sw.day} (týden ${sw.week})`; return <Card key={sw.id} style={{ padding: 16, marginBottom: 8 }}><div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}><div><div style={{ fontWeight: 600, fontSize: 17, color: "var(--w)" }}>{re?.name}</div><div style={{ display: "flex", gap: 6, marginTop: 4, alignItems: "center", flexWrap: "wrap" }}><Badge small color="var(--acc2)">{dateLabel} · {sw.sh}</Badge>{re?.team && <Badge small color={re.team === "L1" ? "var(--l1)" : "var(--sd)"}>{re.team}</Badge>}</div></div><div style={{ display: "flex", gap: 6, alignItems: "center" }}>{can && <Btn warm small onClick={() => doSwap(sw.id, profile.id)}>Přijmout</Btn>}{me && <><Badge color="var(--amb)">Tvoje</Badge><Btn small danger onClick={async () => { if (!confirm("Zrušit žádost?")) return; try { await deleteDoc(doc(db, "swapRequests", sw.id)); notify("Zrušeno"); log(`Zrušena žádost: ${dateLabel}`); } catch (err) { notify("Chyba: " + err.message); } }}>✕ Zrušit</Btn></>}{isA && !me && <Btn small danger onClick={async () => { if (!confirm("Smazat žádost?")) return; try { await deleteDoc(doc(db, "swapRequests", sw.id)); notify("Smazáno"); } catch { notify("Chyba"); } }}>✕</Btn>}</div></div>{sw.comment && <div style={{ marginTop: 8, fontSize: 13, color: "var(--tx2)", padding: "6px 10px", border: "1px solid var(--brd)", background: "var(--bg3)" }}>💬 {sw.comment}</div>}</Card>; })}
+            {openSw.map(sw => { const re = ge(sw.rid); const me = profile.id === sw.rid; const can = !isA && !me; const dateLabel = sw.dateISO ? new Date(sw.dateISO + "T00:00:00").toLocaleDateString("cs", { weekday: "short", day: "numeric", month: "numeric" }) : `${sw.day} (týden ${sw.week})`; return <Card key={sw.id} style={{ padding: 16, marginBottom: 8 }}><div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}><div><div style={{ fontWeight: 600, fontSize: 17, color: "var(--w)" }}>{re?.name}</div><div style={{ display: "flex", gap: 6, marginTop: 4, alignItems: "center", flexWrap: "wrap" }}><Badge small color="var(--acc2)">{dateLabel} · {sw.sh}</Badge>{re?.team && <Badge small color={re.team === "L1" ? "var(--l1)" : "var(--sd)"}>{re.team}</Badge>}</div></div><div style={{ display: "flex", gap: 6, alignItems: "center" }}>{can && <Btn warm small onClick={() => doSwap(sw.id, profile.id)}>Přijmout</Btn>}{me && <><Badge color="var(--amb)">Tvoje</Badge><Btn small danger onClick={async () => { if (!confirm("Zrušit žádost?")) return; try { await deleteDoc(doc(db, "swapRequests", sw.id)); notify("Zrušeno"); log(`Zrušena žádost: ${dateLabel}`); } catch (err) { notify("Chyba: " + err.message); } }}>✕ Zrušit</Btn></>}{isA && !me && <Btn small danger onClick={async () => { if (!confirm("Smazat žádost?")) return; try { await deleteDoc(doc(db, "swapRequests", sw.id)); notify("Smazáno"); } catch { notify("Chyba"); } }}>✕</Btn>}</div></div>{sw.comment && <div style={{ marginTop: 8, fontSize: 13, color: "var(--tx2)", padding: "6px 10px", border: "1px solid var(--brd)", background: "var(--bg3)" }}>💬 {sw.comment}</div>}</Card>; })}
             {!openSw.length && <p style={{ color: "var(--tx3)" }}>Žádné žádosti.</p>}
           </div>}
 
@@ -1064,7 +1084,7 @@ export default function App() {
             </Card>
             {isA && <Card style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, fontFamily: "'Barlow Condensed',sans-serif" }}>Pravidla směn</div>
-              <Input label="L1 Max/směna" type="number" value={rules.L1_max} onChange={e => setRules(r => ({ ...r, L1_max: +e.target.value }))} /><Input label="SD Max 8:00" type="number" value={rules.SD_max8} onChange={e => setRules(r => ({ ...r, SD_max8: +e.target.value }))} /><Input label="SD Max HO/den" type="number" value={rules.SD_maxHO} onChange={e => setRules(r => ({ ...r, SD_maxHO: +e.target.value }))} /><Toggle checked={rules.SD_noHO8} onChange={v => setRules(r => ({ ...r, SD_noHO8: v }))} label="Zákaz HO 08:00" /><Toggle checked={rules.SD_noHO10} onChange={v => setRules(r => ({ ...r, SD_noHO10: v }))} label="Zákaz HO 10:00" /><Btn warm onClick={async () => { await setDoc(doc(db, "rules", "global"), rules); notify("Uloženo"); }}>Uložit pravidla</Btn>
+              <Input label="L1 Max/směna" type="number" value={rules.L1_max} onChange={e => setRules(r => ({ ...r, L1_max: +e.target.value }))} /><Input label="SD Max 8:00" type="number" value={rules.SD_max8} onChange={e => setRules(r => ({ ...r, SD_max8: +e.target.value }))} /><Input label="SD Max HO/den" type="number" value={rules.SD_maxHO} onChange={e => setRules(r => ({ ...r, SD_maxHO: +e.target.value }))} /><Toggle checked={rules.SD_noHO8} onChange={v => setRules(r => ({ ...r, SD_noHO8: v }))} label="Zákaz HO 08:00" /><Toggle checked={rules.SD_noHO10} onChange={v => setRules(r => ({ ...r, SD_noHO10: v }))} label="Zákaz HO 10:00" /><div style={{ borderTop: "1px solid var(--brd)", marginTop: 12, paddingTop: 12 }}><Toggle checked={rules.allowAllDnD || false} onChange={v => setRules(r => ({ ...r, allowAllDnD: v }))} label="Povolit Drag & Drop pro všechny" /><p style={{ fontSize: 12, color: "var(--tx3)", marginTop: -8, marginBottom: 12 }}>Zaměstnanci budou moci přesouvat kohokoliv v rozvrhu (i mezi týmy).</p></div><Btn warm onClick={async () => { await setDoc(doc(db, "rules", "global"), rules); notify("Uloženo"); }}>Uložit pravidla</Btn>
             </Card>}
             {isA && <Card><div style={{ display: "flex", gap: 8 }}><Btn danger onClick={async () => { await deleteDoc(doc(db, "schedules", wk)); notify("Reset"); }}>Reset týden</Btn><Btn ghost onClick={exportCSV}>CSV</Btn></div></Card>}
           </div>}
