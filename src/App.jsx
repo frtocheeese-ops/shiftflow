@@ -507,6 +507,24 @@ function ChangeNameF({ profile, onDone }) {
   </div>;
 }
 
+function DirectSwapF({ targetEmp, dateLabel, dateISO, targetDay, targetShift, onSubmit }) {
+  const [comment, setComment] = useState("");
+  return <div>
+    <div style={{ padding: 16, background: "var(--bg3)", border: "1px solid var(--brd)", marginBottom: 16 }}>
+      <div style={{ fontSize: 13, color: "var(--tx3)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8, fontFamily: "'Barlow Condensed',sans-serif" }}>Požádat o výměnu</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div style={{ width: 40, height: 40, background: targetEmp.team === "L1" ? "var(--l1)" : "var(--sd)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17, fontWeight: 600, color: "#fff" }}>{targetEmp.name.charAt(0)}</div>
+        <div>
+          <div style={{ fontWeight: 600, fontSize: 17, color: "var(--w)" }}>{targetEmp.name}</div>
+          <div style={{ fontSize: 14, color: "var(--acc2)", fontFamily: "'IBM Plex Mono',monospace" }}>{dateLabel} · {targetShift}</div>
+        </div>
+      </div>
+    </div>
+    <Input label="Komentář (volitelné)" value={comment} onChange={e => setComment(e.target.value)} placeholder="Např. potřebuji ten den volno" />
+    <Btn warm onClick={() => onSubmit(comment)} style={{ width: "100%", marginTop: 8 }}>⇄ Odeslat žádost</Btn>
+  </div>;
+}
+
 /* ═══ MAIN APP ═══ */
 export default function App() {
   const [authUser, setAuthUser] = useState(undefined); const [profile, setProfile] = useState(null);
@@ -856,13 +874,14 @@ export default function App() {
       onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add("over"); }}
       onDragLeave={e => e.currentTarget.classList.remove("over")}
       onDrop={e => handleDrop(day, shift, e)}>
-      {entries.map((en, idx) => { const emp = ge(en.empId); if (!emp) return null; const tc = emp.team === "L1" ? "var(--l1)" : "var(--sd)"; const nk = fsKey(en.empId, day, shift.replace(":", "")); const note = notes[nk];
+      {entries.map((en, idx) => { const emp = ge(en.empId); if (!emp) return null; const tc = emp.team === "L1" ? "var(--l1)" : "var(--sd)"; const nk = fsKey(en.empId, day, shift.replace(":", "")); const note = notes[nk]; const isMe = en.empId === profile.id;
         return <div key={en.empId} className="ent" draggable={canDrag(en.empId)}
           onDragStart={e => e.dataTransfer.setData("text/plain", JSON.stringify({ empId: en.empId, day, shift }))}
-          onClick={() => isA ? setSelCell({ day, shift, empId: en.empId }) : en.empId === profile.id && setModal({ type: "myshift", day, shift })}
+          onClick={() => isA ? setSelCell({ day, shift, empId: en.empId }) : isMe && setModal({ type: "myshift", day, shift })}
           style={{ gap: 10, padding: "12px 14px", borderBottom: idx < entries.length - 1 ? "1px solid var(--brd)" : "none" }}>
           <div style={{ width: 3, height: 24, background: tc }} />
           <span style={{ fontWeight: 500, color: "var(--w)", flex: 1 }}>{emp.name}</span>
+          {!isA && !isMe && <button title={`Požádat ${emp.name} o výměnu`} onClick={e => { e.stopPropagation(); setModal({ type: "directSwap", targetEmp: emp, targetDay: day, targetShift: shift }); }} style={{ background: "none", border: "1px solid var(--acc2)", color: "var(--acc2)", width: 26, height: 26, cursor: "pointer", fontSize: 13, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontFamily: "'IBM Plex Mono',monospace" }}>⇄</button>}
           {note && <span title={note} style={{ color: "var(--acc2)", cursor: "help", fontSize: 15, fontWeight: 700, border: "1px solid var(--acc2)", width: 22, height: 22, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>i</span>}
           <Badge small color={tc}>{emp.team}</Badge>
           {en.ho && <Badge small color="var(--grn)">HO</Badge>}
@@ -993,9 +1012,11 @@ export default function App() {
                         onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add("over"); }}
                         onDragLeave={e => e.currentTarget.classList.remove("over")}
                         onDrop={e => handleDrop(day, shift, e)}>
-                        {entries.map(en => { const emp = ge(en.empId); if (!emp) return null; const tc = emp.team === "L1" ? "var(--l1)" : "var(--sd)";
-                          return <div key={en.empId} className="ent" draggable={canDrag(en.empId)} onDragStart={e => e.dataTransfer.setData("text/plain", JSON.stringify({ empId: en.empId, day, shift }))} onClick={() => isA ? setSelCell({ day, shift, empId: en.empId }) : en.empId === profile.id && setModal({ type: "myshift", day, shift })} style={{ gap: 6, padding: "6px 10px", marginBottom: 2, background: "var(--bg3)", border: "1px solid var(--brd)", fontSize: 14 }}>
-                            <span style={{ width: 8, height: 3, background: tc }} /><span style={{ fontWeight: 500, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--w)" }}>{emp.name?.split(" ").pop()}</span>{en.ho && <Badge small color="var(--grn)">HO</Badge>}
+                        {entries.map(en => { const emp = ge(en.empId); if (!emp) return null; const tc = emp.team === "L1" ? "var(--l1)" : "var(--sd)"; const isMe = en.empId === profile.id;
+                          return <div key={en.empId} className="ent" draggable={canDrag(en.empId)} onDragStart={e => e.dataTransfer.setData("text/plain", JSON.stringify({ empId: en.empId, day, shift }))} onClick={() => isA ? setSelCell({ day, shift, empId: en.empId }) : isMe && setModal({ type: "myshift", day, shift })} style={{ gap: 4, padding: "6px 8px", marginBottom: 2, background: "var(--bg3)", border: "1px solid var(--brd)", fontSize: 14 }}>
+                            <span style={{ width: 8, height: 3, background: tc }} /><span style={{ fontWeight: 500, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--w)" }}>{emp.name?.split(" ").pop()}</span>
+                            {!isA && !isMe && <button title={`Výměna s ${emp.name}`} onClick={e => { e.stopPropagation(); setModal({ type: "directSwap", targetEmp: emp, targetDay: day, targetShift: shift }); }} style={{ background: "none", border: "1px solid var(--acc2)", color: "var(--acc2)", width: 20, height: 20, cursor: "pointer", fontSize: 10, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, padding: 0 }}>⇄</button>}
+                            {en.ho && <Badge small color="var(--grn)">HO</Badge>}
                           </div>; })}
                       </td>; })}
                   </tr>)}
@@ -1012,7 +1033,7 @@ export default function App() {
           {view === "swaps" && <div>
             <div style={{ fontSize: 20, fontWeight: 600, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 2, marginBottom: 20, borderBottom: "1px solid var(--brd)", paddingBottom: 12 }}>Výměny</div>
             {!isA && <Card style={{ marginBottom: 20 }}><Btn warm onClick={() => setModal({ type: "swap", day: DAYS[selDay], shift: SHIFTS[0] })}>+ Nová žádost</Btn></Card>}
-            {openSw.map(sw => { const re = ge(sw.rid); const me = profile.id === sw.rid; const can = !isA && !me; const dateLabel = sw.dateISO ? new Date(sw.dateISO + "T00:00:00").toLocaleDateString("cs", { weekday: "short", day: "numeric", month: "numeric" }) : `${sw.day} (týden ${sw.week})`; return <Card key={sw.id} style={{ padding: 16, marginBottom: 8 }}><div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}><div><div style={{ fontWeight: 600, fontSize: 17, color: "var(--w)" }}>{re?.name}</div><div style={{ display: "flex", gap: 6, marginTop: 4, alignItems: "center", flexWrap: "wrap" }}><Badge small color="var(--acc2)">{dateLabel} · {sw.sh}</Badge>{re?.team && <Badge small color={re.team === "L1" ? "var(--l1)" : "var(--sd)"}>{re.team}</Badge>}</div></div><div style={{ display: "flex", gap: 6, alignItems: "center" }}>{can && <Btn warm small onClick={() => doSwap(sw.id, profile.id)}>Přijmout</Btn>}{me && <><Badge color="var(--amb)">Tvoje</Badge><Btn small danger onClick={async () => { if (!confirm("Zrušit žádost?")) return; try { await deleteDoc(doc(db, "swapRequests", sw.id)); notify("Zrušeno"); log(`Zrušena žádost: ${dateLabel}`); } catch (err) { notify("Chyba: " + err.message); } }}>✕ Zrušit</Btn></>}{isA && !me && <Btn small danger onClick={async () => { if (!confirm("Smazat žádost?")) return; try { await deleteDoc(doc(db, "swapRequests", sw.id)); notify("Smazáno"); } catch { notify("Chyba"); } }}>✕</Btn>}</div></div>{sw.comment && <div style={{ marginTop: 8, fontSize: 13, color: "var(--tx2)", padding: "6px 10px", border: "1px solid var(--brd)", background: "var(--bg3)" }}>💬 {sw.comment}</div>}</Card>; })}
+            {openSw.map(sw => { const re = ge(sw.rid); const me = profile.id === sw.rid; const tgt = sw.targetId ? ge(sw.targetId) : null; const isTarget = sw.targetId === profile.id; const can = !isA && !me && (!sw.targetId ? true : isTarget); const dateLabel = sw.dateISO ? new Date(sw.dateISO + "T00:00:00").toLocaleDateString("cs", { weekday: "short", day: "numeric", month: "numeric" }) : `${sw.day} (týden ${sw.week})`; return <Card key={sw.id} style={{ padding: 16, marginBottom: 8 }}><div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}><div><div style={{ fontWeight: 600, fontSize: 17, color: "var(--w)" }}>{re?.name}</div><div style={{ display: "flex", gap: 6, marginTop: 4, alignItems: "center", flexWrap: "wrap" }}><Badge small color="var(--acc2)">{dateLabel} · {sw.sh}</Badge>{re?.team && <Badge small color={re.team === "L1" ? "var(--l1)" : "var(--sd)"}>{re.team}</Badge>}{tgt && <Badge small color="var(--amb)">→ {tgt.name}</Badge>}</div></div><div style={{ display: "flex", gap: 6, alignItems: "center" }}>{can && <Btn warm small onClick={() => doSwap(sw.id, profile.id)}>Přijmout</Btn>}{me && <><Badge color="var(--amb)">Tvoje</Badge><Btn small danger onClick={async () => { if (!confirm("Zrušit žádost?")) return; try { await deleteDoc(doc(db, "swapRequests", sw.id)); notify("Zrušeno"); log(`Zrušena žádost: ${dateLabel}`); } catch (err) { notify("Chyba: " + err.message); } }}>✕ Zrušit</Btn></>}{isA && !me && <Btn small danger onClick={async () => { if (!confirm("Smazat žádost?")) return; try { await deleteDoc(doc(db, "swapRequests", sw.id)); notify("Smazáno"); } catch { notify("Chyba"); } }}>✕</Btn>}</div></div>{sw.comment && <div style={{ marginTop: 8, fontSize: 13, color: "var(--tx2)", padding: "6px 10px", border: "1px solid var(--brd)", background: "var(--bg3)" }}>💬 {sw.comment}</div>}</Card>; })}
             {!openSw.length && <p style={{ color: "var(--tx3)" }}>Žádné žádosti.</p>}
           </div>}
 
@@ -1131,5 +1152,32 @@ export default function App() {
     <Modal open={modal === "changePass"} onClose={() => setModal(null)} title="Změna hesla"><ChangePassF onDone={() => { notify("Heslo změněno"); setModal(null); }} /></Modal>
     <Modal open={modal === "changeName"} onClose={() => setModal(null)} title="Změna jména"><ChangeNameF profile={profile} onDone={() => { notify("Jméno změněno"); setModal(null); }} /></Modal>
     <Modal open={modal === "changeNotif"} onClose={() => setModal(null)} title="Notifikace"><ChangeNotifF profile={profile} onDone={() => { notify("Nastavení uloženo"); setModal(null); }} /></Modal>
+
+    <Modal open={modal?.type === "directSwap"} onClose={() => setModal(null)} title="Žádost o výměnu">{modal?.type === "directSwap" && (() => {
+      const { targetEmp, targetDay, targetShift } = modal;
+      const dayIdx = DAYS.indexOf(targetDay);
+      const dateISO = dayIdx >= 0 ? wd[dayIdx] : "";
+      const dateLabel = dateISO ? new Date(dateISO + "T00:00:00").toLocaleDateString("cs", { weekday: "long", day: "numeric", month: "long" }) : targetDay;
+      return <DirectSwapF targetEmp={targetEmp} dateLabel={dateLabel} dateISO={dateISO} targetDay={targetDay} targetShift={targetShift} onSubmit={async (comment) => {
+        const date = new Date(dateISO + "T00:00:00");
+        const swWk = wKey(date);
+        await addDoc(collection(db, "swapRequests"), {
+          rid: profile.id, day: targetDay, sh: targetShift, week: swWk, dateISO,
+          targetId: targetEmp.id, status: "open", comment: comment || "",
+          created: new Date().toISOString()
+        });
+        // Email target
+        if (targetEmp.notify) {
+          callGAS("sendEmail", {
+            to: targetEmp.notifyEmail || targetEmp.email,
+            employeeName: targetEmp.name,
+            changeDescription: `${profile.name} vás žádá o výměnu směny: ${dateLabel} ${targetShift}${comment ? ` — "${comment}"` : ""}`,
+            weekLabel: dateISO
+          });
+        }
+        notify(`Žádost odeslána: ${targetEmp.name}`); log(`Žádost o výměnu: ${targetEmp.name} ${dateLabel} ${targetShift}`);
+        setModal(null);
+      }} />;
+    })()}</Modal>
   </div>;
 }
