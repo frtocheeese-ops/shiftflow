@@ -84,3 +84,29 @@ pravidla kolekce `schedules`).
 
 Ověřeno plným `vite build` a logickými testy enginu (detekce Nástupů, výjimky, zákaz
 přesunu HO do Nástupového dne).
+
+---
+
+## Aktualizace v4 — férovost, resolution modal, sync, oprava UI
+
+**Férovostní hlídač.** Nová sekce ve Stats agreguje z posledních 16 týdnů počty
+odpracovaných směn od 8:00, od 10:00 a dnů HO pro každého (živě z kolekce `schedules`).
+Tabulka s proužky + hlídač, který upozorní, když rozdíl mezi lidmi překročí 3
+(nejvíc vs. nejmíň, jmenovitě). Konstanty `FAIR_WEEKS`, `FAIR_SPREAD`. Jen čtení.
+
+**Resolution modal.** Když si člen zadá nepřítomnost nebo změní hodinu směny, vyskočí
+tabulka: nasimuluje dopad, a pokud vznikne podstav, vypíše všechny možnosti krytí —
+každou s kolegou, kterého se týká, tlačítkem „Požádat {jméno}" (vytvoří návrh + notifikaci)
+a „✉ napsat" (mailto). U změny hodiny navíc tlačítko „Odeslat změnu ke schválení"
+(návrh s předvyplněným souhlasem žadatele, zbývá admin). Když změna nic nerozbije,
+modal to potvrdí a nikoho neshání.
+
+**Sync tlačítko (⟳).** V hlavičce. Vyčistí Cache Storage i service worker registrace
+a natvrdo přenačte s cache-busting parametrem — jistota čerstvého stavu.
+
+**Opravy UI.** Šipky týdnů ‹ › nově flex-centrované (glyfy byly mimo osu). Nespolehlivý
+`<input type=date>` nahrazen čistým tlačítkem 📅 s neviditelným, přes celou plochu
+roztaženým date-pickerem (spolehlivě otevře nativní výběr na mobilu i desktopu).
+
+Ověřeno `vite build` + logickými testy (resolve simulace absence i změny hodiny,
+férovostní agregace).

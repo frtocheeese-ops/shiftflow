@@ -661,6 +661,7 @@ export default function App() {
   const [absences, setAbsences] = useState({}); const [events, setEvents] = useState({});
   const [swaps, setSwaps] = useState([]); const [selCell, setSelCell] = useState(null);
   const [proposals, setProposals] = useState([]);
+  const [allSchedules, setAllSchedules] = useState({}); const [resolveTarget, setResolveTarget] = useState(null);
   const [modal, setModal] = useState(null); const [notifs, setNotifs] = useState([]);
   const [logs, setLogs] = useState([]); const [notes, setNotes] = useState({});
   const [rules, setRules] = useState({ ...RULE_DEFAULTS, allowAllDnD: false });
@@ -716,6 +717,43 @@ export default function App() {
     };
   }, [cs, absences, employees, rules, wh.join("|"), intake, intakeAllow]);
 
+  // ═══ FÉROVOST: počítadla 8:00 / 10:00 / HO napříč posledními ~16 týdny + hlídač ═══
+  const FAIR_WEEKS = 16, FAIR_SPREAD = 3;
+  const fairness = useMemo(() => {
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - FAIR_WEEKS * 7);
+    const cutoffKey = wKey(cutoff);
+    const tally = {};
+    const active = employees.filter(e => e.role !== "admin");
+    active.forEach(e => tally[e.id] = { eight: 0, ten: 0, ho: 0, weeks: 0 });
+    Object.entries(allSchedules).forEach(([wkKey, data]) => {
+      if (wkKey < cutoffKey || !data.entries) return;
+      const seen = new Set();
+      DAYS.forEach(day => SHIFTS.forEach(sh => (data.entries[day]?.[sh] || []).forEach(en => {
+        const t = tally[en.empId]; if (!t) return;
+        seen.add(en.empId);
+        if (en.ho) t.ho++;
+        else if (sh === "08:00") t.eight++;
+        else if (sh === "10:00") t.ten++;
+      })));
+      seen.forEach(id => tally[id] && tally[id].weeks++);
+    });
+    const rows = active.map(e => ({ id: e.id, name: e.name, ...tally[e.id] })).sort((a, b) => b.eight - a.eight);
+    const metrics = ["eight", "ten", "ho"];
+    const warn = [];
+    metrics.forEach(m => {
+      const vals = rows.filter(r => r.weeks > 0).map(r => r[m]);
+      if (vals.length < 2) return;
+      const max = Math.max(...vals), min = Math.min(...vals);
+      if (max - min > FAIR_SPREAD) {
+        const hi = rows.filter(r => r[m] === max && r.weeks > 0).map(r => r.name);
+        const lo = rows.filter(r => r[m] === min && r.weeks > 0).map(r => r.name);
+        const label = m === "eight" ? "směn od 8:00" : m === "ten" ? "směn od 10:00" : "dnů HO";
+        warn.push({ metric: m, spread: max - min, msg: `Nerovnoměrný počet ${label}: nejvíc ${hi.join(", ")} (${max}), nejmíň ${lo.join(", ")} (${min})` });
+      }
+    });
+    return { rows, warn };
+  }, [allSchedules, employees]);
+
   useEffect(() => { const u = onAuthStateChanged(auth, async u => { if (u) { setAuthUser(u); const s = await getDoc(doc(db, "users", u.uid)); if (s.exists()) setProfile({ id: u.uid, ...s.data() }); else setProfile({ id: u.uid, name: u.displayName || u.email, role: "employee", setupDone: false }); initPush(u.uid); } else { setAuthUser(null); setProfile(null); } }); return u; }, []);
   useEffect(() => { const u = onSnapshot(collection(db, "users"), s => { const e = s.docs.map(d => ({ id: d.id, ...d.data() })); setEmployees(e); if (profile) { const m = e.find(x => x.id === profile.id); if (m) setProfile(p => ({ ...p, ...m })); } }); return u; }, [profile?.id]);
   useEffect(() => { const u = onSnapshot(doc(db, "schedules", wk), s => { if (s.exists()) { const d = s.data(); setSchedule(d.entries || null); setAbsences(d.absences || {}); setEvents(d.events || {}); setNotes(d.notes || {}); setIntake(d.intake || {}); setIntakeAllow(d.intakeAllow || {}); setSchedMeta({ at: d.modifiedAt, by: d.modifiedBy }); } else { setSchedule(null); setAbsences({}); setEvents({}); setNotes({}); setIntake({}); setIntakeAllow({}); setSchedMeta({}); } }); return u; }, [wk]);
@@ -750,10 +788,21 @@ export default function App() {
   }, [profile?.id, profile?.gcalEnabled, employees]);
   useEffect(() => { const u = onSnapshot(collection(db, "swapRequests"), s => setSwaps(s.docs.map(d => ({ id: d.id, ...d.data() })))); return u; }, []);
   useEffect(() => { const u = onSnapshot(collection(db, "changeProposals"), s => setProposals(s.docs.map(d => ({ id: d.id, ...d.data() })))); return u; }, []);
+  // Všechny rozvrhy pro férovostní počítadla (malý tým → pár desítek dokumentů)
+  useEffect(() => { const u = onSnapshot(collection(db, "schedules"), s => { const m = {}; s.docs.forEach(d => m[d.id] = d.data()); setAllSchedules(m); }); return u; }, []);
   useEffect(() => { const u = onSnapshot(doc(db, "rules", "global"), s => { if (s.exists()) setRules(s.data()); }); return u; }, []);
   useEffect(() => { const u = onSnapshot(collection(db, "auditLog"), s => { const a = s.docs.map(d => ({ id: d.id, ...d.data() })); a.sort((a, b) => (b.time || "").localeCompare(a.time || "")); setLogs(a.slice(0, 100)); }); return u; }, []);
 
   const notify = msg => { const n = { id: uid(), msg, time: new Date().toLocaleTimeString("cs") }; setNotifs(p => [n, ...p]); setTimeout(() => setNotifs(p => p.filter(x => x.id !== n.id)), 5000); };
+  const hardSync = async () => {
+    notify("Synchronizuji…");
+    try {
+      if ("caches" in window) { const ks = await caches.keys(); await Promise.all(ks.map(k => caches.delete(k))); }
+      if (navigator.serviceWorker) { const rs = await navigator.serviceWorker.getRegistrations(); await Promise.all(rs.map(r => r.unregister())); }
+    } catch { }
+    // cache-busting reload
+    const u = new URL(window.location.href); u.searchParams.set("_sync", Date.now()); window.location.replace(u.toString());
+  };
   const log = async msg => { try { await addDoc(collection(db, "auditLog"), { msg, time: new Date().toISOString(), week: wk, userId: profile?.id }); } catch { } };
 
   /* ═══ TRANSAKČNÍ ZÁPIS — čte čerstvá data uvnitř transakce, aplikuje jen svou změnu.
@@ -1144,6 +1193,7 @@ export default function App() {
       <header className="pg" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: "1px solid var(--bt)" }}>
         <div style={{ fontSize: 14, color: "var(--tx2)", fontFamily: "'Barlow Condensed',sans-serif" }}>{profile.name} · <Badge small color={isA ? "var(--amb)" : "var(--acc)"}>{isA ? "ADM" : "CREW"}</Badge></div>
         <div style={{ display: "flex", gap: 6 }}>
+          <button onClick={hardSync} title="Sync — načíst čerstvý stav" style={{ background: "none", border: "1px solid var(--brd2)", color: "var(--acc2)", width: 38, height: 38, cursor: "pointer", fontSize: 15, display: "flex", alignItems: "center", justifyContent: "center" }}>⟳</button>
           {isMobile && <button onClick={() => setTheme(t => t === "light" ? "dark" : "light")} style={{ background: "none", border: "1px solid var(--brd2)", width: 38, height: 38, cursor: "pointer", color: "var(--tx2)", fontSize: 14 }}>{theme === "light" ? "●" : "○"}</button>}
           <button onClick={() => signOut(auth)} style={{ background: "none", border: "1px solid var(--brd2)", color: "var(--tx3)", width: 38, height: 38, cursor: "pointer", fontSize: 13 }}>↪</button>
         </div>
@@ -1156,26 +1206,25 @@ export default function App() {
           {view === "schedule" && <div>
             {/* Week nav */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
-              <button onClick={() => setWo(w => w - 1)} style={{ width: 44, height: 44, border: "1px solid var(--brd2)", background: "transparent", color: "var(--tx)", cursor: "pointer", fontSize: 18 }}>‹</button>
-              <div style={{ textAlign: "center" }}>
+              <button onClick={() => setWo(w => w - 1)} aria-label="Předchozí týden" style={{ width: 44, height: 44, border: "1px solid var(--brd2)", background: "transparent", color: "var(--tx)", cursor: "pointer", fontSize: 22, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>‹</button>
+              <div style={{ textAlign: "center", minWidth: 190 }}>
                 <div style={{ fontSize: 18, fontWeight: 500, color: "var(--w)", fontFamily: "'IBM Plex Mono',monospace" }}>{fmtW(cw)}</div>
-                <div style={{ fontSize: 12, color: wo === 0 ? "var(--acc2)" : "var(--tx3)", textTransform: "uppercase", letterSpacing: 1 }}>{wo === 0 ? "Aktuální týden" : `${wo > 0 ? "+" : ""}${wo}`}</div>
+                <div style={{ fontSize: 12, color: wo === 0 ? "var(--acc2)" : "var(--tx3)", textTransform: "uppercase", letterSpacing: 1 }}>{wo === 0 ? "Aktuální týden" : `${wo > 0 ? "+" : ""}${wo} týd.`}</div>
               </div>
-              <button onClick={() => setWo(w => w + 1)} style={{ width: 44, height: 44, border: "1px solid var(--brd2)", background: "transparent", color: "var(--tx)", cursor: "pointer", fontSize: 18 }}>›</button>
-              <div style={{ position: "relative" }}>
-                <input type="date" onChange={e => {
+              <button onClick={() => setWo(w => w + 1)} aria-label="Další týden" style={{ width: 44, height: 44, border: "1px solid var(--brd2)", background: "transparent", color: "var(--tx)", cursor: "pointer", fontSize: 22, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>›</button>
+              <label style={{ position: "relative", width: 44, height: 44, display: "inline-flex", alignItems: "center", justifyContent: "center", border: "1px solid var(--brd2)", cursor: "pointer", color: "var(--tx)" }} title="Přejít na datum">
+                <span style={{ fontSize: 18, pointerEvents: "none" }}>📅</span>
+                <input type="date" aria-label="Přejít na datum" onChange={e => {
                   if (!e.target.value) return;
                   const picked = new Date(e.target.value + "T00:00:00");
                   const today = new Date(); today.setHours(0, 0, 0, 0);
                   const pickedMon = getMon(picked); const todayMon = getMon(today);
                   const diffDays = Math.round((pickedMon - todayMon) / (1000 * 60 * 60 * 24));
-                  const newWo = Math.round(diffDays / 7);
-                  setWo(newWo);
-                  // Set day pill to picked day if weekday
+                  setWo(Math.round(diffDays / 7));
                   const dow = picked.getDay();
                   if (dow >= 1 && dow <= 5) goDay(dow - 1);
-                }} style={{ width: 44, height: 44, border: "1px solid var(--brd2)", background: "transparent", color: "var(--tx)", cursor: "pointer", fontSize: 14, padding: "0 6px", fontFamily: "'IBM Plex Mono',monospace" }} title="Vyberte datum" />
-              </div>
+                }} style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%", height: "100%" }} />
+              </label>
               {wo !== 0 && <Btn small ghost onClick={() => setWo(0)}>Dnes</Btn>}
             </div>
 
@@ -1394,6 +1443,31 @@ export default function App() {
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>{[{ l: "Dovolená", v: (profile.vacationTotal || 20) - (profile.vacationUsed || 0), t: profile.vacationTotal || 20, c: "var(--sd)" }, { l: "Sick", v: (profile.sickTotal || 5) - (profile.sickUsed || 0), t: profile.sickTotal || 5, c: "var(--red)" }, { l: "Whatever", v: (profile.whateverTotal || 3) - (profile.whateverUsed || 0), t: profile.whateverTotal || 3, c: "var(--amb)" }].map(b => <div key={b.l} style={{ textAlign: "center", padding: 12, border: "1px solid var(--brd)", background: "var(--bg3)" }}><div style={{ fontSize: 28, fontWeight: 600, color: b.c, fontFamily: "'IBM Plex Mono',monospace" }}>{b.v}</div><div style={{ fontSize: 11, color: "var(--tx3)", textTransform: "uppercase" }}>{b.l} (z {b.t})</div></div>)}</div>
             </Card>}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))", gap: 12 }}>{[{ l: "Crew", v: employees.filter(e => e.role !== "admin").length, c: "var(--acc2)" }, { l: "Active", v: employees.filter(e => e.setupDone).length, c: "var(--grn)" }, { l: "Swaps", v: openSw.length, c: "var(--amb)" }].map(s => <Card key={s.l}><div style={{ fontSize: 32, fontWeight: 600, color: s.c, fontFamily: "'IBM Plex Mono',monospace" }}>{s.v}</div><div style={{ fontSize: 12, color: "var(--tx3)", textTransform: "uppercase", marginTop: 4 }}>{s.l}</div></Card>)}</div>
+
+            {/* ═══ FÉROVOST ═══ */}
+            <div style={{ fontSize: 16, fontWeight: 600, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 1, margin: "28px 0 6px" }}>Férovost · posledních {FAIR_WEEKS} týdnů</div>
+            <p style={{ fontSize: 12, color: "var(--tx3)", marginBottom: 12 }}>Počty odpracovaných směn od 8:00, od 10:00 a dnů home office. Hlídač upozorní, když se rozdíl mezi lidmi zvětší nad {FAIR_SPREAD}.</p>
+            {fairness.warn.length > 0 && <div className="gl" style={{ padding: "10px 14px", marginBottom: 12, borderLeft: "3px solid var(--amb)" }}>
+              {fairness.warn.map((w, i) => <div key={i} style={{ fontSize: 13, color: "var(--amb)", padding: "2px 0" }}>⚠️ {w.msg}</div>)}
+            </div>}
+            {fairness.warn.length === 0 && fairness.rows.some(r => r.weeks > 0) && <div className="gl" style={{ padding: "10px 14px", marginBottom: 12, borderLeft: "3px solid var(--grn)", fontSize: 13, color: "var(--grn)" }}>✓ Rozložení směn i HO je vyrovnané.</div>}
+            <div className="gl" style={{ overflow: "auto", padding: 0 }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14, minWidth: 420 }}>
+                <thead><tr>
+                  {["Člen", "8:00", "10:00", "HO", "Týdnů"].map((h, i) => <th key={h} style={{ padding: "10px 12px", textAlign: i === 0 ? "left" : "center", color: "var(--tx3)", borderBottom: "1px solid var(--brd)", fontFamily: "'Barlow Condensed',sans-serif", letterSpacing: 1 }}>{h}</th>)}
+                </tr></thead>
+                <tbody>{fairness.rows.map(r => {
+                  const maxV = Math.max(1, ...fairness.rows.map(x => Math.max(x.eight, x.ten, x.ho)));
+                  const bar = (v, c) => <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "center" }}><div style={{ width: 40, height: 6, background: "var(--brd)", position: "relative" }}><div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${100 * v / maxV}%`, background: c }} /></div><span style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 13, minWidth: 18, textAlign: "right" }}>{v}</span></div>;
+                  return <tr key={r.id} style={{ borderBottom: "1px solid var(--brd)" }}>
+                    <td style={{ padding: "8px 12px", fontWeight: 600, color: "var(--w)" }}>{r.name}</td>
+                    <td style={{ padding: "8px 12px" }}>{bar(r.eight, "var(--acc2)")}</td>
+                    <td style={{ padding: "8px 12px" }}>{bar(r.ten, "var(--amb)")}</td>
+                    <td style={{ padding: "8px 12px" }}>{bar(r.ho, "var(--grn)")}</td>
+                    <td style={{ padding: "8px 12px", textAlign: "center", fontFamily: "'IBM Plex Mono',monospace", fontSize: 13, color: "var(--tx3)" }}>{r.weeks}</td>
+                  </tr>; })}</tbody>
+              </table>
+            </div>
           </div>}
 
           {view === "log" && <div><div style={{ fontSize: 20, fontWeight: 600, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 2, marginBottom: 20, borderBottom: "1px solid var(--brd)", paddingBottom: 12 }}>Log</div>{logs.map(h => <div key={h.id} style={{ display: "flex", gap: 10, padding: "10px 12px", borderBottom: "1px solid var(--brd)", fontSize: 14 }}><span style={{ fontSize: 12, color: "var(--tx3)", fontFamily: "'IBM Plex Mono',monospace", minWidth: 130 }}>{h.time ? new Date(h.time).toLocaleString("cs") : ""}</span><span style={{ flex: 1 }}>{h.msg}</span></div>)}</div>}
@@ -1473,18 +1547,58 @@ export default function App() {
         if (pendingHO) return <div style={{ padding: "12px 14px", border: "1px solid var(--amb)", color: "var(--amb)", fontSize: 14, marginBottom: 12 }}>⚑ Žádost o HO na tento den čeká na schválení.</div>;
         return <Btn warm={!isHO} primary={isHO} onClick={() => { requestHO(modal.day, !isHO); setModal(null); }} style={{ width: "100%", marginBottom: 12 }}>{isHO ? "🏠 Požádat o zrušení Home Office" : "🏠 Požádat o Home Office"}</Btn>; })()}
       <div style={{ fontSize: 12, color: "var(--tx3)", margin: "8px 0 6px", textTransform: "uppercase", letterSpacing: 1 }}>Nepřítomnost</div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>{ABS.map(a => <Btn key={a.id} onClick={() => { addAbs(profile.id, modal.day, a.id); setModal(null); }}>{a.icon} {a.label}</Btn>)}</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>{ABS.map(a => <Btn key={a.id} onClick={() => { const d = modal.day; addAbs(profile.id, d, a.id); setModal(null); setResolveTarget({ day: d, kind: "absence", empId: profile.id }); }}>{a.icon} {a.label}</Btn>)}</div>
+      {(() => { const me = cs[modal?.day]?.[modal?.shift]?.find(e => e.empId === profile.id); if (!me || me.ho) return null;
+        return <><div style={{ fontSize: 12, color: "var(--tx3)", margin: "8px 0 6px", textTransform: "uppercase", letterSpacing: 1 }}>Změnit hodinu</div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>{SHIFTS.filter(s => s !== modal.shift).map(s => <Btn key={s} onClick={() => { setResolveTarget({ day: modal.day, kind: "shift", empId: profile.id, fromShift: modal.shift, toShift: s }); setModal(null); }} style={{ flex: 1 }}>{s}</Btn>)}</div></>; })()}
       <Btn warm onClick={() => setModal({ type: "swap", day: modal?.day, shift: modal?.shift })} style={{ width: "100%", marginBottom: 10 }}>Požádat o výměnu</Btn>
       <div style={{ fontSize: 12, color: "var(--tx3)", margin: "8px 0 6px", textTransform: "uppercase" }}>Poznámka</div>
       <NoteInput onSubmit={n => { saveNote(profile.id, modal.day, modal.shift, n); setModal(null); }} />
     </div></Modal>
     <Modal open={modal === "myabsence"} onClose={() => setModal(null)} title="Nepřítomnost">
-      <MyAbsF profile={profile} wd={wd} onSubmit={(d, t) => { addAbs(profile.id, d, t); setModal(null); }} />
+      <MyAbsF profile={profile} wd={wd} onSubmit={(d, t) => { addAbs(profile.id, d, t); setModal(null); setResolveTarget({ day: d, kind: "absence", empId: profile.id }); }} />
       <div style={{ borderTop: "1px solid var(--brd)", marginTop: 16, paddingTop: 16 }}>
         <Btn ghost onClick={() => setModal("vacrange")} style={{ width: "100%", fontSize: 14 }}>🗓 Dovolená od — do (rozsah)</Btn>
       </div>
     </Modal>
     <Modal open={modal === "vacrange"} onClose={() => setModal(null)} title="Nepřítomnost — rozsah"><VacRangeF onSubmit={(f, t, type) => { addAbsRange(f, t, type); setModal(null); }} /></Modal>
+
+    {/* ═══ RESOLVE: možnosti krytí + koho oslovit ═══ */}
+    {(() => {
+      if (!resolveTarget) return null;
+      const { day, kind, empId, fromShift, toShift } = resolveTarget;
+      const sim = dc(cs);
+      if (kind === "absence") SHIFTS.forEach(sh => { if (sim[day]?.[sh]) sim[day][sh] = sim[day][sh].filter(e => e.empId !== empId); });
+      if (kind === "shift") { const arr = sim[day]?.[fromShift] || []; const i = arr.findIndex(e => e.empId === empId); if (i >= 0) { const [en] = arr.splice(i, 1); if (!sim[day][toShift]) sim[day][toShift] = []; sim[day][toShift].push(en); } }
+      const simAbs = kind === "absence" ? { ...absences, [fsKey(empId, day)]: "vacation" } : absences;
+      const probs = analyzeWeek(sim, simAbs, employees, rules, intake, intakeAllow).problems.filter(p => p.day === day);
+      const title = kind === "absence" ? `Krytí nepřítomnosti — ${day}` : `Změna hodiny — ${day}`;
+      return <Modal open={true} onClose={() => setResolveTarget(null)} title={title}>
+        <div>
+          {kind === "shift" && <div style={{ marginBottom: 14 }}>
+            <p style={{ fontSize: 14, color: "var(--tx2)", marginBottom: 10 }}>Chceš přejít z {fromShift} na {toShift}. Odešli změnu ke schválení a níže domluv případné krytí.</p>
+            <Btn warm onClick={() => { createProposal({ kind: "shift", empId, day, fromShift, toShift }, "změna hodiny", { [empId]: true }); notify("Změna hodiny odeslána ke schválení"); }} style={{ width: "100%" }}>Odeslat změnu {fromShift} → {toShift} ke schválení</Btn>
+          </div>}
+          {probs.length === 0
+            ? <div style={{ padding: "12px 14px", border: "1px solid var(--grn)", color: "var(--grn)", fontSize: 14 }}>✓ {kind === "absence" ? "Tvoje nepřítomnost" : "Tato změna"} nezpůsobí podstav — není třeba nikoho shánět.</div>
+            : <>
+              <p style={{ fontSize: 13, color: "var(--tx2)", marginBottom: 12 }}>Tahle změna něco rozbije. Vyber jednu z možností a oslov kolegu — po jeho i adminově souhlasu se to provede.</p>
+              {probs.map(pr => <div key={pr.key} style={{ border: "1px solid var(--brd)", borderLeft: "3px solid var(--red)", padding: "10px 12px", marginBottom: 10 }}>
+                <div style={{ fontWeight: 600, fontSize: 14, color: "var(--w)", marginBottom: 8 }}>{pr.title}</div>
+                {pr.alts.length === 0 && <p style={{ fontSize: 13, color: "var(--tx3)", margin: 0 }}>Žádné automatické řešení — domluv se s adminem.</p>}
+                {pr.alts.slice(0, 5).map((alt, i) => { const colleague = ge(alt.empId); const mail = colleague?.notifyEmail || colleague?.email;
+                  return <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: "var(--bg3)", border: "1px solid var(--brd)", marginBottom: 4, flexWrap: "wrap" }}>
+                    {i === 0 && <Badge small color="var(--grn)">TIP</Badge>}
+                    <span style={{ flex: 1, fontSize: 13, minWidth: 140 }}>{altLabel(alt, ge)}</span>
+                    {mail && <a href={`mailto:${mail}?subject=${encodeURIComponent("Krytí směny " + day)}&body=${encodeURIComponent(`Ahoj ${colleague.name}, potřeboval bych domluvit: ${altLabel(alt, ge)}. Šlo by?`)}`} style={{ fontSize: 12, color: "var(--tx3)", textDecoration: "none", border: "1px solid var(--brd2)", padding: "5px 8px" }}>✉ napsat</a>}
+                    <Btn small warm onClick={() => { createProposal(alt, kind === "absence" ? `krytí nepřítomnosti ${day}` : `krytí změny hodiny ${day}`); notify(`Požádán/a: ${colleague?.name}`); }}>Požádat {colleague?.name?.split(" ")[0]}</Btn>
+                  </div>; })}
+              </div>)}
+            </>}
+          <Btn ghost onClick={() => setResolveTarget(null)} style={{ width: "100%", marginTop: 6 }}>Zavřít</Btn>
+        </div>
+      </Modal>;
+    })()}
     <Modal open={modal === "addMember"} onClose={() => setModal(null)} title="Nový člen"><AddF onDone={m => { notify(m); log(m); setModal(null); }} /></Modal>
     <Modal open={modal?.type === "editDays"} onClose={() => setModal(null)} title="Upravit dny"><EditDF emp={modal?.emp} onDone={() => { notify("Uloženo"); setModal(null); }} /></Modal>
     <Modal open={modal === "changePass"} onClose={() => setModal(null)} title="Změna hesla"><ChangePassF onDone={() => { notify("Heslo změněno"); setModal(null); }} /></Modal>
