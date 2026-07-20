@@ -151,3 +151,25 @@ Franta automaticky přejmenuje na Víťu (mapa `RENAME`). Víťa má `noHO` (jak
 dál platí.
 
 Ověřeno `vite build` + logickými testy (minima 8/10, Víťa bez HO, opener exclusion).
+
+---
+
+## Aktualizace v7 — stálý rozvrh: zobrazení, aplikace, porovnání + fix Nástupů
+
+**Fix Nástupů.** `toggleIntake`/`allowIntakeException` používaly `setDoc` s tečkovým
+klíčem (`intake.Po`), který `merge` NEbere jako vnořené pole → zapisovalo se pole
+s tečkou v názvu a snapshot to přepsal zpět (odtud „probliklo a neuložilo"). Nově se
+zapisuje celý objekt `intake`/`intakeAllow`.
+
+**Zobrazit stálý rozvrh (všichni).** Tlačítko „Stálý rozvrh" v liště rozvrhu → read-only
+modal s trvalým týdenním rozpisem (z výchozích rozvrhů členů), bez možnosti úpravy.
+
+**Aplikovat stálý rozvrh (admin).** Tlačítko „Aplikovat stálý" → volba „tento týden"
+nebo „příštích 52 týdnů (rok)". Přepíše entries trvalým rozpisem, ale zachová absence
+(nepřítomní se do rozvrhu nevrátí). Transakční zápis po týdnech.
+
+**Porovnat se stálým (všichni).** Tlačítko „Porovnat se stálým" → modal s odchylkami
+aktuálního týdne (nebo dne, je-li denní pohled) oproti trvalému rozpisu, po dnech,
+ve formátu „stálý → nynější" (absence zvýrazněné).
+
+Ověřeno `vite build` + logickým testem porovnání.
