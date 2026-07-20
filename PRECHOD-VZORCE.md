@@ -173,3 +173,14 @@ aktuálního týdne (nebo dne, je-li denní pohled) oproti trvalému rozpisu, po
 ve formátu „stálý → nynější" (absence zvýrazněné).
 
 Ověřeno `vite build` + logickým testem porovnání.
+
+---
+
+## Aktualizace v8 — PRESET na skutečná jména
+
+Klíče PRESET/PERSONAL byly na křestní jména (Patrik, Denis…), ale v appce jsou členové
+vedení pod příjmeními, takže se předvyplnění napasovalo jen na Andyho a Víťu. Přepsáno
+na skutečná jména dle dodaného rozvrhu: Slavíček (8:00 celý týden), Víťa (bez HO),
+Stibor, Lochman (středa bez 10:00), Frťala (HO od 8, páteční 10), Švarc, Andy (neotevírá).
+Ověřeno, že „Předvyplnit rozvrh" nyní vytvoří přesně cílový rozpis (0 porušení, 8:00 ≥2,
+10:00 ≥2 vč. HO, HO 2/os. kromě Slavíčka a Víti).

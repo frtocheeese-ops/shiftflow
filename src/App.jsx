@@ -38,23 +38,22 @@ function buildDef(emps) { const s = {}; DAYS.forEach(day => { s[day] = {}; SHIFT
    Entry na den: "08:00"/"09:00"/"10:00" = kancelář; s `${den}_ho:true` = home office.
    HO drží nominální čas ve svém slotu. Klíčováno jménem — seed napasuje na uživatele. */
 const PRESET = {
-  Jirka:  { Po: "08:00", "Út": "08:00", St: "08:00", "Čt": "08:00", "Pá": "08:00" },
-  Andy:   { Po: "10:00", Po_ho: true, "Út": "10:00", "Út_ho": true, St: "10:00", "Čt": "09:00", "Pá": "09:00" },
-  Patrik: { Po: "09:00", "Út": "10:00", St: "08:00", St_ho: true, "Čt": "08:00", "Čt_ho": true, "Pá": "10:00" },
-  Denis:  { Po: "10:00", Po_ho: true, "Út": "09:00", St: "08:00", "Čt": "08:00", "Pá": "09:00", "Pá_ho": true },
-  Olda:   { Po: "10:00", "Út": "08:00", "Út_ho": true, St: "09:00", "Čt": "10:00", "Čt_ho": true, "Pá": "09:00" },
-  "Vláďa":  { Po: "09:00", "Út": "08:00", St: "10:00", St_ho: true, "Čt": "10:00", "Pá": "10:00", "Pá_ho": true },
-  "Víťa":  { Po: "08:00", "Út": "09:00", St: "09:00", "Čt": "09:00", "Pá": "08:00" },
+  "Slavíček": { Po: "08:00", "Út": "08:00", St: "08:00", "Čt": "08:00", "Pá": "08:00" },
+  "Víťa":     { Po: "08:00", "Út": "08:00", St: "08:00", "Čt": "09:00", "Pá": "08:00" },
+  "Stibor":   { Po: "08:00", "Út": "08:00", "Út_ho": true, St: "10:00", "Čt": "10:00", "Čt_ho": true, "Pá": "09:00" },
+  "Lochman":  { Po: "08:00", Po_ho: true, "Út": "09:00", St: "08:00", "Čt": "10:00", "Pá": "10:00", "Pá_ho": true },
+  "Frťala":   { Po: "09:00", "Út": "10:00", St: "08:00", St_ho: true, "Čt": "08:00", "Čt_ho": true, "Pá": "10:00" },
+  "Švarc":    { Po: "10:00", "Út": "09:00", St: "10:00", St_ho: true, "Čt": "08:00", "Pá": "08:00", "Pá_ho": true },
+  "Andy":     { Po: "10:00", Po_ho: true, "Út": "10:00", "Út_ho": true, St: "09:00", "Čt": "09:00", "Pá": "09:00" },
 };
-// Přejmenování člena při seedu (jméno v DB → nové jméno)
+// Přejmenování člena při seedu (staré jméno v DB → nové). Bezpečné i když se nikdo nejmenuje "Franta".
 const RENAME = { Franta: "Víťa" };
-// Osobní preference/pravidla (silná, ale admin je může přebít úpravou). Klíč = jméno.
+// Osobní preference/pravidla (silná, ale admin je může přebít úpravou). Klíč = jméno v appce.
 const PERSONAL = {
-  Jirka:  { mustOpen: true },              // celý týden 8:00 v kanceláři
-  "Víťa": { noHO: true },                  // nemá nárok na HO
-  Andy:   { noOpen: true },                // nikdy 8:00 v kanceláři
-  Andrea: { noOpen: true },                // alias
-  Denis:  { noTenOn: "St" },               // ve středu ne od 10:00
+  "Slavíček": { mustOpen: true },          // Jirka S. — 8:00 celý týden v kanceláři
+  "Víťa":     { noHO: true },              // nemá nárok na HO
+  "Andy":     { noOpen: true },            // nikdy 8:00 v kanceláři
+  "Lochman":  { noTenOn: "St" },           // ve středu ne od 10:00
 };
 const personalOf = (employees, eid) => PERSONAL[(employees.find(e => e.id === eid) || {}).name] || {};
 
