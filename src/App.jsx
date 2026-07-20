@@ -34,6 +34,119 @@ function localISO(d) { return `${d.getFullYear()}-${String(d.getMonth()+1).padSt
 const wKey = d => localISO(getMon(d));
 const fmtW = d => { const m = getMon(d), f = new Date(m); f.setDate(f.getDate() + 4); return `${m.getDate()}.${m.getMonth() + 1}. — ${f.getDate()}.${f.getMonth() + 1}.${f.getFullYear()}`; };
 function buildDef(emps) { const s = {}; DAYS.forEach(day => { s[day] = {}; SHIFTS.forEach(sh => s[day][sh] = []); emps.forEach(emp => { if (!emp.defaultSchedule || !emp.setupDone) return; const shift = emp.defaultSchedule[day]; if (shift && SHIFTS.includes(shift)) s[day][shift].push({ empId: emp.id, ho: emp.defaultSchedule[`${day}_ho`] || false, isDefault: true }); }); }); return s; }
+
+/* ═══ VZORCE A–G (nový model jednoho týmu) ═══
+   Každý vzorec A–F: 2 dny HO + v kanceláři přesně jednou 08:00, 09:00 a 10:00.
+   G: bez pevného HO (9:00 denně) — o HO lze požádat ad-hoc přes návrhy. */
+const PATTERNS = [
+  { key: "A", plan: ["HO", "10:00", "09:00", "HO", "08:00"] },
+  { key: "B", plan: ["HO", "09:00", "HO", "08:00", "10:00"] },
+  { key: "C", plan: ["HO", "09:00", "10:00", "08:00", "HO"] },
+  { key: "D", plan: ["08:00", "HO", "10:00", "09:00", "HO"] },
+  { key: "E", plan: ["10:00", "HO", "08:00", "HO", "09:00"] },
+  { key: "F", plan: ["09:00", "08:00", "HO", "10:00", "HO"] },
+  { key: "G", plan: ["09:00", "09:00", "09:00", "09:00", "09:00"] },
+];
+// HO den nemá fixní čas — v datovém modelu drží slot 09:00 s ho:true (9:00 smí být nepokrytá)
+function patternToDefault(plan) { const ds = {}; DAYS.forEach((d, i) => { const v = plan[i]; ds[d] = v === "HO" ? "09:00" : v; ds[`${d}_ho`] = v === "HO"; }); return ds; }
+
+const RULE_DEFAULTS = { officeMin: 4, hoCapDay: 3, hoPerWeek: 2, cover8: true, cover10: true };
+
+/* Analýza týdne: porušení pravidel + problémy se VŠEMI proveditelnými alternativami řešení */
+function dayStats(cs, absences, day, employees) {
+  const absSet = new Set(Object.keys(absences).filter(k => k.endsWith(`__${day}`)).map(k => k.split("__")[0]));
+  const office = [], ho = [];
+  SHIFTS.forEach(sh => (cs[day]?.[sh] || []).forEach(en => {
+    if (absSet.has(en.empId)) return;
+    if (!employees.some(e => e.id === en.empId)) return;
+    (en.ho ? ho : office).push({ empId: en.empId, shift: sh });
+  }));
+  return { office, ho, absSet };
+}
+
+function analyzeWeek(cs, absences, employees, rulesIn) {
+  const R = { ...RULE_DEFAULTS, ...rulesIn };
+  const stats = DAYS.map(d => dayStats(cs, absences, d, employees));
+  const violations = [], problems = [];
+  const weeklyHO = {};
+  stats.forEach(st => st.ho.forEach(h => weeklyHO[h.empId] = (weeklyHO[h.empId] || 0) + 1));
+
+  DAYS.forEach((day, di) => {
+    const st = stats[di];
+    const has8 = st.office.some(x => x.shift === "08:00"), has10 = st.office.some(x => x.shift === "10:00");
+    const short = R.officeMin - st.office.length;
+
+    if (short > 0) {
+      violations.push({ sev: "crit", day, msg: `${day}: v kanceláři jen ${st.office.length} (minimum ${R.officeMin})` });
+      const toShift = (R.cover8 && !has8) ? "08:00" : (R.cover10 && !has10) ? "10:00" : "09:00";
+      const alts = [];
+      st.ho.forEach(h => {
+        for (let dj = 0; dj < 5; dj++) {
+          if (dj === di) continue;
+          const stj = stats[dj];
+          if (stj.absSet.has(h.empId)) continue;
+          const mine = stj.office.find(x => x.empId === h.empId);
+          if (!mine) continue; // nemá tam kancelářský den (je HO nebo chybí)
+          if (stj.ho.length >= R.hoCapDay) continue;
+          if (stj.office.length - 1 < R.officeMin) continue;
+          if (R.cover8 && mine.shift === "08:00" && stj.office.filter(x => x.shift === "08:00").length <= 1) continue;
+          if (R.cover10 && mine.shift === "10:00" && stj.office.filter(x => x.shift === "10:00").length <= 1) continue;
+          alts.push({ kind: "pullHO", empId: h.empId, day, toShift, moveToDay: DAYS[dj] });
+        }
+        alts.push({ kind: "pullHO", empId: h.empId, day, toShift, moveToDay: null });
+      });
+      problems.push({ key: `head:${day}`, day, title: `${day}: v kanceláři jen ${st.office.length} lidí (minimum ${R.officeMin})`, alts });
+    } else {
+      const cnt = t => st.office.filter(x => x.shift === t).length;
+      const mkShift = (toShift, label, sev) => {
+        violations.push({ sev, day, msg: `${day}: ${label}` });
+        const alts = st.office
+          .filter(x => x.shift !== toShift && (x.shift === "09:00" || cnt(x.shift) > 1))
+          .sort((a, b) => ((a.shift === "09:00") ? 0 : 1) - ((b.shift === "09:00") ? 0 : 1))
+          .map(x => ({ kind: "shift", empId: x.empId, day, fromShift: x.shift, toShift }));
+        if (alts.length) problems.push({ key: `${toShift}:${day}`, day, title: `${day}: ${label}`, alts });
+      };
+      if (R.cover8 && !has8) mkShift("08:00", "nikdo v kanceláři od 8:00", "crit");
+      if (R.cover10 && !has10) mkShift("10:00", "nikdo v kanceláři od 10:00", "warn");
+    }
+    if (st.ho.length > R.hoCapDay) violations.push({ sev: "warn", day, msg: `${day}: ${st.ho.length} lidí na HO (strop ${R.hoCapDay})` });
+  });
+  Object.entries(weeklyHO).forEach(([eid, n]) => { if (n > R.hoPerWeek) violations.push({ sev: "warn", day: null, empId: eid, msg: `HO ${n}× v týdnu (strop ${R.hoPerWeek})` }); });
+  return { violations, problems, stats, weeklyHO };
+}
+
+/* Aplikace schválené alternativy na entries (mutuje kopii) */
+function applyAlt(s, alt) {
+  if (alt.kind === "pullHO") {
+    let en = null;
+    SHIFTS.forEach(sh => { const arr = s[alt.day]?.[sh]; if (!arr) return; const i = arr.findIndex(e => e.empId === alt.empId && e.ho); if (i >= 0) en = arr.splice(i, 1)[0]; });
+    if (!en) en = { empId: alt.empId };
+    en.ho = false; en.isDefault = false;
+    if (!s[alt.day]) s[alt.day] = {}; if (!s[alt.day][alt.toShift]) s[alt.day][alt.toShift] = [];
+    s[alt.day][alt.toShift].push(en);
+    if (alt.moveToDay) SHIFTS.forEach(sh => { const e2 = s[alt.moveToDay]?.[sh]?.find(e => e.empId === alt.empId); if (e2) { e2.ho = true; e2.isDefault = false; } });
+  }
+  if (alt.kind === "shift") {
+    const arr = s[alt.day]?.[alt.fromShift] || []; const i = arr.findIndex(e => e.empId === alt.empId);
+    if (i >= 0) { const [en] = arr.splice(i, 1); en.isDefault = false; if (!s[alt.day][alt.toShift]) s[alt.day][alt.toShift] = []; s[alt.day][alt.toShift].push(en); }
+  }
+  if (alt.kind === "grantHO") {
+    SHIFTS.forEach(sh => { const e2 = s[alt.day]?.[sh]?.find(e => e.empId === alt.empId); if (e2) { e2.ho = true; e2.isDefault = false; } });
+  }
+  if (alt.kind === "dropHO") {
+    SHIFTS.forEach(sh => { const e2 = s[alt.day]?.[sh]?.find(e => e.empId === alt.empId); if (e2) { e2.ho = false; e2.isDefault = false; } });
+  }
+  return s;
+}
+
+function altLabel(alt, ge) {
+  const n = ge(alt.empId)?.name || "?";
+  if (alt.kind === "pullHO") return `${alt.day}: ${n} z HO do kanceláře na ${alt.toShift}${alt.moveToDay ? `, HO náhradou v ${alt.moveToDay}` : " (bez náhrady)"}`;
+  if (alt.kind === "shift") return `${alt.day}: ${n} ${alt.fromShift} → ${alt.toShift}`;
+  if (alt.kind === "grantHO") return `${alt.day}: ${n} — Home Office`;
+  if (alt.kind === "dropHO") return `${alt.day}: ${n} — zrušení Home Office`;
+  return "";
+}
 function getWeekDates(wo) { const d = new Date(); d.setDate(d.getDate() + wo * 7); const mon = getMon(d); return DAYS.map((_, i) => { const x = new Date(mon); x.setDate(mon.getDate() + i); return localISO(x); }); }
 function fmtDate(iso) { const p = iso.split('-'); return `${parseInt(p[2])}.${parseInt(p[1])}.`; }
 const todayIdx = (() => { const d = new Date().getDay(); return d >= 1 && d <= 5 ? d - 1 : -1; })();
@@ -409,24 +522,23 @@ function AuthScreen() {
 function DefEditor({ employees }) {
   const [editEmp, setEditEmp] = useState(null); const [es, setEs] = useState({}); const [saving, setSaving] = useState(false);
   const start = emp => { setEditEmp(emp); const s = {}; DAYS.forEach(d => { s[d] = emp.defaultSchedule?.[d] || "09:00"; s[`${d}_ho`] = emp.defaultSchedule?.[`${d}_ho`] || false; }); setEs(s); };
-  return <div>{["L1", "SD"].map(team => <div key={team} style={{ marginBottom: 28 }}>
-    <div style={{ fontSize: 16, fontWeight: 600, color: team === "L1" ? "var(--l1)" : "var(--sd)", marginBottom: 12, fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 1.5 }}>{TEAMS[team]}</div>
+  return <div><div style={{ marginBottom: 28 }}>
     <div className="gl" style={{ overflow: "auto", padding: 0 }}>
       <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}><thead><tr>
         <th style={{ padding: "12px 14px", textAlign: "left", color: "var(--tx3)", borderBottom: "1px solid var(--brd)" }}>Zaměstnanec</th>
         {DAYS.map(d => <th key={d} style={{ padding: "12px 8px", textAlign: "center", color: "var(--tx3)", borderBottom: "1px solid var(--brd)" }}>{d}</th>)}
         <th style={{ padding: 12, borderBottom: "1px solid var(--brd)" }} />
-      </tr></thead><tbody>{employees.filter(e => e.team === team && e.role !== "admin").map(emp => <tr key={emp.id} style={{ borderBottom: "1px solid var(--brd)" }}>
+      </tr></thead><tbody>{employees.filter(e => e.role !== "admin").map(emp => <tr key={emp.id} style={{ borderBottom: "1px solid var(--brd)" }}>
         <td style={{ padding: "12px 14px", fontWeight: 500, color: "var(--w)" }}>{emp.name}</td>
-        {DAYS.map(d => <td key={d} style={{ padding: 8, textAlign: "center" }}>{emp.setupDone && emp.defaultSchedule?.[d] ? <span style={{ fontFamily: "'IBM Plex Mono',monospace", color: "var(--acc2)", fontSize: 13 }}>{emp.defaultSchedule[d]}</span> : "—"}</td>)}
+        {DAYS.map(d => <td key={d} style={{ padding: 8, textAlign: "center" }}>{emp.setupDone && emp.defaultSchedule?.[d] ? <span style={{ fontFamily: "'IBM Plex Mono',monospace", color: emp.defaultSchedule[`${d}_ho`] ? "var(--grn)" : "var(--acc2)", fontSize: 13 }}>{emp.defaultSchedule[`${d}_ho`] ? "HO" : emp.defaultSchedule[d]}</span> : "—"}</td>)}
         <td style={{ padding: "8px 12px", textAlign: "right" }}><Btn small onClick={() => start(emp)}>✏</Btn></td>
       </tr>)}</tbody></table>
     </div>
-  </div>)}
+  </div>
     <Modal open={!!editEmp} onClose={() => setEditEmp(null)} title={editEmp?.name || ""}>{editEmp && <div>
       {DAYS.map(day => <div key={day} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: "var(--bg3)", marginBottom: 4 }}>
         <span style={{ fontWeight: 600, minWidth: 50, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif" }}>{day}</span>
-        <div style={{ display: "flex", gap: 2, flex: 1 }}>{SHIFTS.map(sh => <button key={sh} onClick={() => setEs(s => ({ ...s, [day]: sh }))} style={{ flex: 1, padding: "10px 0", border: `1px solid ${es[day] === sh ? "var(--acc2)" : "var(--brd)"}`, fontFamily: "'IBM Plex Mono',monospace", cursor: "pointer", background: es[day] === sh ? "var(--adim)" : "transparent", color: es[day] === sh ? "var(--w)" : "var(--tx3)", minHeight: 44 }}>{sh}</button>)}</div>
+        <div style={{ display: "flex", gap: 2, flex: 1 }}>{SHIFTS.map(sh => <button key={sh} onClick={() => setEs(s => ({ ...s, [day]: sh }))} style={{ flex: 1, padding: "10px 0", border: `1px solid ${es[day] === sh ? "var(--acc2)" : "var(--brd)"}`, fontFamily: "'IBM Plex Mono',monospace", cursor: "pointer", background: es[day] === sh ? "var(--adim)" : "transparent", color: es[day] === sh ? "var(--w)" : "var(--tx3)", minHeight: 44 }}>{sh}</button>)}<button onClick={() => setEs(s => ({ ...s, [`${day}_ho`]: !s[`${day}_ho`] }))} style={{ padding: "10px 12px", border: `1px solid ${es[`${day}_ho`] ? "var(--grn)" : "var(--brd)"}`, fontFamily: "'IBM Plex Mono',monospace", cursor: "pointer", background: "transparent", color: es[`${day}_ho`] ? "var(--grn)" : "var(--tx3)", minHeight: 44 }}>HO</button></div>
       </div>)}
       <div style={{ display: "flex", gap: 8, marginTop: 16 }}><Btn warm disabled={saving} onClick={async () => { setSaving(true); await updateDoc(doc(db, "users", editEmp.id), { defaultSchedule: es, setupDone: true }); setSaving(false); setEditEmp(null); }} style={{ flex: 1 }}>Uložit</Btn><Btn ghost onClick={() => setEditEmp(null)}>Zrušit</Btn></div>
     </div>}</Modal></div>;
@@ -533,9 +645,10 @@ export default function App() {
   const [wo, setWo] = useState(0); const [schedule, setSchedule] = useState(null);
   const [absences, setAbsences] = useState({}); const [events, setEvents] = useState({});
   const [swaps, setSwaps] = useState([]); const [selCell, setSelCell] = useState(null);
+  const [proposals, setProposals] = useState([]);
   const [modal, setModal] = useState(null); const [notifs, setNotifs] = useState([]);
   const [logs, setLogs] = useState([]); const [notes, setNotes] = useState({});
-  const [rules, setRules] = useState({ L1_max: 2, SD_max8: 2, SD_maxHO: 2, SD_noHO8: true, SD_noHO10: true });
+  const [rules, setRules] = useState({ ...RULE_DEFAULTS, allowAllDnD: false });
   const [theme, setTheme] = useState(() => localStorage.getItem("sf_theme") || "light");
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 900);
   const [selDay, setSelDay] = useState(Math.max(0, todayIdx));
@@ -577,6 +690,16 @@ export default function App() {
   }, [schedule, ds, employees, absences]);
   const wd = useMemo(() => getWeekDates(wo), [wo]);
   const wh = wd.map(d => HMAP[d] || null);
+  // Analýza pravidel nového modelu (jen pracovní dny bez svátku)
+  const analysis = useMemo(() => {
+    const res = analyzeWeek(cs, absences, employees, rules);
+    const isHol = day => !!wh[DAYS.indexOf(day)];
+    return {
+      violations: res.violations.filter(v => !v.day || !isHol(v.day)),
+      problems: res.problems.filter(p => !isHol(p.day)),
+      weeklyHO: res.weeklyHO,
+    };
+  }, [cs, absences, employees, rules, wh.join("|")]);
 
   useEffect(() => { const u = onAuthStateChanged(auth, async u => { if (u) { setAuthUser(u); const s = await getDoc(doc(db, "users", u.uid)); if (s.exists()) setProfile({ id: u.uid, ...s.data() }); else setProfile({ id: u.uid, name: u.displayName || u.email, role: "employee", team: "L1", setupDone: false }); initPush(u.uid); } else { setAuthUser(null); setProfile(null); } }); return u; }, []);
   useEffect(() => { const u = onSnapshot(collection(db, "users"), s => { const e = s.docs.map(d => ({ id: d.id, ...d.data() })); setEmployees(e); if (profile) { const m = e.find(x => x.id === profile.id); if (m) setProfile(p => ({ ...p, ...m })); } }); return u; }, [profile?.id]);
@@ -611,6 +734,7 @@ export default function App() {
     return u;
   }, [profile?.id, profile?.gcalEnabled, employees]);
   useEffect(() => { const u = onSnapshot(collection(db, "swapRequests"), s => setSwaps(s.docs.map(d => ({ id: d.id, ...d.data() })))); return u; }, []);
+  useEffect(() => { const u = onSnapshot(collection(db, "changeProposals"), s => setProposals(s.docs.map(d => ({ id: d.id, ...d.data() })))); return u; }, []);
   useEffect(() => { const u = onSnapshot(doc(db, "rules", "global"), s => { if (s.exists()) setRules(s.data()); }); return u; }, []);
   useEffect(() => { const u = onSnapshot(collection(db, "auditLog"), s => { const a = s.docs.map(d => ({ id: d.id, ...d.data() })); a.sort((a, b) => (b.time || "").localeCompare(a.time || "")); setLogs(a.slice(0, 100)); }); return u; }, []);
 
@@ -634,11 +758,9 @@ export default function App() {
     try {
       const d = JSON.parse(e.dataTransfer.getData("text/plain"));
       if (d.day === targetDay && d.shift === targetShift) return;
-      // Permission: admin OR self OR global flag
+      // Permission: admin OR self OR global flag (jeden tým — bez týmového omezení)
       const allowedAll = rules?.allowAllDnD === true;
       if (!isA && !allowedAll && d.empId !== profile?.id) return;
-      // Team restriction only applies to non-admin without global flag
-      if (!isA && !allowedAll) { const emp = ge(d.empId); if (emp?.team !== profile?.team) return; }
       const s = dc(cs); const f = s[d.day]?.[d.shift]; if (!f) return;
       const i = f.findIndex(x => x.empId === d.empId); if (i === -1) return;
       const [en] = f.splice(i, 1); en.isDefault = false;
@@ -773,7 +895,7 @@ export default function App() {
     // Notify same-team members
     const requester = ge(rid);
     if (requester) {
-      const teamMembers = employees.filter(e => e.team === requester.team && e.id !== rid && e.role !== "admin" && e.notify);
+      const teamMembers = employees.filter(e => e.id !== rid && e.role !== "admin" && e.notify);
       const msg = `${requester.name} žádá o výměnu: ${day} ${dateISO} ${sh}${comment ? ` — "${comment}"` : ""}`;
       teamMembers.forEach(m => callGAS("sendEmail", { to: m.notifyEmail || m.email, employeeName: m.name, changeDescription: msg, weekLabel: dateISO }));
     }
@@ -854,6 +976,84 @@ export default function App() {
     }
   };
   const delUser = async eid => { if (!confirm(`Smazat ${ge(eid)?.name}?`)) return; await deleteDoc(doc(db, "users", eid)); notify("Smazán"); };
+
+  /* ═══ NÁVRHY ZMĚN (admin + dotčení) ═══ */
+  const createProposal = async (alt, why, extraConsents = {}) => {
+    const label = altLabel(alt, ge);
+    await addDoc(collection(db, "changeProposals"), {
+      week: wk, alt, label, why: why || "", affected: [alt.empId],
+      consents: { ...(isA ? { admin: true } : {}), ...extraConsents },
+      status: "open", created: new Date().toISOString(), createdBy: profile.id,
+    });
+    const emp = ge(alt.empId);
+    if (emp && emp.id !== profile.id) eN(emp, `Nový návrh ke schválení: ${label}${why ? ` (${why})` : ""}`);
+    notify("Návrh odeslán ke schválení"); log(`Návrh: ${label}`);
+  };
+
+  const applyProposal = async p => {
+    let entries, weekAbs;
+    if (p.week === wk) { entries = dc(cs); weekAbs = absences; }
+    else {
+      const snap = await getDoc(doc(db, "schedules", p.week));
+      const d = snap.exists() ? snap.data() : {};
+      entries = d.entries ? dc(d.entries) : dc(buildDef(employees));
+      weekAbs = d.absences || {};
+    }
+    applyAlt(entries, p.alt);
+    await setDoc(doc(db, "schedules", p.week), { entries, weekStart: p.week, modifiedAt: new Date().toISOString(), modifiedBy: profile?.id }, { merge: true });
+    if (p.week === wk) setSchedule(entries);
+    await updateDoc(doc(db, "changeProposals", p.id), { status: "done", resolvedAt: new Date().toISOString() });
+    notify("Změna provedena ✓"); log(`Schváleno: ${p.label}`);
+    p.affected.forEach(eid => { const e = ge(eid); if (e) eN(e, `Schválená změna rozvrhu: ${p.label}`); });
+  };
+
+  const consentProposal = async p => {
+    const who = isA ? "admin" : profile.id;
+    if (who !== "admin" && !p.affected.includes(profile.id)) return;
+    const consents = { ...(p.consents || {}), [who]: true };
+    const required = ["admin", ...p.affected];
+    const complete = required.every(r => consents[r]);
+    await updateDoc(doc(db, "changeProposals", p.id), { [`consents.${who}`]: true });
+    if (complete) await applyProposal({ ...p, consents });
+    else notify("Souhlas zaznamenán");
+  };
+
+  const rejectProposal = async p => {
+    if (!isA && !p.affected.includes(profile.id)) return;
+    await updateDoc(doc(db, "changeProposals", p.id), { status: "rejected", rejectedBy: profile.id, resolvedAt: new Date().toISOString() });
+    notify("Návrh zamítnut"); log(`Zamítnuto: ${p.label}`);
+  };
+
+  // Žádost zaměstnance o (zrušení) HO — validace proti pravidlům, pak návrh adminovi
+  const requestHO = async (day, grant) => {
+    const alt = { kind: grant ? "grantHO" : "dropHO", empId: profile.id, day };
+    if (grant) {
+      if ((analysis.weeklyHO[profile.id] || 0) >= (rules.hoPerWeek ?? 2)) { notify(`Strop ${rules.hoPerWeek ?? 2}× HO týdně je vyčerpán`); return; }
+      const sim = applyAlt(dc(cs), alt);
+      const res = analyzeWeek(sim, absences, employees, rules);
+      const crit = res.violations.find(v => v.sev === "crit" && v.day === day);
+      if (crit) { notify(`Nelze: ${crit.msg}`); return; }
+      if (res.violations.some(v => v.sev === "warn" && v.day === day && v.msg.includes("na HO"))) { notify(`Nelze: ${day} je HO kapacita plná`); return; }
+    }
+    await createProposal(alt, grant ? "žádost o home office" : "žádost o zrušení home office", { [profile.id]: true });
+  };
+
+  // Přiřazení vzorce (admin) — výměna, pokud je vzorec obsazen
+  const assignPattern = async (eid, key) => {
+    const pat = PATTERNS.find(p => p.key === key); if (!pat) return;
+    const holder = employees.find(e => e.pattern === key && e.id !== eid && e.role !== "admin");
+    const me = ge(eid);
+    if (holder && me?.pattern) {
+      const myPat = PATTERNS.find(p => p.key === me.pattern);
+      if (myPat) await updateDoc(doc(db, "users", holder.id), { pattern: myPat.key, defaultSchedule: patternToDefault(myPat.plan), setupDone: true });
+    } else if (holder) {
+      await updateDoc(doc(db, "users", holder.id), { pattern: null });
+    }
+    await updateDoc(doc(db, "users", eid), { pattern: key, defaultSchedule: patternToDefault(pat.plan), setupDone: true });
+    notify(`${me?.name}: vzorec ${key}${holder ? ` (výměna s ${holder.name})` : ""}`);
+    log(`Vzorec ${key} → ${me?.name}${holder ? `, výměna s ${holder.name}` : ""}`);
+  };
+
   const exportCSV = () => { let csv = "\ufeffDen,Směna,Jméno,Tým,HO\n"; DAYS.forEach(d => SHIFTS.forEach(sh => (cs[d]?.[sh] || []).forEach(en => { const e = ge(en.empId); if (e) csv += `${d},${sh},${e.name},${e.team},${en.ho ? "Ano" : "Ne"}\n`; }))); const b = new Blob([csv], { type: "text/csv;charset=utf-8;" }); const u = URL.createObjectURL(b); Object.assign(document.createElement("a"), { href: u, download: `rozvrh_${wk}.csv` }).click(); };
 
   if (authUser === undefined) return <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center" }}><style>{CSS}</style><div style={{ color: "var(--tx3)", fontSize: 14, letterSpacing: 4, fontFamily: "'Barlow Condensed',sans-serif", animation: "pulse 1.5s infinite" }}>SHIFTFLOW</div></div>;
@@ -862,7 +1062,11 @@ export default function App() {
   if (!isA && !profile.setupDone) return <Setup profile={profile} onDone={() => setProfile(p => ({ ...p, setupDone: true }))} />;
 
   const openSw = swaps.filter(s => s.status === "open").sort((a, b) => (a.dateISO || a.week || "").localeCompare(b.dateISO || b.week || ""));
-  const NAV = [{ id: "schedule", l: "Rozvrh", ic: "▦", b: 0 }, { id: "swaps", l: "Výměny", ic: "⇄", b: openSw.length }, ...(isA ? [{ id: "people", l: "Tým", ic: "◉", b: 0 }] : []), { id: "stats", l: "Stats", ic: "◫", b: 0 }, { id: "log", l: "Log", ic: "≡", b: 0 }, ...(isA ? [{ id: "defaults", l: "Default", ic: "⊞", b: 0 }] : []), { id: "settings", l: "Nastavení", ic: "⚙", b: 0 }];
+  const openProps = proposals.filter(p => p.status === "open").sort((a, b) => (a.created || "").localeCompare(b.created || ""));
+  const visibleProps = openProps.filter(p => isA || p.affected?.includes(profile.id));
+  const myPendingProps = openProps.filter(p => isA ? !p.consents?.admin : (p.affected?.includes(profile.id) && !p.consents?.[profile.id]));
+  const probBadge = isA ? analysis.problems.length : 0;
+  const NAV = [{ id: "schedule", l: "Rozvrh", ic: "▦", b: 0 }, { id: "proposals", l: "Návrhy", ic: "⚑", b: myPendingProps.length + probBadge }, { id: "swaps", l: "Výměny", ic: "⇄", b: openSw.length }, ...(isA ? [{ id: "people", l: "Tým", ic: "◉", b: 0 }] : []), { id: "stats", l: "Stats", ic: "◫", b: 0 }, { id: "log", l: "Log", ic: "≡", b: 0 }, ...(isA ? [{ id: "patterns", l: "Vzorce", ic: "⊞", b: 0 }, { id: "defaults", l: "Default", ic: "✎", b: 0 }] : []), { id: "settings", l: "Nastavení", ic: "⚙", b: 0 }];
   const dayHol = wh[selDay];
   const getEntries = (day, shift) => (cs[day]?.[shift] || []).filter(e => { const emp = ge(e.empId); return emp && (tf === "all" || emp.team === tf); });
   const getDayAbs = day => Object.entries(absences).filter(([k]) => k.endsWith(`__${day}`)).map(([k, t]) => ({ empId: k.split("__")[0], type: t })).filter(a => ge(a.empId));
@@ -940,6 +1144,12 @@ export default function App() {
               {wo !== 0 && <Btn small ghost onClick={() => setWo(0)}>Dnes</Btn>}
             </div>
 
+            {/* Porušení pravidel nového modelu */}
+            {analysis.violations.length > 0 && <div className="gl" style={{ padding: "10px 14px", marginBottom: 12, borderLeft: "3px solid var(--red)" }}>
+              {analysis.violations.map((v, i) => <div key={i} style={{ fontSize: 13, color: v.sev === "crit" ? "var(--red)" : "var(--amb)", padding: "2px 0", fontWeight: v.sev === "crit" ? 600 : 400 }}>{v.sev === "crit" ? "⛔" : "⚠️"} {v.empId ? `${ge(v.empId)?.name}: ` : ""}{v.msg}</div>)}
+              {isA && analysis.problems.length > 0 && <Btn small warm onClick={() => switchV("proposals")} style={{ marginTop: 8 }}>⚑ Zobrazit návrhy řešení ({analysis.problems.length})</Btn>}
+            </div>}
+
             {/* View toggle: Den / Týden */}
             <div style={{ display: "flex", gap: 2, marginBottom: 14, border: "1px solid var(--brd)", width: "fit-content" }}>
               {[{ k: "day", l: "Den" }, { k: "week", l: "Týden" }].map(v => <button key={v.k} onClick={() => setSchedView(v.k)} style={{ padding: "8px 18px", border: "none", background: schedView === v.k ? "var(--sel)" : "transparent", color: schedView === v.k ? "var(--stx)" : "var(--tx3)", cursor: "pointer", fontSize: 13, fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 1, minHeight: 38 }}>{v.l}</button>)}
@@ -952,7 +1162,6 @@ export default function App() {
 
             {/* Filters + actions */}
             <div style={{ display: "flex", gap: 4, marginBottom: 12, flexWrap: "wrap" }}>
-              {[{ k: "all", l: "Vše" }, { k: "L1", l: "L1" }, { k: "SD", l: "SD" }].map(f => <Btn key={f.k} small warm={tf === f.k} onClick={() => setTf(f.k)}>{f.l}</Btn>)}
               <div style={{ flex: 1 }} />
               {isA && <Btn small onClick={() => setModal("absence")}>+ Nepřít.</Btn>}
               {!isA && <Btn small warm onClick={() => setModal("myabsence")}>+ Nepřítomnost</Btn>}
@@ -1030,6 +1239,79 @@ export default function App() {
           </div>}
 
           {/* ═══ OTHER VIEWS ═══ */}
+          {view === "proposals" && <div>
+            <div style={{ fontSize: 20, fontWeight: 600, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 2, marginBottom: 20, borderBottom: "1px solid var(--brd)", paddingBottom: 12 }}>Návrhy změn</div>
+
+            {/* Detekované problémy — pouze admin, týká se zobrazeného týdne */}
+            {isA && analysis.problems.length > 0 && <div style={{ marginBottom: 24 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10, fontFamily: "'Barlow Condensed',sans-serif" }}>Detekované problémy · {fmtW(cw)}</div>
+              {analysis.problems.map(pr => <Card key={pr.key} style={{ marginBottom: 10, borderLeft: "3px solid var(--red)" }}>
+                <div style={{ fontWeight: 600, fontSize: 16, color: "var(--w)", marginBottom: 10 }}>{pr.title}</div>
+                {pr.alts.length === 0 && <p style={{ fontSize: 13, color: "var(--tx3)", margin: 0 }}>Žádné automatické řešení — vyřešte ručně v rozvrhu.</p>}
+                {pr.alts.map((alt, i) => {
+                  const already = openProps.some(p => p.label === altLabel(alt, ge) && p.week === wk);
+                  return <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", background: "var(--bg3)", border: "1px solid var(--brd)", marginBottom: 4 }}>
+                    {i === 0 && <Badge small color="var(--grn)">TIP</Badge>}
+                    <span style={{ flex: 1, fontSize: 14 }}>{altLabel(alt, ge)}</span>
+                    {already ? <Badge small color="var(--amb)">Odesláno</Badge> : <Btn small warm onClick={() => createProposal(alt, pr.title)}>Ke schválení →</Btn>}
+                  </div>;
+                })}
+              </Card>)}
+            </div>}
+            {isA && analysis.problems.length === 0 && <Card style={{ marginBottom: 24, borderLeft: "3px solid var(--grn)" }}><span style={{ fontSize: 14 }}>✓ Týden {fmtW(cw)} splňuje všechna pravidla.</span></Card>}
+
+            {/* Čekající návrhy — admin vidí vše, člen jen svoje */}
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10, fontFamily: "'Barlow Condensed',sans-serif" }}>Čeká na schválení</div>
+            {visibleProps.map(p => {
+              const required = ["admin", ...(p.affected || [])];
+              const canConsent = (isA && !p.consents?.admin) || (p.affected?.includes(profile.id) && !p.consents?.[profile.id]);
+              return <Card key={p.id} style={{ marginBottom: 8 }}>
+                <div style={{ fontWeight: 600, fontSize: 16, color: "var(--w)" }}>{p.label}</div>
+                {p.why && <div style={{ fontSize: 13, color: "var(--tx2)", marginTop: 2 }}>Důvod: {p.why}</div>}
+                <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap", alignItems: "center" }}>
+                  <Badge small color="var(--acc2)">týden {p.week}</Badge>
+                  {required.map(r => <Badge key={r} small color={p.consents?.[r] ? "var(--grn)" : "var(--tx3)"}>{p.consents?.[r] ? "✓ " : "· "}{r === "admin" ? "Admin" : ge(r)?.name || "?"}</Badge>)}
+                  <div style={{ flex: 1 }} />
+                  {canConsent && <Btn small warm onClick={() => consentProposal(p)}>Souhlasím</Btn>}
+                  {(isA || p.affected?.includes(profile.id)) && <Btn small danger onClick={() => rejectProposal(p)}>Zamítnout</Btn>}
+                </div>
+              </Card>;
+            })}
+            {!visibleProps.length && <p style={{ color: "var(--tx3)" }}>Žádné čekající návrhy.</p>}
+          </div>}
+
+          {/* ═══ VZORCE (admin) ═══ */}
+          {view === "patterns" && isA && <div>
+            <div style={{ fontSize: 20, fontWeight: 600, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 2, marginBottom: 8, borderBottom: "1px solid var(--brd)", paddingBottom: 12 }}>Vzorce směn</div>
+            <p style={{ fontSize: 13, color: "var(--tx2)", marginBottom: 16 }}>Vzorec = 2 pevné dny HO + jednou týdně směna od 8:00, 9:00 i 10:00. G je bez HO (9:00 denně, o HO lze žádat ad-hoc). Přiřazení obsazeného vzorce provede výměnu.</p>
+            <div className="gl" style={{ overflow: "auto", padding: 0, marginBottom: 20 }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14, minWidth: 560 }}>
+                <thead><tr>
+                  <th style={{ padding: "12px 14px", textAlign: "left", color: "var(--tx3)", borderBottom: "1px solid var(--brd)" }}>Vzorec</th>
+                  {DAYS.map(d => <th key={d} style={{ padding: "12px 8px", textAlign: "center", color: "var(--tx3)", borderBottom: "1px solid var(--brd)" }}>{d}</th>)}
+                  <th style={{ padding: "12px 14px", textAlign: "left", color: "var(--tx3)", borderBottom: "1px solid var(--brd)" }}>Drží</th>
+                </tr></thead>
+                <tbody>{PATTERNS.map(pat => { const holder = employees.find(e => e.pattern === pat.key && e.role !== "admin"); return <tr key={pat.key} style={{ borderBottom: "1px solid var(--brd)" }}>
+                  <td style={{ padding: "10px 14px", fontWeight: 600, color: "var(--acc2)", fontFamily: "'IBM Plex Mono',monospace" }}>{pat.key}</td>
+                  {pat.plan.map((v, i) => <td key={i} style={{ padding: 6, textAlign: "center" }}><span style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 12, color: v === "HO" ? "var(--grn)" : "var(--tx)", border: `1px solid ${v === "HO" ? "var(--grn)" : "var(--brd)"}`, padding: "2px 6px" }}>{v === "HO" ? "HO" : v.slice(0, 2)}</span></td>)}
+                  <td style={{ padding: "10px 14px", color: holder ? "var(--w)" : "var(--tx3)", fontWeight: holder ? 500 : 400 }}>{holder?.name || "—"}</td>
+                </tr>; })}</tbody>
+              </table>
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10, fontFamily: "'Barlow Condensed',sans-serif" }}>Přiřazení</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(240px,1fr))", gap: 10 }}>
+              {employees.filter(e => e.role !== "admin").map(emp => <Card key={emp.id} style={{ padding: 14 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontWeight: 600, color: "var(--w)", flex: 1 }}>{emp.name}</span>
+                  <select value={emp.pattern || ""} onChange={e => e.target.value && assignPattern(emp.id, e.target.value)} style={{ padding: "8px 10px", border: "1px solid var(--brd2)", background: "var(--bg)", color: "var(--w)", fontFamily: "'IBM Plex Mono',monospace", fontSize: 14, minHeight: 40 }}>
+                    <option value="">—</option>
+                    {PATTERNS.map(p => <option key={p.key} value={p.key}>{p.key}</option>)}
+                  </select>
+                </div>
+              </Card>)}
+            </div>
+          </div>}
+
           {view === "swaps" && <div>
             <div style={{ fontSize: 20, fontWeight: 600, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 2, marginBottom: 20, borderBottom: "1px solid var(--brd)", paddingBottom: 12 }}>Výměny</div>
             {!isA && <Card style={{ marginBottom: 20 }}><Btn warm onClick={() => setModal({ type: "swap", day: DAYS[selDay], shift: SHIFTS[0] })}>+ Nová žádost</Btn></Card>}
@@ -1039,16 +1321,15 @@ export default function App() {
 
           {view === "people" && isA && <div>
             <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20, borderBottom: "1px solid var(--brd)", paddingBottom: 12 }}><div style={{ fontSize: 20, fontWeight: 600, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 2 }}>Tým</div><Btn warm onClick={() => setModal("addMember")}>+ Přidat</Btn></div>
-            {["L1", "SD"].map(team => <div key={team} style={{ marginBottom: 24 }}>
-              <div style={{ fontSize: 16, fontWeight: 600, color: team === "L1" ? "var(--l1)" : "var(--sd)", marginBottom: 12, fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase" }}>{TEAMS[team]}</div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 12 }}>{employees.filter(e => e.team === team && e.role !== "admin").map(emp => <Card key={emp.id}>
+            <div style={{ marginBottom: 24 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 12 }}>{employees.filter(e => e.role !== "admin").map(emp => <Card key={emp.id}>
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <div style={{ fontWeight: 600, fontSize: 17, color: "var(--w)" }}>{emp.name}</div>
+                  <div style={{ fontWeight: 600, fontSize: 17, color: "var(--w)" }}>{emp.name}{emp.pattern && <Badge small color="var(--acc2)" style={{ marginLeft: 8 }}>{emp.pattern}</Badge>}</div>
                   <div style={{ display: "flex", gap: 4 }}><button onClick={() => setModal({ type: "editDays", emp })} style={{ background: "none", border: "1px solid var(--brd2)", color: "var(--tx3)", cursor: "pointer", width: 34, height: 34, display: "flex", alignItems: "center", justifyContent: "center" }}>✏</button><button onClick={() => delUser(emp.id)} style={{ background: "none", border: "1px solid rgba(192,48,48,.3)", color: "var(--red)", cursor: "pointer", width: 34, height: 34, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button></div>
                 </div>
                 <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>{[{ l: "Dovol.", v: (emp.vacationTotal || 20) - (emp.vacationUsed || 0), c: "var(--sd)" }, { l: "Sick", v: (emp.sickTotal || 5) - (emp.sickUsed || 0), c: "var(--red)" }, { l: "What.", v: (emp.whateverTotal || 3) - (emp.whateverUsed || 0), c: "var(--amb)" }].map(b => <div key={b.l} style={{ textAlign: "center", padding: 8, border: "1px solid var(--brd)" }}><div style={{ fontSize: 20, fontWeight: 600, color: b.c, fontFamily: "'IBM Plex Mono',monospace" }}>{b.v}</div><div style={{ fontSize: 10, color: "var(--tx3)", textTransform: "uppercase" }}>{b.l}</div></div>)}</div>
               </Card>)}</div>
-            </div>)}
+            </div>
           </div>}
 
           {view === "stats" && <div>
@@ -1105,7 +1386,7 @@ export default function App() {
             </Card>
             {isA && <Card style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, fontFamily: "'Barlow Condensed',sans-serif" }}>Pravidla směn</div>
-              <Input label="L1 Max/směna" type="number" value={rules.L1_max} onChange={e => setRules(r => ({ ...r, L1_max: +e.target.value }))} /><Input label="SD Max 8:00" type="number" value={rules.SD_max8} onChange={e => setRules(r => ({ ...r, SD_max8: +e.target.value }))} /><Input label="SD Max HO/den" type="number" value={rules.SD_maxHO} onChange={e => setRules(r => ({ ...r, SD_maxHO: +e.target.value }))} /><Toggle checked={rules.SD_noHO8} onChange={v => setRules(r => ({ ...r, SD_noHO8: v }))} label="Zákaz HO 08:00" /><Toggle checked={rules.SD_noHO10} onChange={v => setRules(r => ({ ...r, SD_noHO10: v }))} label="Zákaz HO 10:00" /><div style={{ borderTop: "1px solid var(--brd)", marginTop: 12, paddingTop: 12 }}><Toggle checked={rules.allowAllDnD || false} onChange={v => setRules(r => ({ ...r, allowAllDnD: v }))} label="Povolit Drag & Drop pro všechny" /><p style={{ fontSize: 12, color: "var(--tx3)", marginTop: -8, marginBottom: 12 }}>Zaměstnanci budou moci přesouvat kohokoliv v rozvrhu (i mezi týmy).</p></div><Btn warm onClick={async () => { await setDoc(doc(db, "rules", "global"), rules); notify("Uloženo"); }}>Uložit pravidla</Btn>
+              <Input label="Minimum lidí v kanceláři" type="number" value={rules.officeMin ?? 4} onChange={e => setRules(r => ({ ...r, officeMin: +e.target.value }))} /><Input label="Max HO / den" type="number" value={rules.hoCapDay ?? 3} onChange={e => setRules(r => ({ ...r, hoCapDay: +e.target.value }))} /><Input label="Max HO / osoba / týden" type="number" value={rules.hoPerWeek ?? 2} onChange={e => setRules(r => ({ ...r, hoPerWeek: +e.target.value }))} /><Toggle checked={rules.cover8 !== false} onChange={v => setRules(r => ({ ...r, cover8: v }))} label="8:00 musí být pokryta z kanceláře" /><Toggle checked={rules.cover10 !== false} onChange={v => setRules(r => ({ ...r, cover10: v }))} label="10:00 musí být pokryta z kanceláře" /><div style={{ borderTop: "1px solid var(--brd)", marginTop: 12, paddingTop: 12 }}><Toggle checked={rules.allowAllDnD || false} onChange={v => setRules(r => ({ ...r, allowAllDnD: v }))} label="Povolit Drag & Drop pro všechny" /><p style={{ fontSize: 12, color: "var(--tx3)", marginTop: -8, marginBottom: 12 }}>Zaměstnanci budou moci přesouvat kohokoliv v rozvrhu.</p></div><Btn warm onClick={async () => { await setDoc(doc(db, "rules", "global"), rules); notify("Uloženo"); }}>Uložit pravidla</Btn>
             </Card>}
             {isA && <Card><div style={{ display: "flex", gap: 8 }}><Btn danger onClick={async () => { await deleteDoc(doc(db, "schedules", wk)); notify("Reset"); }}>Reset týden</Btn><Btn ghost onClick={exportCSV}>CSV</Btn></div></Card>}
           </div>}
@@ -1133,7 +1414,9 @@ export default function App() {
     <Modal open={modal?.type === "myshift"} onClose={() => setModal(null)} title="Moje směna"><div>
       <p style={{ fontSize: 15, color: "var(--tx2)", marginBottom: 16 }}>{modal?.day} · {modal?.shift}</p>
       {(() => { const myEntry = cs[modal?.day]?.[modal?.shift]?.find(e => e.empId === profile.id); const isHO = myEntry?.ho || false;
-        return <Btn warm={!isHO} primary={isHO} onClick={() => { togHO(modal.day, modal.shift, profile.id); setModal(null); }} style={{ width: "100%", marginBottom: 12 }}>{isHO ? "🏠 Zrušit Home Office" : "🏠 Změnit na Home Office"}</Btn>; })()}
+        const pendingHO = openProps.some(p => p.affected?.includes(profile.id) && p.week === wk && p.alt?.day === modal?.day && (p.alt?.kind === "grantHO" || p.alt?.kind === "dropHO"));
+        if (pendingHO) return <div style={{ padding: "12px 14px", border: "1px solid var(--amb)", color: "var(--amb)", fontSize: 14, marginBottom: 12 }}>⚑ Žádost o HO na tento den čeká na schválení.</div>;
+        return <Btn warm={!isHO} primary={isHO} onClick={() => { requestHO(modal.day, !isHO); setModal(null); }} style={{ width: "100%", marginBottom: 12 }}>{isHO ? "🏠 Požádat o zrušení Home Office" : "🏠 Požádat o Home Office"}</Btn>; })()}
       <div style={{ fontSize: 12, color: "var(--tx3)", margin: "8px 0 6px", textTransform: "uppercase", letterSpacing: 1 }}>Nepřítomnost</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>{ABS.map(a => <Btn key={a.id} onClick={() => { addAbs(profile.id, modal.day, a.id); setModal(null); }}>{a.icon} {a.label}</Btn>)}</div>
       <Btn warm onClick={() => setModal({ type: "swap", day: modal?.day, shift: modal?.shift })} style={{ width: "100%", marginBottom: 10 }}>Požádat o výměnu</Btn>

@@ -27,6 +27,13 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    match /changeProposals/{proposalId} {
+      allow read: if isAdmin() || (isAuth() && request.auth.uid in resource.data.affected);
+      allow create: if isAuth();
+      allow update: if isAdmin() || (isAuth() && request.auth.uid in resource.data.affected);
+      allow delete: if isAdmin();
+    }
+
     match /rules/{ruleId} {
       allow read: if isAuth();
       allow write: if isAdmin();
