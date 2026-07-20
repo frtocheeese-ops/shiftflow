@@ -43,19 +43,22 @@ const PRESET = {
   Patrik: { Po: "09:00", "Út": "10:00", St: "08:00", St_ho: true, "Čt": "08:00", "Čt_ho": true, "Pá": "10:00" },
   Denis:  { Po: "10:00", Po_ho: true, "Út": "09:00", St: "08:00", "Čt": "08:00", "Pá": "09:00", "Pá_ho": true },
   Olda:   { Po: "10:00", "Út": "08:00", "Út_ho": true, St: "09:00", "Čt": "10:00", "Čt_ho": true, "Pá": "09:00" },
-  "Vláďa":  { Po: "09:00", "Út": "10:00", "Út_ho": true, St: "09:00", "Čt": "09:00", "Pá": "08:00", "Pá_ho": true },
-  Franta: { Po: "08:00", Po_ho: true, "Út": "09:00", St: "10:00", St_ho: true, "Čt": "10:00", "Pá": "08:00" },
+  "Vláďa":  { Po: "09:00", "Út": "08:00", St: "10:00", St_ho: true, "Čt": "10:00", "Pá": "10:00", "Pá_ho": true },
+  "Víťa":  { Po: "08:00", "Út": "09:00", St: "09:00", "Čt": "09:00", "Pá": "08:00" },
 };
+// Přejmenování člena při seedu (jméno v DB → nové jméno)
+const RENAME = { Franta: "Víťa" };
 // Osobní preference/pravidla (silná, ale admin je může přebít úpravou). Klíč = jméno.
 const PERSONAL = {
   Jirka:  { mustOpen: true },              // celý týden 8:00 v kanceláři
+  "Víťa": { noHO: true },                  // nemá nárok na HO
   Andy:   { noOpen: true },                // nikdy 8:00 v kanceláři
   Andrea: { noOpen: true },                // alias
   Denis:  { noTenOn: "St" },               // ve středu ne od 10:00
 };
 const personalOf = (employees, eid) => PERSONAL[(employees.find(e => e.id === eid) || {}).name] || {};
 
-const RULE_DEFAULTS = { officeMin: 4, hoCapDay: 3, hoPerWeek: 2, cover8: true, cover10: true };
+const RULE_DEFAULTS = { officeMin: 4, hoCapDay: 3, hoPerWeek: 2, cover8: true, cover10: true, min8: 2, min10: 2 };
 
 /* Analýza týdne: porušení pravidel + problémy se VŠEMI proveditelnými alternativami řešení */
 function dayStats(cs, absences, day, employees) {
@@ -80,44 +83,62 @@ function analyzeWeek(cs, absences, employees, rulesIn, intake = {}, intakeAllow 
 
   DAYS.forEach((day, di) => {
     const st = stats[di];
-    const has8 = st.office.some(x => x.shift === "08:00"), has10 = st.office.some(x => x.shift === "10:00");
+    const off8 = st.office.filter(x => x.shift === "08:00").length;
+    const off10 = st.office.filter(x => x.shift === "10:00").length;
+    const ho10 = st.ho.filter(x => x.shift === "10:00").length;
     const short = R.officeMin - st.office.length;
+    const min8 = R.min8 ?? 2, min10 = R.min10 ?? 2;
+    const cnt = t => st.office.filter(x => x.shift === t).length;
+    const shiftMin = t => t === "08:00" ? min8 : t === "10:00" ? 1 : 0; // kolik musí v kanceláři zůstat
 
-    if (short > 0) {
-      violations.push({ sev: "crit", day, msg: `${day}: v kanceláři jen ${st.office.length} (minimum ${R.officeMin})` });
-      const toShift = (R.cover8 && !has8) ? "08:00" : (R.cover10 && !has10) ? "10:00" : "09:00";
-      const alts = [];
+    // Alternativy: přesun člověka v kanceláři na cílovou směnu (bez rozbití zdrojové)
+    const shiftAlts = toShift => st.office
+      .filter(x => x.shift !== toShift && cnt(x.shift) > shiftMin(x.shift))
+      .filter(x => toShift !== "08:00" || canOpen(x.empId))
+      .sort((a, b) => ((a.shift === "09:00") ? 0 : 1) - ((b.shift === "09:00") ? 0 : 1))
+      .map(x => ({ kind: "shift", empId: x.empId, day, fromShift: x.shift, toShift }));
+    // Alternativy: stažení člověka z HO do kanceláře na cílovou směnu
+    const pullAlts = toShift => {
+      const out = [];
       st.ho.forEach(h => {
-        if (toShift === "08:00" && !canOpen(h.empId)) return; // na 8:00 jen openeři
+        if (toShift === "08:00" && !canOpen(h.empId)) return;
         for (let dj = 0; dj < 5; dj++) {
-          if (dj === di) continue;
-          if (intake[DAYS[dj]]) continue; // do Nástupového dne HO nepřesouváme
+          if (dj === di || intake[DAYS[dj]]) continue;
           const stj = stats[dj];
           if (stj.absSet.has(h.empId)) continue;
           const mine = stj.office.find(x => x.empId === h.empId);
           if (!mine) continue;
           if (stj.ho.length >= R.hoCapDay) continue;
           if (stj.office.length - 1 < R.officeMin) continue;
-          if (R.cover8 && mine.shift === "08:00" && stj.office.filter(x => x.shift === "08:00").length <= 1) continue;
-          if (R.cover10 && mine.shift === "10:00" && stj.office.filter(x => x.shift === "10:00").length <= 1) continue;
-          alts.push({ kind: "pullHO", empId: h.empId, day, toShift, moveToDay: DAYS[dj] });
+          if (mine.shift === "08:00" && stj.office.filter(x => x.shift === "08:00").length <= min8) continue;
+          if (mine.shift === "10:00" && stj.office.filter(x => x.shift === "10:00").length <= 1) continue;
+          out.push({ kind: "pullHO", empId: h.empId, day, toShift, moveToDay: DAYS[dj] });
         }
-        alts.push({ kind: "pullHO", empId: h.empId, day, toShift, moveToDay: null });
+        out.push({ kind: "pullHO", empId: h.empId, day, toShift, moveToDay: null });
       });
-      problems.push({ key: `head:${day}`, day, title: `${day}: v kanceláři jen ${st.office.length} lidí (minimum ${R.officeMin})`, alts });
+      return out;
+    };
+
+    if (short > 0) {
+      violations.push({ sev: "crit", day, msg: `${day}: v kanceláři jen ${st.office.length} (minimum ${R.officeMin})` });
+      const toShift = (R.cover8 && off8 < min8) ? "08:00" : (R.cover10 && off10 < 1) ? "10:00" : "09:00";
+      problems.push({ key: `head:${day}`, day, title: `${day}: v kanceláři jen ${st.office.length} lidí (minimum ${R.officeMin})`, alts: pullAlts(toShift) });
     } else {
-      const cnt = t => st.office.filter(x => x.shift === t).length;
-      const mkShift = (toShift, label, sev) => {
-        violations.push({ sev, day, msg: `${day}: ${label}` });
-        const alts = st.office
-          .filter(x => x.shift !== toShift && (x.shift === "09:00" || cnt(x.shift) > 1))
-          .filter(x => toShift !== "08:00" || canOpen(x.empId))
-          .sort((a, b) => ((a.shift === "09:00") ? 0 : 1) - ((b.shift === "09:00") ? 0 : 1))
-          .map(x => ({ kind: "shift", empId: x.empId, day, fromShift: x.shift, toShift }));
-        if (alts.length) problems.push({ key: `${toShift}:${day}`, day, title: `${day}: ${label}`, alts });
-      };
-      if (R.cover8 && !has8) mkShift("08:00", "nikdo v kanceláři od 8:00", "crit");
-      if (R.cover10 && !has10) mkShift("10:00", "nikdo v kanceláři od 10:00", "warn");
+      // 8:00 — minimálně min8 v kanceláři
+      if (R.cover8 && off8 < min8) {
+        violations.push({ sev: "crit", day, msg: `${day}: v kanceláři od 8:00 jen ${off8} (potřeba ${min8})` });
+        const alts = [...shiftAlts("08:00"), ...pullAlts("08:00")];
+        if (alts.length) problems.push({ key: `08:00:${day}`, day, title: `${day}: potřeba ${min8} v kanceláři od 8:00`, alts });
+      }
+      // 10:00 — minimálně min10, aspoň 1 z kanceláře
+      if (R.cover10 && (off10 < 1 || (off10 + ho10) < min10)) {
+        const total = off10 + ho10;
+        const noOffice = off10 < 1;
+        const msg = noOffice ? `${day}: od 10:00 nikdo v kanceláři` : `${day}: na 10:00 jen ${total} (potřeba ${min10}, aspoň 1 v kanceláři)`;
+        violations.push({ sev: noOffice ? "crit" : "warn", day, msg });
+        const alts = [...shiftAlts("10:00"), ...pullAlts("10:00")];
+        if (alts.length) problems.push({ key: `10:00:${day}`, day, title: msg, alts });
+      }
     }
     if (st.ho.length > R.hoCapDay) violations.push({ sev: "warn", day, msg: `${day}: ${st.ho.length} lidí na HO (strop ${R.hoCapDay})` });
 
@@ -126,6 +147,8 @@ function analyzeWeek(cs, absences, employees, rulesIn, intake = {}, intakeAllow 
       violations.push({ sev: "warn", day, empId: x.empId, msg: `${day}: ${(employees.find(e => e.id === x.empId) || {}).name} nemá otevírat (8:00)` }));
     [...st.office, ...st.ho].filter(x => { const p = personalOf(employees, x.empId); return p.noTenOn === day && x.shift === "10:00"; }).forEach(x =>
       violations.push({ sev: "warn", day, empId: x.empId, msg: `${day}: ${(employees.find(e => e.id === x.empId) || {}).name} nemá mít 10:00` }));
+    st.ho.filter(x => personalOf(employees, x.empId).noHO).forEach(x =>
+      violations.push({ sev: "warn", day, empId: x.empId, msg: `${day}: ${(employees.find(e => e.id === x.empId) || {}).name} nemá mít HO` }));
 
     // Nástupy
     if (intake[day]) {
@@ -1134,15 +1157,17 @@ export default function App() {
   // Předvyplnění rozvrhu dle preferencí — napasuje PRESET na uživatele podle jména
   const applyPreset = async () => {
     if (!confirm("Předvyplnit výchozí rozvrh dle preferencí členů? Přepíše stávající výchozí rozvrhy (týdenní rozpisy zůstanou).")) return;
-    let n = 0, miss = [];
+    let n = 0, miss = [], renamed = [];
     for (const emp of employees.filter(e => e.role !== "admin")) {
-      const ds = PRESET[emp.name];
-      if (!ds) { miss.push(emp.name); continue; }
+      let name = emp.name;
+      if (RENAME[name]) { const nn = RENAME[name]; await updateDoc(doc(db, "users", emp.id), { name: nn }); renamed.push(`${name}→${nn}`); name = nn; }
+      const ds = PRESET[name];
+      if (!ds) { miss.push(name); continue; }
       await updateDoc(doc(db, "users", emp.id), { defaultSchedule: ds, setupDone: true });
       n++;
     }
-    notify(`Předvyplněno pro ${n} lidí${miss.length ? ` (bez předvolby: ${miss.join(", ")})` : ""}`);
-    log(`Rozvrh předvyplněn dle preferencí (${n})`);
+    notify(`Předvyplněno pro ${n} lidí${renamed.length ? ` · přejmenováno: ${renamed.join(", ")}` : ""}${miss.length ? ` (bez předvolby: ${miss.join(", ")})` : ""}`);
+    log(`Rozvrh předvyplněn dle preferencí (${n})${renamed.length ? `, přejmenováno ${renamed.join(", ")}` : ""}`);
   };
 
   const exportCSV = () => { let csv = "\ufeffDen,Směna,Jméno,HO\n"; DAYS.forEach(d => SHIFTS.forEach(sh => (cs[d]?.[sh] || []).forEach(en => { const e = ge(en.empId); if (e) csv += `${d},${sh},${e.name},${en.ho ? "Ano" : "Ne"}\n`; }))); const b = new Blob([csv], { type: "text/csv;charset=utf-8;" }); const u = URL.createObjectURL(b); Object.assign(document.createElement("a"), { href: u, download: `rozvrh_${wk}.csv` }).click(); };
@@ -1495,7 +1520,7 @@ export default function App() {
             </Card>
             {isA && <Card style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, fontFamily: "'Barlow Condensed',sans-serif" }}>Pravidla směn</div>
-              <Input label="Minimum lidí v kanceláři" type="number" value={rules.officeMin ?? 4} onChange={e => setRules(r => ({ ...r, officeMin: +e.target.value }))} /><Input label="Max HO / den" type="number" value={rules.hoCapDay ?? 3} onChange={e => setRules(r => ({ ...r, hoCapDay: +e.target.value }))} /><Input label="Max HO / osoba / týden" type="number" value={rules.hoPerWeek ?? 2} onChange={e => setRules(r => ({ ...r, hoPerWeek: +e.target.value }))} /><Toggle checked={rules.cover8 !== false} onChange={v => setRules(r => ({ ...r, cover8: v }))} label="8:00 musí být pokryta z kanceláře" /><Toggle checked={rules.cover10 !== false} onChange={v => setRules(r => ({ ...r, cover10: v }))} label="10:00 musí být pokryta z kanceláře" /><div style={{ borderTop: "1px solid var(--brd)", marginTop: 12, paddingTop: 12 }}><Toggle checked={rules.allowAllDnD || false} onChange={v => setRules(r => ({ ...r, allowAllDnD: v }))} label="Povolit Drag & Drop pro všechny" /><p style={{ fontSize: 12, color: "var(--tx3)", marginTop: -8, marginBottom: 12 }}>Zaměstnanci budou moci přesouvat kohokoliv v rozvrhu.</p></div><Btn warm onClick={async () => { await setDoc(doc(db, "rules", "global"), rules); notify("Uloženo"); }}>Uložit pravidla</Btn>
+              <Input label="Minimum lidí v kanceláři" type="number" value={rules.officeMin ?? 4} onChange={e => setRules(r => ({ ...r, officeMin: +e.target.value }))} /><Input label="Minimum v kanceláři od 8:00" type="number" value={rules.min8 ?? 2} onChange={e => setRules(r => ({ ...r, min8: +e.target.value }))} /><Input label="Minimum na 10:00 (vč. HO)" type="number" value={rules.min10 ?? 2} onChange={e => setRules(r => ({ ...r, min10: +e.target.value }))} /><Input label="Max HO / den" type="number" value={rules.hoCapDay ?? 3} onChange={e => setRules(r => ({ ...r, hoCapDay: +e.target.value }))} /><Input label="Max HO / osoba / týden" type="number" value={rules.hoPerWeek ?? 2} onChange={e => setRules(r => ({ ...r, hoPerWeek: +e.target.value }))} /><Toggle checked={rules.cover8 !== false} onChange={v => setRules(r => ({ ...r, cover8: v }))} label="8:00 musí být pokryta z kanceláře" /><Toggle checked={rules.cover10 !== false} onChange={v => setRules(r => ({ ...r, cover10: v }))} label="10:00 musí být pokryta z kanceláře" /><div style={{ borderTop: "1px solid var(--brd)", marginTop: 12, paddingTop: 12 }}><Toggle checked={rules.allowAllDnD || false} onChange={v => setRules(r => ({ ...r, allowAllDnD: v }))} label="Povolit Drag & Drop pro všechny" /><p style={{ fontSize: 12, color: "var(--tx3)", marginTop: -8, marginBottom: 12 }}>Zaměstnanci budou moci přesouvat kohokoliv v rozvrhu.</p></div><Btn warm onClick={async () => { await setDoc(doc(db, "rules", "global"), rules); notify("Uloženo"); }}>Uložit pravidla</Btn>
             </Card>}
             {isA && <Card><div style={{ display: "flex", gap: 8 }}><Btn danger onClick={async () => { await deleteDoc(doc(db, "schedules", wk)); notify("Reset"); }}>Reset týden</Btn><Btn ghost onClick={exportCSV}>CSV</Btn></div></Card>}
           </div>}

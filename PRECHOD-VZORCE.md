@@ -131,3 +131,23 @@ středu nemá 10:00. Samoopravný engine navíc na 8:00 nikdy nenavrhne někoho,
 otevírat nemá (ověřeno scénářem „Jirka nemocný").
 
 Ověřeno `vite build` + logickými testy (PRESET coverage, osobní warny, opener exclusion).
+
+---
+
+## Aktualizace v6 — 2× ráno, 2× na 10:00, Víťa bez HO
+
+**Nová minima pokrytí.** 8:00 nově vyžaduje ≥2 v kanceláři (dřív 1), 10:00 vyžaduje
+≥2 celkem, z toho aspoň 1 v kanceláři (druhý smí být HO). Řízeno `min8`/`min10`
+v `RULE_DEFAULTS` a editovatelné v Nastavení → Pravidla. Samoopravný engine zná nová
+minima (nabízí posun i stažení z HO tak, aby se dodržela, a nikdy nerozbije zdrojovou
+směnu pod její minimum).
+
+**Franta → Víťa, bez HO.** PRESET přejmenován; při „Předvyplnit rozvrh" se člen jménem
+Franta automaticky přejmenuje na Víťu (mapa `RENAME`). Víťa má `noHO` (jako Jirka)
+— HO se mu hlásí jako upozornění.
+
+**Přepočítaný PRESET.** Ověřeno: 0 porušení, každý den kancelář 5, 8:00 = 2 v kanceláři,
+10:00 = 2 (1 kancelář + 1 HO), HO 2/os. (Jirka a Víťa 0). Všechny osobní preference
+dál platí.
+
+Ověřeno `vite build` + logickými testy (minima 8/10, Víťa bez HO, opener exclusion).
