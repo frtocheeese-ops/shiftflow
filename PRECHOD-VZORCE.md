@@ -58,3 +58,29 @@ Swapy, absence, GCal sync, GAS e-maily beze změny. P0 security (heslo v bundlu,
 self-escalation rule, otevřený GAS relay) a P1 (addAbsRange lost-update, chybějící
 transakce, removeAbs nerefunduje countery) trvají — doporučuji řešit samostatně
 před ostrým provozem nového modelu.
+
+---
+
+## Aktualizace v3 — real-time, sloučení týmů, Nástupy
+
+**Real-time / konec lost-update.** Zápisy rozvrhu (drag&drop, přesun, HO toggle,
+absence, rozsah absencí) teď jdou přes `runTransaction` (`txSchedule` + `editSchedule`):
+transakce uvnitř přečte čerstvá data a aplikuje jen svou změnu, takže dva souběžné
+zásahy se nepřepíšou. Autor vidí okamžitou optimistickou změnu, ostatní ji dostanou
+přes `onSnapshot` po commitu. Počítadla (dovolená/sick/whatever) jdou přes `increment()`
+— a `removeAbs` je teď vrací zpět (oprava P1). V záhlaví rozvrhu přibylo „aktualizováno
+HH:MM · jméno" pro přehled o čerstvosti.
+
+**Sloučení týmů.** Odstraněny všechny zbytky L1/SD: `TEAMS`, výběr týmu v registraci
+i přidání člena, týmové badge a barvy, filtr `tf`, sloupec Tým v CSV a v GCal popisu.
+Pole `team` u existujících uživatelů zůstává (kompatibilita), kód ho ignoruje.
+
+**Nástupy.** Admin může označit den jako „Nástupy" (týdenní i denní pohled). V takový
+den systém doporučuje nulové HO — kdo HO má, dostane upozornění a admin může udělit
+výjimku („Povolit výjimku"). Ad-hoc HO žádost na Nástupový den se zablokuje (bez výjimky)
+a samoopravný engine do Nástupového dne nepřesouvá HO. Ukládá se na týdenní dokument
+(`intake`, `intakeAllow`) — žádná změna Firestore rules není potřeba (spadá pod stávající
+pravidla kolekce `schedules`).
+
+Ověřeno plným `vite build` a logickými testy enginu (detekce Nástupů, výjimky, zákaz
+přesunu HO do Nástupového dne).
