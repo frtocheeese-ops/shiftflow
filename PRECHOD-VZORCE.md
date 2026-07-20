@@ -110,3 +110,24 @@ roztaženým date-pickerem (spolehlivě otevře nativní výběr na mobilu i des
 
 Ověřeno `vite build` + logickými testy (resolve simulace absence i změny hodiny,
 férovostní agregace).
+
+---
+
+## Aktualizace v5 — konec vzorců, předvyplnění dle preferencí
+
+**Vzorce A–G odstraněny.** Pryč `PATTERNS`, `patternToDefault`, `assignPattern`, admin
+view „Vzorce" i položka v menu. Model je teď čistě per-osoba přes `defaultSchedule`
+(stávající editor „Rozvrh (default)" zůstává pro ruční úpravy — s přepínačem HO).
+
+**Předvyplnění dle preferencí.** Nová konstanta `PRESET` (jméno → týdenní rozvrh)
+sestavená z „ideálních" požadavků členů; tlačítko „Předvyplnit rozvrh" v sekci Rozvrh
+(default) ji napasuje na uživatele podle jména (`setupDone:true`). Ověřeno: rozložení
+je validní (0 porušení, kancelář 4-4-5-5-5, HO 3-3-2-2-2, každý 2 HO). Přepíše jen
+výchozí rozvrhy; už rozepsané týdny zůstávají.
+
+**Osobní pravidla** (`PERSONAL`, upravitelná úpravou rozvrhu, hlásí se jen jako
+upozornění): Jirka otevírá celý týden (8:00), Andy/Andrea nikdy neotevírá, Denis ve
+středu nemá 10:00. Samoopravný engine navíc na 8:00 nikdy nenavrhne někoho, kdo
+otevírat nemá (ověřeno scénářem „Jirka nemocný").
+
+Ověřeno `vite build` + logickými testy (PRESET coverage, osobní warny, opener exclusion).
