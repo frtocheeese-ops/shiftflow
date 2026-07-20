@@ -58,3 +58,96 @@ Swapy, absence, GCal sync, GAS e-maily beze změny. P0 security (heslo v bundlu,
 self-escalation rule, otevřený GAS relay) a P1 (addAbsRange lost-update, chybějící
 transakce, removeAbs nerefunduje countery) trvají — doporučuji řešit samostatně
 před ostrým provozem nového modelu.
+
+---
+
+## Aktualizace v3 — real-time, sloučení týmů, Nástupy
+
+**Real-time / konec lost-update.** Zápisy rozvrhu (drag&drop, přesun, HO toggle,
+absence, rozsah absencí) teď jdou přes `runTransaction` (`txSchedule` + `editSchedule`):
+transakce uvnitř přečte čerstvá data a aplikuje jen svou změnu, takže dva souběžné
+zásahy se nepřepíšou. Autor vidí okamžitou optimistickou změnu, ostatní ji dostanou
+přes `onSnapshot` po commitu. Počítadla (dovolená/sick/whatever) jdou přes `increment()`
+— a `removeAbs` je teď vrací zpět (oprava P1). V záhlaví rozvrhu přibylo „aktualizováno
+HH:MM · jméno" pro přehled o čerstvosti.
+
+**Sloučení týmů.** Odstraněny všechny zbytky L1/SD: `TEAMS`, výběr týmu v registraci
+i přidání člena, týmové badge a barvy, filtr `tf`, sloupec Tým v CSV a v GCal popisu.
+Pole `team` u existujících uživatelů zůstává (kompatibilita), kód ho ignoruje.
+
+**Nástupy.** Admin může označit den jako „Nástupy" (týdenní i denní pohled). V takový
+den systém doporučuje nulové HO — kdo HO má, dostane upozornění a admin může udělit
+výjimku („Povolit výjimku"). Ad-hoc HO žádost na Nástupový den se zablokuje (bez výjimky)
+a samoopravný engine do Nástupového dne nepřesouvá HO. Ukládá se na týdenní dokument
+(`intake`, `intakeAllow`) — žádná změna Firestore rules není potřeba (spadá pod stávající
+pravidla kolekce `schedules`).
+
+Ověřeno plným `vite build` a logickými testy enginu (detekce Nástupů, výjimky, zákaz
+přesunu HO do Nástupového dne).
+
+---
+
+## Aktualizace v4 — férovost, resolution modal, sync, oprava UI
+
+**Férovostní hlídač.** Nová sekce ve Stats agreguje z posledních 16 týdnů počty
+odpracovaných směn od 8:00, od 10:00 a dnů HO pro každého (živě z kolekce `schedules`).
+Tabulka s proužky + hlídač, který upozorní, když rozdíl mezi lidmi překročí 3
+(nejvíc vs. nejmíň, jmenovitě). Konstanty `FAIR_WEEKS`, `FAIR_SPREAD`. Jen čtení.
+
+**Resolution modal.** Když si člen zadá nepřítomnost nebo změní hodinu směny, vyskočí
+tabulka: nasimuluje dopad, a pokud vznikne podstav, vypíše všechny možnosti krytí —
+každou s kolegou, kterého se týká, tlačítkem „Požádat {jméno}" (vytvoří návrh + notifikaci)
+a „✉ napsat" (mailto). U změny hodiny navíc tlačítko „Odeslat změnu ke schválení"
+(návrh s předvyplněným souhlasem žadatele, zbývá admin). Když změna nic nerozbije,
+modal to potvrdí a nikoho neshání.
+
+**Sync tlačítko (⟳).** V hlavičce. Vyčistí Cache Storage i service worker registrace
+a natvrdo přenačte s cache-busting parametrem — jistota čerstvého stavu.
+
+**Opravy UI.** Šipky týdnů ‹ › nově flex-centrované (glyfy byly mimo osu). Nespolehlivý
+`<input type=date>` nahrazen čistým tlačítkem 📅 s neviditelným, přes celou plochu
+roztaženým date-pickerem (spolehlivě otevře nativní výběr na mobilu i desktopu).
+
+Ověřeno `vite build` + logickými testy (resolve simulace absence i změny hodiny,
+férovostní agregace).
+
+---
+
+## Aktualizace v5 — konec vzorců, předvyplnění dle preferencí
+
+**Vzorce A–G odstraněny.** Pryč `PATTERNS`, `patternToDefault`, `assignPattern`, admin
+view „Vzorce" i položka v menu. Model je teď čistě per-osoba přes `defaultSchedule`
+(stávající editor „Rozvrh (default)" zůstává pro ruční úpravy — s přepínačem HO).
+
+**Předvyplnění dle preferencí.** Nová konstanta `PRESET` (jméno → týdenní rozvrh)
+sestavená z „ideálních" požadavků členů; tlačítko „Předvyplnit rozvrh" v sekci Rozvrh
+(default) ji napasuje na uživatele podle jména (`setupDone:true`). Ověřeno: rozložení
+je validní (0 porušení, kancelář 4-4-5-5-5, HO 3-3-2-2-2, každý 2 HO). Přepíše jen
+výchozí rozvrhy; už rozepsané týdny zůstávají.
+
+**Osobní pravidla** (`PERSONAL`, upravitelná úpravou rozvrhu, hlásí se jen jako
+upozornění): Jirka otevírá celý týden (8:00), Andy/Andrea nikdy neotevírá, Denis ve
+středu nemá 10:00. Samoopravný engine navíc na 8:00 nikdy nenavrhne někoho, kdo
+otevírat nemá (ověřeno scénářem „Jirka nemocný").
+
+Ověřeno `vite build` + logickými testy (PRESET coverage, osobní warny, opener exclusion).
+
+---
+
+## Aktualizace v6 — 2× ráno, 2× na 10:00, Víťa bez HO
+
+**Nová minima pokrytí.** 8:00 nově vyžaduje ≥2 v kanceláři (dřív 1), 10:00 vyžaduje
+≥2 celkem, z toho aspoň 1 v kanceláři (druhý smí být HO). Řízeno `min8`/`min10`
+v `RULE_DEFAULTS` a editovatelné v Nastavení → Pravidla. Samoopravný engine zná nová
+minima (nabízí posun i stažení z HO tak, aby se dodržela, a nikdy nerozbije zdrojovou
+směnu pod její minimum).
+
+**Franta → Víťa, bez HO.** PRESET přejmenován; při „Předvyplnit rozvrh" se člen jménem
+Franta automaticky přejmenuje na Víťu (mapa `RENAME`). Víťa má `noHO` (jako Jirka)
+— HO se mu hlásí jako upozornění.
+
+**Přepočítaný PRESET.** Ověřeno: 0 porušení, každý den kancelář 5, 8:00 = 2 v kanceláři,
+10:00 = 2 (1 kancelář + 1 HO), HO 2/os. (Jirka a Víťa 0). Všechny osobní preference
+dál platí.
+
+Ověřeno `vite build` + logickými testy (minima 8/10, Víťa bez HO, opener exclusion).

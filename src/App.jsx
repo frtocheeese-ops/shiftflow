@@ -1,11 +1,10 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { auth, db, getMsg } from "./firebase";
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, sendPasswordResetEmail, updatePassword } from "firebase/auth";
-import { doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc, collection, onSnapshot, deleteField } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc, collection, onSnapshot, runTransaction, increment } from "firebase/firestore";
 import { getToken, onMessage } from "firebase/messaging";
 
 /* ═══ CONSTANTS ═══ */
-const TEAMS = { L1: "L1 Support", SD: "Service Desk" };
 const SHIFTS = ["08:00", "09:00", "10:00"];
 const DAYS = ["Po", "Út", "St", "Čt", "Pá"];
 const DAYS_F = ["Pondělí", "Úterý", "Středa", "Čtvrtek", "Pátek"];
@@ -35,22 +34,31 @@ const wKey = d => localISO(getMon(d));
 const fmtW = d => { const m = getMon(d), f = new Date(m); f.setDate(f.getDate() + 4); return `${m.getDate()}.${m.getMonth() + 1}. — ${f.getDate()}.${f.getMonth() + 1}.${f.getFullYear()}`; };
 function buildDef(emps) { const s = {}; DAYS.forEach(day => { s[day] = {}; SHIFTS.forEach(sh => s[day][sh] = []); emps.forEach(emp => { if (!emp.defaultSchedule || !emp.setupDone) return; const shift = emp.defaultSchedule[day]; if (shift && SHIFTS.includes(shift)) s[day][shift].push({ empId: emp.id, ho: emp.defaultSchedule[`${day}_ho`] || false, isDefault: true }); }); }); return s; }
 
-/* ═══ VZORCE A–G (nový model jednoho týmu) ═══
-   Každý vzorec A–F: 2 dny HO + v kanceláři přesně jednou 08:00, 09:00 a 10:00.
-   G: bez pevného HO (9:00 denně) — o HO lze požádat ad-hoc přes návrhy. */
-const PATTERNS = [
-  { key: "A", plan: ["HO", "10:00", "09:00", "HO", "08:00"] },
-  { key: "B", plan: ["HO", "09:00", "HO", "08:00", "10:00"] },
-  { key: "C", plan: ["HO", "09:00", "10:00", "08:00", "HO"] },
-  { key: "D", plan: ["08:00", "HO", "10:00", "09:00", "HO"] },
-  { key: "E", plan: ["10:00", "HO", "08:00", "HO", "09:00"] },
-  { key: "F", plan: ["09:00", "08:00", "HO", "10:00", "HO"] },
-  { key: "G", plan: ["09:00", "09:00", "09:00", "09:00", "09:00"] },
-];
-// HO den nemá fixní čas — v datovém modelu drží slot 09:00 s ho:true (9:00 smí být nepokrytá)
-function patternToDefault(plan) { const ds = {}; DAYS.forEach((d, i) => { const v = plan[i]; ds[d] = v === "HO" ? "09:00" : v; ds[`${d}_ho`] = v === "HO"; }); return ds; }
+/* ═══ PŘEDVYPLNĚNÝ ROZVRH dle preferencí členů (upravitelný v editoru Default) ═══
+   Entry na den: "08:00"/"09:00"/"10:00" = kancelář; s `${den}_ho:true` = home office.
+   HO drží nominální čas ve svém slotu. Klíčováno jménem — seed napasuje na uživatele. */
+const PRESET = {
+  Jirka:  { Po: "08:00", "Út": "08:00", St: "08:00", "Čt": "08:00", "Pá": "08:00" },
+  Andy:   { Po: "10:00", Po_ho: true, "Út": "10:00", "Út_ho": true, St: "10:00", "Čt": "09:00", "Pá": "09:00" },
+  Patrik: { Po: "09:00", "Út": "10:00", St: "08:00", St_ho: true, "Čt": "08:00", "Čt_ho": true, "Pá": "10:00" },
+  Denis:  { Po: "10:00", Po_ho: true, "Út": "09:00", St: "08:00", "Čt": "08:00", "Pá": "09:00", "Pá_ho": true },
+  Olda:   { Po: "10:00", "Út": "08:00", "Út_ho": true, St: "09:00", "Čt": "10:00", "Čt_ho": true, "Pá": "09:00" },
+  "Vláďa":  { Po: "09:00", "Út": "08:00", St: "10:00", St_ho: true, "Čt": "10:00", "Pá": "10:00", "Pá_ho": true },
+  "Víťa":  { Po: "08:00", "Út": "09:00", St: "09:00", "Čt": "09:00", "Pá": "08:00" },
+};
+// Přejmenování člena při seedu (jméno v DB → nové jméno)
+const RENAME = { Franta: "Víťa" };
+// Osobní preference/pravidla (silná, ale admin je může přebít úpravou). Klíč = jméno.
+const PERSONAL = {
+  Jirka:  { mustOpen: true },              // celý týden 8:00 v kanceláři
+  "Víťa": { noHO: true },                  // nemá nárok na HO
+  Andy:   { noOpen: true },                // nikdy 8:00 v kanceláři
+  Andrea: { noOpen: true },                // alias
+  Denis:  { noTenOn: "St" },               // ve středu ne od 10:00
+};
+const personalOf = (employees, eid) => PERSONAL[(employees.find(e => e.id === eid) || {}).name] || {};
 
-const RULE_DEFAULTS = { officeMin: 4, hoCapDay: 3, hoPerWeek: 2, cover8: true, cover10: true };
+const RULE_DEFAULTS = { officeMin: 4, hoCapDay: 3, hoPerWeek: 2, cover8: true, cover10: true, min8: 2, min10: 2 };
 
 /* Analýza týdne: porušení pravidel + problémy se VŠEMI proveditelnými alternativami řešení */
 function dayStats(cs, absences, day, employees) {
@@ -64,52 +72,90 @@ function dayStats(cs, absences, day, employees) {
   return { office, ho, absSet };
 }
 
-function analyzeWeek(cs, absences, employees, rulesIn) {
+function analyzeWeek(cs, absences, employees, rulesIn, intake = {}, intakeAllow = {}) {
   const R = { ...RULE_DEFAULTS, ...rulesIn };
   const stats = DAYS.map(d => dayStats(cs, absences, d, employees));
   const violations = [], problems = [];
   const weeklyHO = {};
   stats.forEach(st => st.ho.forEach(h => weeklyHO[h.empId] = (weeklyHO[h.empId] || 0) + 1));
+  const allowed = (day, eid) => (intakeAllow[day] || []).includes(eid);
+  const canOpen = eid => !personalOf(employees, eid).noOpen; // kdo smí 8:00 v kanceláři
 
   DAYS.forEach((day, di) => {
     const st = stats[di];
-    const has8 = st.office.some(x => x.shift === "08:00"), has10 = st.office.some(x => x.shift === "10:00");
+    const off8 = st.office.filter(x => x.shift === "08:00").length;
+    const off10 = st.office.filter(x => x.shift === "10:00").length;
+    const ho10 = st.ho.filter(x => x.shift === "10:00").length;
     const short = R.officeMin - st.office.length;
+    const min8 = R.min8 ?? 2, min10 = R.min10 ?? 2;
+    const cnt = t => st.office.filter(x => x.shift === t).length;
+    const shiftMin = t => t === "08:00" ? min8 : t === "10:00" ? 1 : 0; // kolik musí v kanceláři zůstat
 
-    if (short > 0) {
-      violations.push({ sev: "crit", day, msg: `${day}: v kanceláři jen ${st.office.length} (minimum ${R.officeMin})` });
-      const toShift = (R.cover8 && !has8) ? "08:00" : (R.cover10 && !has10) ? "10:00" : "09:00";
-      const alts = [];
+    // Alternativy: přesun člověka v kanceláři na cílovou směnu (bez rozbití zdrojové)
+    const shiftAlts = toShift => st.office
+      .filter(x => x.shift !== toShift && cnt(x.shift) > shiftMin(x.shift))
+      .filter(x => toShift !== "08:00" || canOpen(x.empId))
+      .sort((a, b) => ((a.shift === "09:00") ? 0 : 1) - ((b.shift === "09:00") ? 0 : 1))
+      .map(x => ({ kind: "shift", empId: x.empId, day, fromShift: x.shift, toShift }));
+    // Alternativy: stažení člověka z HO do kanceláře na cílovou směnu
+    const pullAlts = toShift => {
+      const out = [];
       st.ho.forEach(h => {
+        if (toShift === "08:00" && !canOpen(h.empId)) return;
         for (let dj = 0; dj < 5; dj++) {
-          if (dj === di) continue;
+          if (dj === di || intake[DAYS[dj]]) continue;
           const stj = stats[dj];
           if (stj.absSet.has(h.empId)) continue;
           const mine = stj.office.find(x => x.empId === h.empId);
-          if (!mine) continue; // nemá tam kancelářský den (je HO nebo chybí)
+          if (!mine) continue;
           if (stj.ho.length >= R.hoCapDay) continue;
           if (stj.office.length - 1 < R.officeMin) continue;
-          if (R.cover8 && mine.shift === "08:00" && stj.office.filter(x => x.shift === "08:00").length <= 1) continue;
-          if (R.cover10 && mine.shift === "10:00" && stj.office.filter(x => x.shift === "10:00").length <= 1) continue;
-          alts.push({ kind: "pullHO", empId: h.empId, day, toShift, moveToDay: DAYS[dj] });
+          if (mine.shift === "08:00" && stj.office.filter(x => x.shift === "08:00").length <= min8) continue;
+          if (mine.shift === "10:00" && stj.office.filter(x => x.shift === "10:00").length <= 1) continue;
+          out.push({ kind: "pullHO", empId: h.empId, day, toShift, moveToDay: DAYS[dj] });
         }
-        alts.push({ kind: "pullHO", empId: h.empId, day, toShift, moveToDay: null });
+        out.push({ kind: "pullHO", empId: h.empId, day, toShift, moveToDay: null });
       });
-      problems.push({ key: `head:${day}`, day, title: `${day}: v kanceláři jen ${st.office.length} lidí (minimum ${R.officeMin})`, alts });
+      return out;
+    };
+
+    if (short > 0) {
+      violations.push({ sev: "crit", day, msg: `${day}: v kanceláři jen ${st.office.length} (minimum ${R.officeMin})` });
+      const toShift = (R.cover8 && off8 < min8) ? "08:00" : (R.cover10 && off10 < 1) ? "10:00" : "09:00";
+      problems.push({ key: `head:${day}`, day, title: `${day}: v kanceláři jen ${st.office.length} lidí (minimum ${R.officeMin})`, alts: pullAlts(toShift) });
     } else {
-      const cnt = t => st.office.filter(x => x.shift === t).length;
-      const mkShift = (toShift, label, sev) => {
-        violations.push({ sev, day, msg: `${day}: ${label}` });
-        const alts = st.office
-          .filter(x => x.shift !== toShift && (x.shift === "09:00" || cnt(x.shift) > 1))
-          .sort((a, b) => ((a.shift === "09:00") ? 0 : 1) - ((b.shift === "09:00") ? 0 : 1))
-          .map(x => ({ kind: "shift", empId: x.empId, day, fromShift: x.shift, toShift }));
-        if (alts.length) problems.push({ key: `${toShift}:${day}`, day, title: `${day}: ${label}`, alts });
-      };
-      if (R.cover8 && !has8) mkShift("08:00", "nikdo v kanceláři od 8:00", "crit");
-      if (R.cover10 && !has10) mkShift("10:00", "nikdo v kanceláři od 10:00", "warn");
+      // 8:00 — minimálně min8 v kanceláři
+      if (R.cover8 && off8 < min8) {
+        violations.push({ sev: "crit", day, msg: `${day}: v kanceláři od 8:00 jen ${off8} (potřeba ${min8})` });
+        const alts = [...shiftAlts("08:00"), ...pullAlts("08:00")];
+        if (alts.length) problems.push({ key: `08:00:${day}`, day, title: `${day}: potřeba ${min8} v kanceláři od 8:00`, alts });
+      }
+      // 10:00 — minimálně min10, aspoň 1 z kanceláře
+      if (R.cover10 && (off10 < 1 || (off10 + ho10) < min10)) {
+        const total = off10 + ho10;
+        const noOffice = off10 < 1;
+        const msg = noOffice ? `${day}: od 10:00 nikdo v kanceláři` : `${day}: na 10:00 jen ${total} (potřeba ${min10}, aspoň 1 v kanceláři)`;
+        violations.push({ sev: noOffice ? "crit" : "warn", day, msg });
+        const alts = [...shiftAlts("10:00"), ...pullAlts("10:00")];
+        if (alts.length) problems.push({ key: `10:00:${day}`, day, title: msg, alts });
+      }
     }
     if (st.ho.length > R.hoCapDay) violations.push({ sev: "warn", day, msg: `${day}: ${st.ho.length} lidí na HO (strop ${R.hoCapDay})` });
+
+    // Osobní preference (upravitelné) — jen upozornění
+    st.office.filter(x => x.shift === "08:00" && personalOf(employees, x.empId).noOpen).forEach(x =>
+      violations.push({ sev: "warn", day, empId: x.empId, msg: `${day}: ${(employees.find(e => e.id === x.empId) || {}).name} nemá otevírat (8:00)` }));
+    [...st.office, ...st.ho].filter(x => { const p = personalOf(employees, x.empId); return p.noTenOn === day && x.shift === "10:00"; }).forEach(x =>
+      violations.push({ sev: "warn", day, empId: x.empId, msg: `${day}: ${(employees.find(e => e.id === x.empId) || {}).name} nemá mít 10:00` }));
+    st.ho.filter(x => personalOf(employees, x.empId).noHO).forEach(x =>
+      violations.push({ sev: "warn", day, empId: x.empId, msg: `${day}: ${(employees.find(e => e.id === x.empId) || {}).name} nemá mít HO` }));
+
+    // Nástupy
+    if (intake[day]) {
+      const offenders = st.ho.filter(h => !allowed(day, h.empId));
+      offenders.forEach(h => violations.push({ sev: "warn", day, empId: h.empId, intake: true, msg: `Nástupy (${day}): ${(employees.find(e => e.id === h.empId) || {}).name || "?"} má HO — doporučeno do kanceláře` }));
+      if (offenders.length) problems.push({ key: `intake:${day}`, day, intake: true, title: `Nástupy ${day}: ${offenders.length}× HO (doporučeno bez HO)`, alts: offenders.map(h => ({ kind: "cancelHO", empId: h.empId, day, toShift: "09:00" })) });
+    }
   });
   Object.entries(weeklyHO).forEach(([eid, n]) => { if (n > R.hoPerWeek) violations.push({ sev: "warn", day: null, empId: eid, msg: `HO ${n}× v týdnu (strop ${R.hoPerWeek})` }); });
   return { violations, problems, stats, weeklyHO };
@@ -235,10 +281,10 @@ function buildWeekEvents(userId, weekDates, schedule, employees, absences) {
         const hoLabel = entry.ho ? " 🏠 HO" : "";
         events.push({
           summary: `${shift} Směna${hoLabel} — ShiftFlow`,
-          description: `[ShiftFlow] ${emp.team} · ${shift}${hoLabel}`,
+          description: `[ShiftFlow] ${shift}${hoLabel}`,
           start: { dateTime: `${date}T${shift}:00`, timeZone: "Europe/Prague" },
           end: { dateTime: `${date}T${String(endH).padStart(2, "0")}:00:00`, timeZone: "Europe/Prague" },
-          colorId: entry.ho ? "10" : emp.team === "L1" ? "9" : "7",
+          colorId: entry.ho ? "10" : "9",
         });
         break;
       }
@@ -491,9 +537,9 @@ function AuthScreen() {
   const [mode, setMode] = useState("login"); const [login, setLogin] = useState(""); const [pass, setPass] = useState("");
   const [err, setErr] = useState(""); const [loading, setLoading] = useState(false);
   const [rn, setRn] = useState(""); const [rEmail, setREmail] = useState(""); const [rp, setRp] = useState(""); const [rp2, setRp2] = useState("");
-  const [rt, setRt] = useState("L1"); const [rNotify, setRNotify] = useState(false); const [rNotifEmail, setRNotifEmail] = useState("");
+  const [rNotify, setRNotify] = useState(false); const [rNotifEmail, setRNotifEmail] = useState("");
   const doLogin = async () => { setErr(""); setLoading(true); try { if (login === "Admin" && pass === "0000") await signInWithEmailAndPassword(auth, AE, AP); else await signInWithEmailAndPassword(auth, login, pass); } catch (e) { setErr(e.code === "auth/invalid-credential" ? "Neplatné údaje" : e.message); } setLoading(false); };
-  const doReg = async () => { setErr(""); setLoading(true); try { if (!rn.trim() || !rEmail || !rp) { setErr("Vyplňte pole"); setLoading(false); return; } if (rp !== rp2) { setErr("Hesla neshodují"); setLoading(false); return; } if (rp.length < 6) { setErr("Min. 6 znaků"); setLoading(false); return; } const c = await createUserWithEmailAndPassword(auth, rEmail, rp); await updateProfile(c.user, { displayName: rn.trim() }); await setDoc(doc(db, "users", c.user.uid), { name: rn.trim(), email: rEmail, team: rt, role: "employee", notify: rNotify, notifyEmail: rNotify ? rNotifEmail : "", fcmToken: null, defaultSchedule: null, setupDone: false, vacationTotal: 20, sickTotal: 5, whateverTotal: 3, vacationUsed: 0, sickUsed: 0, whateverUsed: 0, createdAt: new Date().toISOString() }); } catch (e) { setErr(e.message); } setLoading(false); };
+  const doReg = async () => { setErr(""); setLoading(true); try { if (!rn.trim() || !rEmail || !rp) { setErr("Vyplňte pole"); setLoading(false); return; } if (rp !== rp2) { setErr("Hesla neshodují"); setLoading(false); return; } if (rp.length < 6) { setErr("Min. 6 znaků"); setLoading(false); return; } const c = await createUserWithEmailAndPassword(auth, rEmail, rp); await updateProfile(c.user, { displayName: rn.trim() }); await setDoc(doc(db, "users", c.user.uid), { name: rn.trim(), email: rEmail, role: "employee", notify: rNotify, notifyEmail: rNotify ? rNotifEmail : "", fcmToken: null, defaultSchedule: null, setupDone: false, vacationTotal: 20, sickTotal: 5, whateverTotal: 3, vacationUsed: 0, sickUsed: 0, whateverUsed: 0, createdAt: new Date().toISOString() }); } catch (e) { setErr(e.message); } setLoading(false); };
   return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg)", padding: 16 }}><style>{CSS}</style><ParallaxBg />
     <div className="gl" style={{ width: "100%", maxWidth: 440, padding: "40px 28px", animation: "mu .5s", position: "relative", zIndex: 1 }}>
       <div style={{ textAlign: "center", marginBottom: 36, borderBottom: "1px solid var(--brd)", paddingBottom: 28 }}>
@@ -511,7 +557,6 @@ function AuthScreen() {
         <Input label="Email" value={rEmail} onChange={e => setREmail(e.target.value)} />
         <Input label="Heslo (min. 6)" type="password" value={rp} onChange={e => setRp(e.target.value)} />
         <Input label="Heslo znovu" type="password" value={rp2} onChange={e => setRp2(e.target.value)} />
-        <Sel label="Tým" value={rt} onChange={e => setRt(e.target.value)} options={[{ value: "L1", label: "L1 Support" }, { value: "SD", label: "Service Desk" }]} />
         <Btn warm disabled={loading} onClick={doReg} style={{ width: "100%" }}>{loading ? "..." : "Zaregistrovat"}</Btn>
       </>}
       {err && <p style={{ color: "var(--red)", fontSize: 14, marginTop: 12, padding: "10px 14px", border: "1px solid var(--red)" }}>{err}</p>}
@@ -567,7 +612,7 @@ function SwF({ dDay, dShift, wd, onSubmit }) {
 }
 function MyAbsF({ profile, wd, onSubmit }) { const [dayIdx, setDayIdx] = useState(Math.max(0, todayIdx)); const [t, setT] = useState(ABS[0].id); const r = { sick: (profile.sickTotal || 5) - (profile.sickUsed || 0), vacation: (profile.vacationTotal || 20) - (profile.vacationUsed || 0), whatever: (profile.whateverTotal || 3) - (profile.whateverUsed || 0) }; return <div><div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 20 }}>{[{ l: "Dovol.", v: r.vacation, c: "var(--sd)" }, { l: "Sick", v: r.sick, c: "var(--red)" }, { l: "What.", v: r.whatever, c: "var(--amb)" }].map(b => <div key={b.l} style={{ textAlign: "center", padding: 12, border: "1px solid var(--brd)", background: "var(--bg3)" }}><div style={{ fontSize: 28, fontWeight: 600, color: b.c, fontFamily: "'IBM Plex Mono',monospace" }}>{b.v}</div><div style={{ fontSize: 11, color: "var(--tx3)", textTransform: "uppercase" }}>{b.l}</div></div>)}</div><Sel label="Den" value={dayIdx} onChange={e => setDayIdx(+e.target.value)} options={DAYS.map((d, i) => ({ value: i, label: `${DAYS_F[i]} ${fmtDate(wd[i])}` }))} /><Sel label="Typ" value={t} onChange={e => setT(e.target.value)} options={ABS.map(a => ({ value: a.id, label: `${a.icon} ${a.label}` }))} /><Btn warm onClick={() => onSubmit(DAYS[dayIdx], t)} style={{ width: "100%", marginTop: 8 }}>Zadat</Btn></div>; }
 function EditDF({ emp, onDone }) { const [vac, setVac] = useState(emp?.vacationTotal || 20); const [sick, setSick] = useState(emp?.sickTotal || 5); const [what, setWhat] = useState(emp?.whateverTotal || 3); const [l, setL] = useState(false); if (!emp) return null; return <div><Input label="Dovolená" type="number" value={vac} onChange={e => setVac(+e.target.value)} /><Input label="Sick Days" type="number" value={sick} onChange={e => setSick(+e.target.value)} /><Input label="Whatever Days" type="number" value={what} onChange={e => setWhat(+e.target.value)} /><Btn warm disabled={l} onClick={async () => { setL(true); await updateDoc(doc(db, "users", emp.id), { vacationTotal: vac, sickTotal: sick, whateverTotal: what }); setL(false); onDone(); }} style={{ width: "100%", marginTop: 8 }}>Uložit</Btn></div>; }
-function AddF({ onDone }) { const [name, setName] = useState(""); const [email, setEmail] = useState(""); const [pass, setPass] = useState(""); const [team, setTeam] = useState("L1"); const [l, setL] = useState(false); const [err, setErr] = useState(""); return <div><Input label="Jméno" value={name} onChange={e => setName(e.target.value)} /><Input label="Email" value={email} onChange={e => setEmail(e.target.value)} /><Input label="Heslo (min. 6)" type="password" value={pass} onChange={e => setPass(e.target.value)} /><Sel label="Tým" value={team} onChange={e => setTeam(e.target.value)} options={[{ value: "L1", label: "L1 Support" }, { value: "SD", label: "Service Desk" }]} />{err && <p style={{ color: "var(--red)", fontSize: 14, marginBottom: 8, padding: 10, border: "1px solid var(--red)" }}>{err}</p>}<Btn warm disabled={l} onClick={async () => { setErr(""); if (!name.trim() || !email || !pass) return setErr("Vyplňte vše"); if (pass.length < 6) return setErr("Min. 6 znaků"); setL(true); try { const r = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${import.meta.env.VITE_FIREBASE_API_KEY}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password: pass, displayName: name.trim(), returnSecureToken: false }) }); const d = await r.json(); if (d.error) { setErr(d.error.message); setL(false); return; } await setDoc(doc(db, "users", d.localId), { name: name.trim(), email, team, role: "employee", notify: false, notifyEmail: "", fcmToken: null, defaultSchedule: null, setupDone: false, vacationTotal: 20, sickTotal: 5, whateverTotal: 3, vacationUsed: 0, sickUsed: 0, whateverUsed: 0, createdAt: new Date().toISOString() }); onDone(`Přidán: ${name.trim()}`); } catch (e) { setErr(e.message); } setL(false); }} style={{ width: "100%" }}>Přidat</Btn></div>; }
+function AddF({ onDone }) { const [name, setName] = useState(""); const [email, setEmail] = useState(""); const [pass, setPass] = useState(""); const [l, setL] = useState(false); const [err, setErr] = useState(""); return <div><Input label="Jméno" value={name} onChange={e => setName(e.target.value)} /><Input label="Email" value={email} onChange={e => setEmail(e.target.value)} /><Input label="Heslo (min. 6)" type="password" value={pass} onChange={e => setPass(e.target.value)} />{err && <p style={{ color: "var(--red)", fontSize: 14, marginBottom: 8, padding: 10, border: "1px solid var(--red)" }}>{err}</p>}<Btn warm disabled={l} onClick={async () => { setErr(""); if (!name.trim() || !email || !pass) return setErr("Vyplňte vše"); if (pass.length < 6) return setErr("Min. 6 znaků"); setL(true); try { const r = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${import.meta.env.VITE_FIREBASE_API_KEY}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password: pass, displayName: name.trim(), returnSecureToken: false }) }); const d = await r.json(); if (d.error) { setErr(d.error.message); setL(false); return; } await setDoc(doc(db, "users", d.localId), { name: name.trim(), email, role: "employee", notify: false, notifyEmail: "", fcmToken: null, defaultSchedule: null, setupDone: false, vacationTotal: 20, sickTotal: 5, whateverTotal: 3, vacationUsed: 0, sickUsed: 0, whateverUsed: 0, createdAt: new Date().toISOString() }); onDone(`Přidán: ${name.trim()}`); } catch (e) { setErr(e.message); } setL(false); }} style={{ width: "100%" }}>Přidat</Btn></div>; }
 function NoteInput({ onSubmit }) { const [n, setN] = useState(""); return <div><Input value={n} onChange={e => setN(e.target.value)} placeholder="Přijdu o 20 min později" /><Btn warm onClick={() => onSubmit(n)} style={{ width: "100%", marginTop: 4 }}>Uložit poznámku</Btn></div>; }
 
 function VacRangeF({ onSubmit }) {
@@ -625,7 +670,7 @@ function DirectSwapF({ targetEmp, dateLabel, dateISO, targetDay, targetShift, on
     <div style={{ padding: 16, background: "var(--bg3)", border: "1px solid var(--brd)", marginBottom: 16 }}>
       <div style={{ fontSize: 13, color: "var(--tx3)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8, fontFamily: "'Barlow Condensed',sans-serif" }}>Požádat o výměnu</div>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <div style={{ width: 40, height: 40, background: targetEmp.team === "L1" ? "var(--l1)" : "var(--sd)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17, fontWeight: 600, color: "#fff" }}>{targetEmp.name.charAt(0)}</div>
+        <div style={{ width: 40, height: 40, background: "var(--acc2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17, fontWeight: 600, color: "#fff" }}>{targetEmp.name.charAt(0)}</div>
         <div>
           <div style={{ fontWeight: 600, fontSize: 17, color: "var(--w)" }}>{targetEmp.name}</div>
           <div style={{ fontSize: 14, color: "var(--acc2)", fontFamily: "'IBM Plex Mono',monospace" }}>{dateLabel} · {targetShift}</div>
@@ -641,11 +686,13 @@ function DirectSwapF({ targetEmp, dateLabel, dateISO, targetDay, targetShift, on
 export default function App() {
   const [authUser, setAuthUser] = useState(undefined); const [profile, setProfile] = useState(null);
   const [view, setView] = useState("schedule"); const [schedView, setSchedView] = useState("day");
-  const [tf, setTf] = useState("all"); const [employees, setEmployees] = useState([]);
+  const [employees, setEmployees] = useState([]);
+  const [intake, setIntake] = useState({}); const [intakeAllow, setIntakeAllow] = useState({}); const [schedMeta, setSchedMeta] = useState({});
   const [wo, setWo] = useState(0); const [schedule, setSchedule] = useState(null);
   const [absences, setAbsences] = useState({}); const [events, setEvents] = useState({});
   const [swaps, setSwaps] = useState([]); const [selCell, setSelCell] = useState(null);
   const [proposals, setProposals] = useState([]);
+  const [allSchedules, setAllSchedules] = useState({}); const [resolveTarget, setResolveTarget] = useState(null);
   const [modal, setModal] = useState(null); const [notifs, setNotifs] = useState([]);
   const [logs, setLogs] = useState([]); const [notes, setNotes] = useState({});
   const [rules, setRules] = useState({ ...RULE_DEFAULTS, allowAllDnD: false });
@@ -692,18 +739,55 @@ export default function App() {
   const wh = wd.map(d => HMAP[d] || null);
   // Analýza pravidel nového modelu (jen pracovní dny bez svátku)
   const analysis = useMemo(() => {
-    const res = analyzeWeek(cs, absences, employees, rules);
+    const res = analyzeWeek(cs, absences, employees, rules, intake, intakeAllow);
     const isHol = day => !!wh[DAYS.indexOf(day)];
     return {
       violations: res.violations.filter(v => !v.day || !isHol(v.day)),
       problems: res.problems.filter(p => !isHol(p.day)),
       weeklyHO: res.weeklyHO,
     };
-  }, [cs, absences, employees, rules, wh.join("|")]);
+  }, [cs, absences, employees, rules, wh.join("|"), intake, intakeAllow]);
 
-  useEffect(() => { const u = onAuthStateChanged(auth, async u => { if (u) { setAuthUser(u); const s = await getDoc(doc(db, "users", u.uid)); if (s.exists()) setProfile({ id: u.uid, ...s.data() }); else setProfile({ id: u.uid, name: u.displayName || u.email, role: "employee", team: "L1", setupDone: false }); initPush(u.uid); } else { setAuthUser(null); setProfile(null); } }); return u; }, []);
+  // ═══ FÉROVOST: počítadla 8:00 / 10:00 / HO napříč posledními ~16 týdny + hlídač ═══
+  const FAIR_WEEKS = 16, FAIR_SPREAD = 3;
+  const fairness = useMemo(() => {
+    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - FAIR_WEEKS * 7);
+    const cutoffKey = wKey(cutoff);
+    const tally = {};
+    const active = employees.filter(e => e.role !== "admin");
+    active.forEach(e => tally[e.id] = { eight: 0, ten: 0, ho: 0, weeks: 0 });
+    Object.entries(allSchedules).forEach(([wkKey, data]) => {
+      if (wkKey < cutoffKey || !data.entries) return;
+      const seen = new Set();
+      DAYS.forEach(day => SHIFTS.forEach(sh => (data.entries[day]?.[sh] || []).forEach(en => {
+        const t = tally[en.empId]; if (!t) return;
+        seen.add(en.empId);
+        if (en.ho) t.ho++;
+        else if (sh === "08:00") t.eight++;
+        else if (sh === "10:00") t.ten++;
+      })));
+      seen.forEach(id => tally[id] && tally[id].weeks++);
+    });
+    const rows = active.map(e => ({ id: e.id, name: e.name, ...tally[e.id] })).sort((a, b) => b.eight - a.eight);
+    const metrics = ["eight", "ten", "ho"];
+    const warn = [];
+    metrics.forEach(m => {
+      const vals = rows.filter(r => r.weeks > 0).map(r => r[m]);
+      if (vals.length < 2) return;
+      const max = Math.max(...vals), min = Math.min(...vals);
+      if (max - min > FAIR_SPREAD) {
+        const hi = rows.filter(r => r[m] === max && r.weeks > 0).map(r => r.name);
+        const lo = rows.filter(r => r[m] === min && r.weeks > 0).map(r => r.name);
+        const label = m === "eight" ? "směn od 8:00" : m === "ten" ? "směn od 10:00" : "dnů HO";
+        warn.push({ metric: m, spread: max - min, msg: `Nerovnoměrný počet ${label}: nejvíc ${hi.join(", ")} (${max}), nejmíň ${lo.join(", ")} (${min})` });
+      }
+    });
+    return { rows, warn };
+  }, [allSchedules, employees]);
+
+  useEffect(() => { const u = onAuthStateChanged(auth, async u => { if (u) { setAuthUser(u); const s = await getDoc(doc(db, "users", u.uid)); if (s.exists()) setProfile({ id: u.uid, ...s.data() }); else setProfile({ id: u.uid, name: u.displayName || u.email, role: "employee", setupDone: false }); initPush(u.uid); } else { setAuthUser(null); setProfile(null); } }); return u; }, []);
   useEffect(() => { const u = onSnapshot(collection(db, "users"), s => { const e = s.docs.map(d => ({ id: d.id, ...d.data() })); setEmployees(e); if (profile) { const m = e.find(x => x.id === profile.id); if (m) setProfile(p => ({ ...p, ...m })); } }); return u; }, [profile?.id]);
-  useEffect(() => { const u = onSnapshot(doc(db, "schedules", wk), s => { if (s.exists()) { const d = s.data(); setSchedule(d.entries || null); setAbsences(d.absences || {}); setEvents(d.events || {}); setNotes(d.notes || {}); } else { setSchedule(null); setAbsences({}); setEvents({}); setNotes({}); } }); return u; }, [wk]);
+  useEffect(() => { const u = onSnapshot(doc(db, "schedules", wk), s => { if (s.exists()) { const d = s.data(); setSchedule(d.entries || null); setAbsences(d.absences || {}); setEvents(d.events || {}); setNotes(d.notes || {}); setIntake(d.intake || {}); setIntakeAllow(d.intakeAllow || {}); setSchedMeta({ at: d.modifiedAt, by: d.modifiedBy }); } else { setSchedule(null); setAbsences({}); setEvents({}); setNotes({}); setIntake({}); setIntakeAllow({}); setSchedMeta({}); } }); return u; }, [wk]);
 
   // Auto-sync GCal when ANY week's schedule changes affecting current user
   // Listens to schedules collection and syncs the affected week if user has events there
@@ -735,19 +819,46 @@ export default function App() {
   }, [profile?.id, profile?.gcalEnabled, employees]);
   useEffect(() => { const u = onSnapshot(collection(db, "swapRequests"), s => setSwaps(s.docs.map(d => ({ id: d.id, ...d.data() })))); return u; }, []);
   useEffect(() => { const u = onSnapshot(collection(db, "changeProposals"), s => setProposals(s.docs.map(d => ({ id: d.id, ...d.data() })))); return u; }, []);
+  // Všechny rozvrhy pro férovostní počítadla (malý tým → pár desítek dokumentů)
+  useEffect(() => { const u = onSnapshot(collection(db, "schedules"), s => { const m = {}; s.docs.forEach(d => m[d.id] = d.data()); setAllSchedules(m); }); return u; }, []);
   useEffect(() => { const u = onSnapshot(doc(db, "rules", "global"), s => { if (s.exists()) setRules(s.data()); }); return u; }, []);
   useEffect(() => { const u = onSnapshot(collection(db, "auditLog"), s => { const a = s.docs.map(d => ({ id: d.id, ...d.data() })); a.sort((a, b) => (b.time || "").localeCompare(a.time || "")); setLogs(a.slice(0, 100)); }); return u; }, []);
 
   const notify = msg => { const n = { id: uid(), msg, time: new Date().toLocaleTimeString("cs") }; setNotifs(p => [n, ...p]); setTimeout(() => setNotifs(p => p.filter(x => x.id !== n.id)), 5000); };
+  const hardSync = async () => {
+    notify("Synchronizuji…");
+    try {
+      if ("caches" in window) { const ks = await caches.keys(); await Promise.all(ks.map(k => caches.delete(k))); }
+      if (navigator.serviceWorker) { const rs = await navigator.serviceWorker.getRegistrations(); await Promise.all(rs.map(r => r.unregister())); }
+    } catch { }
+    // cache-busting reload
+    const u = new URL(window.location.href); u.searchParams.set("_sync", Date.now()); window.location.replace(u.toString());
+  };
   const log = async msg => { try { await addDoc(collection(db, "auditLog"), { msg, time: new Date().toISOString(), week: wk, userId: profile?.id }); } catch { } };
-  const saveS = async en => {
-    await setDoc(doc(db, "schedules", wk), { entries: en, weekStart: wk, modifiedAt: new Date().toISOString(), modifiedBy: profile?.id }, { merge: true });
-    // Auto-sync to Google Calendar if enabled
-    if (profile?.gcalEnabled && getGcalToken()) {
-      setTimeout(async () => {
-        try { await syncWeekToGCal(profile.id, wd, en || cs, employees, absences); } catch { }
-      }, 1500);
-    }
+
+  /* ═══ TRANSAKČNÍ ZÁPIS — čte čerstvá data uvnitř transakce, aplikuje jen svou změnu.
+     Tím se dva souběžné zásahy nepřepíšou (konec lost-update). ═══ */
+  const txSchedule = (mutate, weekKey = wk) => {
+    const ref = doc(db, "schedules", weekKey);
+    return runTransaction(db, async t => {
+      const snap = await t.get(ref);
+      const data = snap.exists() ? snap.data() : {};
+      const entries = data.entries ? dc(data.entries) : dc(buildDef(employees));
+      const absences = data.absences ? { ...data.absences } : {};
+      const res = mutate({ entries, absences }) || {};
+      const payload = { entries: res.entries || entries, weekStart: weekKey, modifiedAt: new Date().toISOString(), modifiedBy: profile?.id };
+      if (res.absences) payload.absences = res.absences;
+      t.set(ref, payload, { merge: true });
+    });
+  };
+  // Optimistické zobrazení pro autora + autoritativní transakce; onSnapshot pak sladí všechny
+  const editSchedule = (mutate, msg) => {
+    const opt = mutate({ entries: dc(cs), absences: { ...absences } }) || {};
+    if (opt.entries) setSchedule(opt.entries);
+    if (opt.absences) setAbsences(opt.absences);
+    txSchedule(mutate)
+      .then(() => { if (msg) notify(msg); if (profile?.gcalEnabled && getGcalToken()) setTimeout(() => syncWeekToGCal(profile.id, wd, opt.entries || cs, employees, opt.absences || absences).catch(() => {}), 1500); })
+      .catch(err => { console.error("editSchedule:", err); notify("Změna se neuložila — zkuste to znovu"); });
   };
   const eN = (emp, msg) => { if (emp?.notify) callGAS("sendEmail", { to: emp.notifyEmail || emp.email, employeeName: emp.name, changeDescription: msg, weekLabel: fmtW(cw) }); };
 
@@ -761,40 +872,46 @@ export default function App() {
       // Permission: admin OR self OR global flag (jeden tým — bez týmového omezení)
       const allowedAll = rules?.allowAllDnD === true;
       if (!isA && !allowedAll && d.empId !== profile?.id) return;
-      const s = dc(cs); const f = s[d.day]?.[d.shift]; if (!f) return;
-      const i = f.findIndex(x => x.empId === d.empId); if (i === -1) return;
-      const [en] = f.splice(i, 1); en.isDefault = false;
-      if (!s[targetDay]) s[targetDay] = {}; if (!s[targetDay][targetShift]) s[targetDay][targetShift] = [];
-      s[targetDay][targetShift].push(en);
-      setSchedule(s); saveS(s); notify(`Přesun: ${ge(d.empId)?.name}`);
+      editSchedule(({ entries: s }) => {
+        const f = s[d.day]?.[d.shift]; if (!f) return {};
+        const i = f.findIndex(x => x.empId === d.empId); if (i === -1) return {};
+        const [en] = f.splice(i, 1); en.isDefault = false;
+        if (!s[targetDay]) s[targetDay] = {}; if (!s[targetDay][targetShift]) s[targetDay][targetShift] = [];
+        s[targetDay][targetShift].push(en); return { entries: s };
+      }, `Přesun: ${ge(d.empId)?.name}`);
     } catch { }
   };
 
-  const moveE = async (eid, fd, fs, td, ts) => { const s = dc(cs); const f = s[fd]?.[fs]; if (!f) return; const i = f.findIndex(e => e.empId === eid); if (i === -1) return; const [en] = f.splice(i, 1); en.isDefault = false; if (!s[td]) s[td] = {}; if (!s[td][ts]) s[td][ts] = []; s[td][ts].push(en); setSchedule(s); await saveS(s); notify(`Přesun: ${ge(eid)?.name}`); };
-  const togHO = async (day, sh, eid) => { const s = dc(cs); const en = s[day]?.[sh]?.find(e => e.empId === eid); if (en) { en.ho = !en.ho; en.isDefault = false; } setSchedule(s); await saveS(s); notify(`HO ${en?.ho ? "ON" : "OFF"}`); };
+  const moveE = (eid, fd, fs, td, ts) => editSchedule(({ entries: s }) => {
+    const f = s[fd]?.[fs]; if (!f) return {};
+    const i = f.findIndex(e => e.empId === eid); if (i === -1) return {};
+    const [en] = f.splice(i, 1); en.isDefault = false;
+    if (!s[td]) s[td] = {}; if (!s[td][ts]) s[td][ts] = []; s[td][ts].push(en); return { entries: s };
+  }, `Přesun: ${ge(eid)?.name}`);
+  const togHO = (day, sh, eid) => editSchedule(({ entries: s }) => {
+    const en = s[day]?.[sh]?.find(e => e.empId === eid); if (en) { en.ho = !en.ho; en.isDefault = false; } return { entries: s };
+  }, "HO přepnuto");
 
-  // ABSENCE: single Firestore write, optimistic
+  // ABSENCE: transakční zápis (řeší souběh) + increment počítadla
   const addAbs = async (eid, day, type) => {
     if (!isA && eid !== profile.id) return;
-    const s = dc(cs);
-    SHIFTS.forEach(sh => { if (s[day]?.[sh]) s[day][sh] = s[day][sh].filter(e => e.empId !== eid); });
     const absKey = fsKey(eid, day);
-    const newAbs = { ...absences, [absKey]: type };
-    setSchedule(s); setAbsences(newAbs);
+    const emp = ge(eid);
     try {
-      // SINGLE write with both entries and absence
-      const writeData = { entries: s, weekStart: wk, modifiedAt: new Date().toISOString(), modifiedBy: profile?.id, absences: newAbs };
-      await setDoc(doc(db, "schedules", wk), writeData, { merge: true });
-      const emp = ge(eid);
+      await txSchedule(({ entries: s, absences: a }) => {
+        SHIFTS.forEach(sh => { if (s[day]?.[sh]) s[day][sh] = s[day][sh].filter(e => e.empId !== eid); });
+        return { entries: s, absences: { ...a, [absKey]: type } };
+      });
+      // optimistické lokální sladění
+      setAbsences(prev => ({ ...prev, [absKey]: type }));
       if (emp && !["doctor", "training", "half_ho"].includes(type)) {
         const f = type === "sick" ? "sickUsed" : type === "vacation" || type === "half_vacation" ? "vacationUsed" : type === "whatever" ? "whateverUsed" : null;
-        if (f) await updateDoc(doc(db, "users", eid), { [f]: (emp[f] || 0) + (type.startsWith("half_") ? 0.5 : 1) });
+        if (f) await updateDoc(doc(db, "users", eid), { [f]: increment(type.startsWith("half_") ? 0.5 : 1) });
       }
       const al = ABS.find(a => a.id === type)?.label;
       notify(`${emp?.name}: ${al}`); log(`${emp?.name}: ${al} ${day}`);
-      // Auto-sync GCal
       if (profile?.gcalEnabled && getGcalToken() && eid === profile.id) {
-        setTimeout(() => syncWeekToGCal(profile.id, wd, s, employees, newAbs).catch(() => {}), 1500);
+        setTimeout(() => syncWeekToGCal(profile.id, wd, cs, employees, { ...absences, [absKey]: type }).catch(() => {}), 1500);
       }
     } catch (err) { console.error("addAbs:", err); notify("Chyba: " + err.message); }
   };
@@ -809,26 +926,13 @@ export default function App() {
       const dow = current.getDay();
       if (dow >= 1 && dow <= 5) { // skip weekends
         const dayName = DAYS[dow - 1];
-        const dateStr = localISO(current);
         const weekStart = wKey(current);
-        // Determine which week this day belongs to
-        const s = dc(cs);
-        SHIFTS.forEach(sh => { if (s[dayName]?.[sh]) s[dayName][sh] = s[dayName][sh].filter(e => e.empId !== eid); });
         const ak = fsKey(eid, dayName);
-        if (weekStart === wk) {
-          // Same week - update local state too
-          const newAbs = { ...absences, [ak]: type };
-          setSchedule(s); setAbsences(newAbs);
-          await setDoc(doc(db, "schedules", wk), { entries: s, absences: newAbs, modifiedAt: new Date().toISOString() }, { merge: true });
-        } else {
-          // Different week - just write to Firestore
-          const snap = await getDoc(doc(db, "schedules", weekStart));
-          const weekData = snap.exists() ? snap.data() : {};
-          const weekEntries = weekData.entries ? dc(weekData.entries) : dc(buildDef(employees));
-          SHIFTS.forEach(sh => { if (weekEntries[dayName]?.[sh]) weekEntries[dayName][sh] = weekEntries[dayName][sh].filter(e => e.empId !== eid); });
-          const weekAbs = { ...(weekData.absences || {}), [ak]: type };
-          await setDoc(doc(db, "schedules", weekStart), { entries: weekEntries, absences: weekAbs, weekStart, modifiedAt: new Date().toISOString() }, { merge: true });
-        }
+        await txSchedule(({ entries: s, absences: a }) => {
+          SHIFTS.forEach(sh => { if (s[dayName]?.[sh]) s[dayName][sh] = s[dayName][sh].filter(e => e.empId !== eid); });
+          return { entries: s, absences: { ...a, [ak]: type } };
+        }, weekStart);
+        if (weekStart === wk) setAbsences(prev => ({ ...prev, [ak]: type }));
         count++;
       }
       current.setDate(current.getDate() + 1);
@@ -837,7 +941,7 @@ export default function App() {
     const emp = ge(eid);
     if (emp && !["doctor", "training"].includes(type)) {
       const f = type === "sick" ? "sickUsed" : type === "vacation" ? "vacationUsed" : type === "whatever" ? "whateverUsed" : null;
-      if (f) await updateDoc(doc(db, "users", eid), { [f]: (emp[f] || 0) + count });
+      if (f) await updateDoc(doc(db, "users", eid), { [f]: increment(count) });
     }
     notify(`${ABS.find(a => a.id === type)?.label}: ${count} dní zadáno`);
     log(`Rozsah: ${type} ${fromISO} — ${toISO}`);
@@ -845,30 +949,27 @@ export default function App() {
 
   const removeAbs = async (eid, day) => {
     const k = fsKey(eid, day);
-    const newAbs = { ...absences }; delete newAbs[k];
     const emp = ge(eid);
-    const s = dc(cs);
-    // First, remove employee from ALL shifts on that day to clear duplicates
-    SHIFTS.forEach(sh => { if (s[day]?.[sh]) s[day][sh] = s[day][sh].filter(e => e.empId !== eid); });
-    // Then add them back to their default shift if they have one
-    if (emp?.defaultSchedule?.[day]) {
-      const shift = emp.defaultSchedule[day];
-      if (SHIFTS.includes(shift)) {
-        if (!s[day]) s[day] = {};
-        if (!s[day][shift]) s[day][shift] = [];
-        s[day][shift].push({ empId: eid, ho: emp.defaultSchedule[`${day}_ho`] || false, isDefault: true });
-      }
-    }
-    setAbsences(newAbs); setSchedule(s);
+    const prevType = absences[k];
     try {
-      await updateDoc(doc(db, "schedules", wk), {
-        entries: s,
-        [`absences.${k}`]: deleteField(),
-        modifiedAt: new Date().toISOString()
+      await txSchedule(({ entries: s, absences: a }) => {
+        SHIFTS.forEach(sh => { if (s[day]?.[sh]) s[day][sh] = s[day][sh].filter(e => e.empId !== eid); });
+        if (emp?.defaultSchedule?.[day]) {
+          const shift = emp.defaultSchedule[day];
+          if (SHIFTS.includes(shift)) { if (!s[day]) s[day] = {}; if (!s[day][shift]) s[day][shift] = []; s[day][shift].push({ empId: eid, ho: emp.defaultSchedule[`${day}_ho`] || false, isDefault: true }); }
+        }
+        const na = { ...a }; delete na[k];
+        return { entries: s, absences: na };
       });
+      setAbsences(prev => { const n = { ...prev }; delete n[k]; return n; });
+      // refundace počítadla (dřív se nevracelo)
+      if (emp && prevType && !["doctor", "training", "half_ho"].includes(prevType)) {
+        const f = prevType === "sick" ? "sickUsed" : prevType === "vacation" || prevType === "half_vacation" ? "vacationUsed" : prevType === "whatever" ? "whateverUsed" : null;
+        if (f) await updateDoc(doc(db, "users", eid), { [f]: increment(prevType.startsWith("half_") ? -0.5 : -1) });
+      }
       notify("Nepřítomnost odebrána, směna obnovena");
       if (profile?.gcalEnabled && getGcalToken() && eid === profile.id) {
-        setTimeout(() => syncWeekToGCal(profile.id, wd, s, employees, newAbs).catch(() => {}), 1500);
+        setTimeout(() => syncWeekToGCal(profile.id, wd, cs, employees, absences).catch(() => {}), 1500);
       }
     } catch (err) { console.error("removeAbs:", err); notify("Chyba"); }
   };
@@ -1028,9 +1129,10 @@ export default function App() {
   const requestHO = async (day, grant) => {
     const alt = { kind: grant ? "grantHO" : "dropHO", empId: profile.id, day };
     if (grant) {
+      if (intake[day] && !(intakeAllow[day] || []).includes(profile.id)) { notify(`${day} je den Nástupů — HO jen s výjimkou od admina`); return; }
       if ((analysis.weeklyHO[profile.id] || 0) >= (rules.hoPerWeek ?? 2)) { notify(`Strop ${rules.hoPerWeek ?? 2}× HO týdně je vyčerpán`); return; }
       const sim = applyAlt(dc(cs), alt);
-      const res = analyzeWeek(sim, absences, employees, rules);
+      const res = analyzeWeek(sim, absences, employees, rules, intake, intakeAllow);
       const crit = res.violations.find(v => v.sev === "crit" && v.day === day);
       if (crit) { notify(`Nelze: ${crit.msg}`); return; }
       if (res.violations.some(v => v.sev === "warn" && v.day === day && v.msg.includes("na HO"))) { notify(`Nelze: ${day} je HO kapacita plná`); return; }
@@ -1038,23 +1140,37 @@ export default function App() {
     await createProposal(alt, grant ? "žádost o home office" : "žádost o zrušení home office", { [profile.id]: true });
   };
 
-  // Přiřazení vzorce (admin) — výměna, pokud je vzorec obsazen
-  const assignPattern = async (eid, key) => {
-    const pat = PATTERNS.find(p => p.key === key); if (!pat) return;
-    const holder = employees.find(e => e.pattern === key && e.id !== eid && e.role !== "admin");
-    const me = ge(eid);
-    if (holder && me?.pattern) {
-      const myPat = PATTERNS.find(p => p.key === me.pattern);
-      if (myPat) await updateDoc(doc(db, "users", holder.id), { pattern: myPat.key, defaultSchedule: patternToDefault(myPat.plan), setupDone: true });
-    } else if (holder) {
-      await updateDoc(doc(db, "users", holder.id), { pattern: null });
-    }
-    await updateDoc(doc(db, "users", eid), { pattern: key, defaultSchedule: patternToDefault(pat.plan), setupDone: true });
-    notify(`${me?.name}: vzorec ${key}${holder ? ` (výměna s ${holder.name})` : ""}`);
-    log(`Vzorec ${key} → ${me?.name}${holder ? `, výměna s ${holder.name}` : ""}`);
+  // ═══ NÁSTUPY (admin) ═══
+  const toggleIntake = async day => {
+    const on = !intake[day];
+    setIntake(prev => ({ ...prev, [day]: on })); // optimistické
+    await setDoc(doc(db, "schedules", wk), { [`intake.${day}`]: on, weekStart: wk, modifiedAt: new Date().toISOString(), modifiedBy: profile?.id }, { merge: true });
+    notify(on ? `${day} označen jako Nástupy` : `${day} už není Nástupy`); log(`Nástupy ${day}: ${on ? "zapnuto" : "vypnuto"}`);
+  };
+  const allowIntakeException = async (day, eid) => {
+    const cur = intakeAllow[day] || [];
+    if (cur.includes(eid)) return;
+    await setDoc(doc(db, "schedules", wk), { [`intakeAllow.${day}`]: [...cur, eid], modifiedAt: new Date().toISOString() }, { merge: true });
+    notify(`Výjimka pro ${ge(eid)?.name} v ${day}`); log(`Nástupy výjimka: ${ge(eid)?.name} ${day}`);
   };
 
-  const exportCSV = () => { let csv = "\ufeffDen,Směna,Jméno,Tým,HO\n"; DAYS.forEach(d => SHIFTS.forEach(sh => (cs[d]?.[sh] || []).forEach(en => { const e = ge(en.empId); if (e) csv += `${d},${sh},${e.name},${e.team},${en.ho ? "Ano" : "Ne"}\n`; }))); const b = new Blob([csv], { type: "text/csv;charset=utf-8;" }); const u = URL.createObjectURL(b); Object.assign(document.createElement("a"), { href: u, download: `rozvrh_${wk}.csv` }).click(); };
+  // Předvyplnění rozvrhu dle preferencí — napasuje PRESET na uživatele podle jména
+  const applyPreset = async () => {
+    if (!confirm("Předvyplnit výchozí rozvrh dle preferencí členů? Přepíše stávající výchozí rozvrhy (týdenní rozpisy zůstanou).")) return;
+    let n = 0, miss = [], renamed = [];
+    for (const emp of employees.filter(e => e.role !== "admin")) {
+      let name = emp.name;
+      if (RENAME[name]) { const nn = RENAME[name]; await updateDoc(doc(db, "users", emp.id), { name: nn }); renamed.push(`${name}→${nn}`); name = nn; }
+      const ds = PRESET[name];
+      if (!ds) { miss.push(name); continue; }
+      await updateDoc(doc(db, "users", emp.id), { defaultSchedule: ds, setupDone: true });
+      n++;
+    }
+    notify(`Předvyplněno pro ${n} lidí${renamed.length ? ` · přejmenováno: ${renamed.join(", ")}` : ""}${miss.length ? ` (bez předvolby: ${miss.join(", ")})` : ""}`);
+    log(`Rozvrh předvyplněn dle preferencí (${n})${renamed.length ? `, přejmenováno ${renamed.join(", ")}` : ""}`);
+  };
+
+  const exportCSV = () => { let csv = "\ufeffDen,Směna,Jméno,HO\n"; DAYS.forEach(d => SHIFTS.forEach(sh => (cs[d]?.[sh] || []).forEach(en => { const e = ge(en.empId); if (e) csv += `${d},${sh},${e.name},${en.ho ? "Ano" : "Ne"}\n`; }))); const b = new Blob([csv], { type: "text/csv;charset=utf-8;" }); const u = URL.createObjectURL(b); Object.assign(document.createElement("a"), { href: u, download: `rozvrh_${wk}.csv` }).click(); };
 
   if (authUser === undefined) return <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center" }}><style>{CSS}</style><div style={{ color: "var(--tx3)", fontSize: 14, letterSpacing: 4, fontFamily: "'Barlow Condensed',sans-serif", animation: "pulse 1.5s infinite" }}>SHIFTFLOW</div></div>;
   if (!authUser) return <AuthScreen />;
@@ -1066,9 +1182,9 @@ export default function App() {
   const visibleProps = openProps.filter(p => isA || p.affected?.includes(profile.id));
   const myPendingProps = openProps.filter(p => isA ? !p.consents?.admin : (p.affected?.includes(profile.id) && !p.consents?.[profile.id]));
   const probBadge = isA ? analysis.problems.length : 0;
-  const NAV = [{ id: "schedule", l: "Rozvrh", ic: "▦", b: 0 }, { id: "proposals", l: "Návrhy", ic: "⚑", b: myPendingProps.length + probBadge }, { id: "swaps", l: "Výměny", ic: "⇄", b: openSw.length }, ...(isA ? [{ id: "people", l: "Tým", ic: "◉", b: 0 }] : []), { id: "stats", l: "Stats", ic: "◫", b: 0 }, { id: "log", l: "Log", ic: "≡", b: 0 }, ...(isA ? [{ id: "patterns", l: "Vzorce", ic: "⊞", b: 0 }, { id: "defaults", l: "Default", ic: "✎", b: 0 }] : []), { id: "settings", l: "Nastavení", ic: "⚙", b: 0 }];
+  const NAV = [{ id: "schedule", l: "Rozvrh", ic: "▦", b: 0 }, { id: "proposals", l: "Návrhy", ic: "⚑", b: myPendingProps.length + probBadge }, { id: "swaps", l: "Výměny", ic: "⇄", b: openSw.length }, ...(isA ? [{ id: "people", l: "Tým", ic: "◉", b: 0 }] : []), { id: "stats", l: "Stats", ic: "◫", b: 0 }, { id: "log", l: "Log", ic: "≡", b: 0 }, ...(isA ? [{ id: "defaults", l: "Rozvrh (default)", ic: "✎", b: 0 }] : []), { id: "settings", l: "Nastavení", ic: "⚙", b: 0 }];
   const dayHol = wh[selDay];
-  const getEntries = (day, shift) => (cs[day]?.[shift] || []).filter(e => { const emp = ge(e.empId); return emp && (tf === "all" || emp.team === tf); });
+  const getEntries = (day, shift) => (cs[day]?.[shift] || []).filter(e => ge(e.empId));
   const getDayAbs = day => Object.entries(absences).filter(([k]) => k.endsWith(`__${day}`)).map(([k, t]) => ({ empId: k.split("__")[0], type: t })).filter(a => ge(a.empId));
 
   // Shift card renderer (reused in day + week views)
@@ -1078,16 +1194,15 @@ export default function App() {
       onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add("over"); }}
       onDragLeave={e => e.currentTarget.classList.remove("over")}
       onDrop={e => handleDrop(day, shift, e)}>
-      {entries.map((en, idx) => { const emp = ge(en.empId); if (!emp) return null; const tc = emp.team === "L1" ? "var(--l1)" : "var(--sd)"; const nk = fsKey(en.empId, day, shift.replace(":", "")); const note = notes[nk]; const isMe = en.empId === profile.id;
+      {entries.map((en, idx) => { const emp = ge(en.empId); if (!emp) return null; const nk = fsKey(en.empId, day, shift.replace(":", "")); const note = notes[nk]; const isMe = en.empId === profile.id;
         return <div key={en.empId} className="ent" draggable={canDrag(en.empId)}
           onDragStart={e => e.dataTransfer.setData("text/plain", JSON.stringify({ empId: en.empId, day, shift }))}
           onClick={() => isA ? setSelCell({ day, shift, empId: en.empId }) : isMe && setModal({ type: "myshift", day, shift })}
           style={{ gap: 10, padding: "12px 14px", borderBottom: idx < entries.length - 1 ? "1px solid var(--brd)" : "none" }}>
-          <div style={{ width: 3, height: 24, background: tc }} />
+          <div style={{ width: 3, height: 24, background: en.ho ? "var(--grn)" : "var(--acc2)" }} />
           <span style={{ fontWeight: 500, color: "var(--w)", flex: 1 }}>{emp.name}</span>
           {!isA && !isMe && <button title={`Požádat ${emp.name} o výměnu`} onClick={e => { e.stopPropagation(); setModal({ type: "directSwap", targetEmp: emp, targetDay: day, targetShift: shift }); }} style={{ background: "none", border: "1px solid var(--acc2)", color: "var(--acc2)", width: 26, height: 26, cursor: "pointer", fontSize: 13, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontFamily: "'IBM Plex Mono',monospace" }}>⇄</button>}
           {note && <span title={note} style={{ color: "var(--acc2)", cursor: "help", fontSize: 15, fontWeight: 700, border: "1px solid var(--acc2)", width: 22, height: 22, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>i</span>}
-          <Badge small color={tc}>{emp.team}</Badge>
           {en.ho && <Badge small color="var(--grn)">HO</Badge>}
         </div>; })}
       {entries.length === 0 && <div style={{ padding: "14px", color: "var(--tx3)", fontSize: 14 }}>—</div>}
@@ -1109,6 +1224,7 @@ export default function App() {
       <header className="pg" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: "1px solid var(--bt)" }}>
         <div style={{ fontSize: 14, color: "var(--tx2)", fontFamily: "'Barlow Condensed',sans-serif" }}>{profile.name} · <Badge small color={isA ? "var(--amb)" : "var(--acc)"}>{isA ? "ADM" : "CREW"}</Badge></div>
         <div style={{ display: "flex", gap: 6 }}>
+          <button onClick={hardSync} title="Sync — načíst čerstvý stav" style={{ background: "none", border: "1px solid var(--brd2)", color: "var(--acc2)", width: 38, height: 38, cursor: "pointer", fontSize: 15, display: "flex", alignItems: "center", justifyContent: "center" }}>⟳</button>
           {isMobile && <button onClick={() => setTheme(t => t === "light" ? "dark" : "light")} style={{ background: "none", border: "1px solid var(--brd2)", width: 38, height: 38, cursor: "pointer", color: "var(--tx2)", fontSize: 14 }}>{theme === "light" ? "●" : "○"}</button>}
           <button onClick={() => signOut(auth)} style={{ background: "none", border: "1px solid var(--brd2)", color: "var(--tx3)", width: 38, height: 38, cursor: "pointer", fontSize: 13 }}>↪</button>
         </div>
@@ -1121,33 +1237,40 @@ export default function App() {
           {view === "schedule" && <div>
             {/* Week nav */}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
-              <button onClick={() => setWo(w => w - 1)} style={{ width: 44, height: 44, border: "1px solid var(--brd2)", background: "transparent", color: "var(--tx)", cursor: "pointer", fontSize: 18 }}>‹</button>
-              <div style={{ textAlign: "center" }}>
+              <button onClick={() => setWo(w => w - 1)} aria-label="Předchozí týden" style={{ width: 44, height: 44, border: "1px solid var(--brd2)", background: "transparent", color: "var(--tx)", cursor: "pointer", fontSize: 22, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>‹</button>
+              <div style={{ textAlign: "center", minWidth: 190 }}>
                 <div style={{ fontSize: 18, fontWeight: 500, color: "var(--w)", fontFamily: "'IBM Plex Mono',monospace" }}>{fmtW(cw)}</div>
-                <div style={{ fontSize: 12, color: wo === 0 ? "var(--acc2)" : "var(--tx3)", textTransform: "uppercase", letterSpacing: 1 }}>{wo === 0 ? "Aktuální týden" : `${wo > 0 ? "+" : ""}${wo}`}</div>
+                <div style={{ fontSize: 12, color: wo === 0 ? "var(--acc2)" : "var(--tx3)", textTransform: "uppercase", letterSpacing: 1 }}>{wo === 0 ? "Aktuální týden" : `${wo > 0 ? "+" : ""}${wo} týd.`}</div>
               </div>
-              <button onClick={() => setWo(w => w + 1)} style={{ width: 44, height: 44, border: "1px solid var(--brd2)", background: "transparent", color: "var(--tx)", cursor: "pointer", fontSize: 18 }}>›</button>
-              <div style={{ position: "relative" }}>
-                <input type="date" onChange={e => {
+              <button onClick={() => setWo(w => w + 1)} aria-label="Další týden" style={{ width: 44, height: 44, border: "1px solid var(--brd2)", background: "transparent", color: "var(--tx)", cursor: "pointer", fontSize: 22, lineHeight: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>›</button>
+              <label style={{ position: "relative", width: 44, height: 44, display: "inline-flex", alignItems: "center", justifyContent: "center", border: "1px solid var(--brd2)", cursor: "pointer", color: "var(--tx)" }} title="Přejít na datum">
+                <span style={{ fontSize: 18, pointerEvents: "none" }}>📅</span>
+                <input type="date" aria-label="Přejít na datum" onChange={e => {
                   if (!e.target.value) return;
                   const picked = new Date(e.target.value + "T00:00:00");
                   const today = new Date(); today.setHours(0, 0, 0, 0);
                   const pickedMon = getMon(picked); const todayMon = getMon(today);
                   const diffDays = Math.round((pickedMon - todayMon) / (1000 * 60 * 60 * 24));
-                  const newWo = Math.round(diffDays / 7);
-                  setWo(newWo);
-                  // Set day pill to picked day if weekday
+                  setWo(Math.round(diffDays / 7));
                   const dow = picked.getDay();
                   if (dow >= 1 && dow <= 5) goDay(dow - 1);
-                }} style={{ width: 44, height: 44, border: "1px solid var(--brd2)", background: "transparent", color: "var(--tx)", cursor: "pointer", fontSize: 14, padding: "0 6px", fontFamily: "'IBM Plex Mono',monospace" }} title="Vyberte datum" />
-              </div>
+                }} style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%", height: "100%" }} />
+              </label>
               {wo !== 0 && <Btn small ghost onClick={() => setWo(0)}>Dnes</Btn>}
             </div>
 
             {/* Porušení pravidel nového modelu */}
             {analysis.violations.length > 0 && <div className="gl" style={{ padding: "10px 14px", marginBottom: 12, borderLeft: "3px solid var(--red)" }}>
-              {analysis.violations.map((v, i) => <div key={i} style={{ fontSize: 13, color: v.sev === "crit" ? "var(--red)" : "var(--amb)", padding: "2px 0", fontWeight: v.sev === "crit" ? 600 : 400 }}>{v.sev === "crit" ? "⛔" : "⚠️"} {v.empId ? `${ge(v.empId)?.name}: ` : ""}{v.msg}</div>)}
+              {analysis.violations.map((v, i) => <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: v.sev === "crit" ? "var(--red)" : "var(--amb)", padding: "2px 0", fontWeight: v.sev === "crit" ? 600 : 400 }}>
+                <span style={{ flex: 1 }}>{v.sev === "crit" ? "⛔" : "⚠️"} {v.empId && !v.intake ? `${ge(v.empId)?.name}: ` : ""}{v.msg}</span>
+                {isA && v.intake && v.empId && !(intakeAllow[v.day] || []).includes(v.empId) && <Btn small onClick={() => allowIntakeException(v.day, v.empId)}>Povolit výjimku</Btn>}
+              </div>)}
               {isA && analysis.problems.length > 0 && <Btn small warm onClick={() => switchV("proposals")} style={{ marginTop: 8 }}>⚑ Zobrazit návrhy řešení ({analysis.problems.length})</Btn>}
+            </div>}
+
+            {/* Freshness — kdo a kdy naposledy upravil (real-time) */}
+            {schedMeta.at && <div style={{ fontSize: 11, color: "var(--tx3)", fontFamily: "'IBM Plex Mono',monospace", marginBottom: 10 }}>
+              aktualizováno {new Date(schedMeta.at).toLocaleTimeString("cs", { hour: "2-digit", minute: "2-digit" })}{schedMeta.by && ge(schedMeta.by) ? ` · ${ge(schedMeta.by).name}` : ""}
             </div>}
 
             {/* View toggle: Den / Týden */}
@@ -1177,12 +1300,22 @@ export default function App() {
                   <div style={{ fontSize: 11, fontFamily: "'IBM Plex Mono',monospace", marginTop: 2 }}>{fmtDate(wd[i])}</div>
                   {it && <span style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--acc2)", display: "block", margin: "2px auto 0" }} />}
                   {hol && <div style={{ fontSize: 7, color: "var(--acc2)" }}>svátek</div>}
+                  {!hol && intake[d] && <div style={{ fontSize: 7, color: "var(--amb)" }}>🎓 nástupy</div>}
                 </button>; })}
               </div>
 
               {/* Banners */}
               {isTd(selDay, wo) && <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 14px", border: "1px solid var(--abrd)", background: "var(--adim)", marginBottom: 12 }}><div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--acc2)" }} /><span style={{ fontFamily: "'Barlow Condensed',sans-serif", fontSize: 12, color: "var(--acc2)", textTransform: "uppercase", letterSpacing: 1.5 }}>Dnes</span></div>}
               {dayHol && <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", border: "1px solid var(--abrd)", background: "var(--adim)", marginBottom: 12 }}><span>🎉</span><span style={{ fontFamily: "'Barlow Condensed',sans-serif", fontWeight: 700, color: "var(--acc2)", textTransform: "uppercase", letterSpacing: 1, fontSize: 14 }}>{dayHol} — volno</span></div>}
+
+              {/* Nástupy: indikátor + admin přepínač */}
+              {!dayHol && (intake[DAYS[selDay]] || isA) && <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 14px", border: `1px solid ${intake[DAYS[selDay]] ? "var(--amb)" : "var(--brd)"}`, background: intake[DAYS[selDay]] ? "rgba(200,112,32,.08)" : "transparent", marginBottom: 12, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 16 }}>🎓</span>
+                <span style={{ fontFamily: "'Barlow Condensed',sans-serif", fontSize: 13, letterSpacing: 1, textTransform: "uppercase", color: intake[DAYS[selDay]] ? "var(--amb)" : "var(--tx3)", flex: 1 }}>
+                  {intake[DAYS[selDay]] ? "Den nástupů — HO jen s výjimkou" : "Běžný den"}
+                </span>
+                {isA && <Btn small warm={!intake[DAYS[selDay]]} danger={intake[DAYS[selDay]]} onClick={() => toggleIntake(DAYS[selDay])}>{intake[DAYS[selDay]] ? "Zrušit Nástupy" : "Označit jako Nástupy"}</Btn>}
+              </div>}
 
               {/* Shifts */}
               <div key={`${selDay}-${wo}`} className={slideDir === 'right' ? 'asr' : 'asl'}>
@@ -1212,6 +1345,8 @@ export default function App() {
                       <div style={{ fontSize: 14, fontWeight: 600, color: td ? "var(--acc2)" : "var(--w)", fontFamily: "'Barlow Condensed',sans-serif" }}>{DAYS_F[i]}</div>
                       <div style={{ fontSize: 11, color: "var(--tx3)", fontFamily: "'IBM Plex Mono',monospace" }}>{fmtDate(wd[i])}</div>
                       {hol && <Badge small color="var(--grn)">{hol}</Badge>}
+                      {!hol && intake[d] && <div style={{ fontSize: 9, color: "var(--amb)", fontFamily: "'Barlow Condensed',sans-serif", letterSpacing: 1 }}>🎓 NÁSTUPY</div>}
+                      {isA && !hol && <button onClick={() => toggleIntake(d)} title={intake[d] ? "Zrušit Nástupy" : "Označit jako Nástupy"} style={{ marginTop: 3, fontSize: 9, fontFamily: "'Barlow Condensed',sans-serif", letterSpacing: .5, textTransform: "uppercase", cursor: "pointer", background: "transparent", border: `1px solid ${intake[d] ? "var(--amb)" : "var(--brd)"}`, color: intake[d] ? "var(--amb)" : "var(--tx3)", padding: "1px 6px" }}>{intake[d] ? "✕ nástupy" : "+ nástupy"}</button>}
                     </th>; })}
                   </tr></thead>
                   <tbody>{SHIFTS.map(shift => <tr key={shift}>
@@ -1221,9 +1356,9 @@ export default function App() {
                         onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add("over"); }}
                         onDragLeave={e => e.currentTarget.classList.remove("over")}
                         onDrop={e => handleDrop(day, shift, e)}>
-                        {entries.map(en => { const emp = ge(en.empId); if (!emp) return null; const tc = emp.team === "L1" ? "var(--l1)" : "var(--sd)"; const isMe = en.empId === profile.id;
+                        {entries.map(en => { const emp = ge(en.empId); if (!emp) return null; const isMe = en.empId === profile.id;
                           return <div key={en.empId} className="ent" draggable={canDrag(en.empId)} onDragStart={e => e.dataTransfer.setData("text/plain", JSON.stringify({ empId: en.empId, day, shift }))} onClick={() => isA ? setSelCell({ day, shift, empId: en.empId }) : isMe && setModal({ type: "myshift", day, shift })} style={{ gap: 4, padding: "6px 8px", marginBottom: 2, background: "var(--bg3)", border: "1px solid var(--brd)", fontSize: 14 }}>
-                            <span style={{ width: 8, height: 3, background: tc }} /><span style={{ fontWeight: 500, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--w)" }}>{emp.name?.split(" ").pop()}</span>
+                            <span style={{ width: 8, height: 3, background: en.ho ? "var(--grn)" : "var(--acc2)" }} /><span style={{ fontWeight: 500, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--w)" }}>{emp.name?.split(" ").pop()}</span>
                             {!isA && !isMe && <button title={`Výměna s ${emp.name}`} onClick={e => { e.stopPropagation(); setModal({ type: "directSwap", targetEmp: emp, targetDay: day, targetShift: shift }); }} style={{ background: "none", border: "1px solid var(--acc2)", color: "var(--acc2)", width: 20, height: 20, cursor: "pointer", fontSize: 10, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, padding: 0 }}>⇄</button>}
                             {en.ho && <Badge small color="var(--grn)">HO</Badge>}
                           </div>; })}
@@ -1280,42 +1415,10 @@ export default function App() {
             {!visibleProps.length && <p style={{ color: "var(--tx3)" }}>Žádné čekající návrhy.</p>}
           </div>}
 
-          {/* ═══ VZORCE (admin) ═══ */}
-          {view === "patterns" && isA && <div>
-            <div style={{ fontSize: 20, fontWeight: 600, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 2, marginBottom: 8, borderBottom: "1px solid var(--brd)", paddingBottom: 12 }}>Vzorce směn</div>
-            <p style={{ fontSize: 13, color: "var(--tx2)", marginBottom: 16 }}>Vzorec = 2 pevné dny HO + jednou týdně směna od 8:00, 9:00 i 10:00. G je bez HO (9:00 denně, o HO lze žádat ad-hoc). Přiřazení obsazeného vzorce provede výměnu.</p>
-            <div className="gl" style={{ overflow: "auto", padding: 0, marginBottom: 20 }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14, minWidth: 560 }}>
-                <thead><tr>
-                  <th style={{ padding: "12px 14px", textAlign: "left", color: "var(--tx3)", borderBottom: "1px solid var(--brd)" }}>Vzorec</th>
-                  {DAYS.map(d => <th key={d} style={{ padding: "12px 8px", textAlign: "center", color: "var(--tx3)", borderBottom: "1px solid var(--brd)" }}>{d}</th>)}
-                  <th style={{ padding: "12px 14px", textAlign: "left", color: "var(--tx3)", borderBottom: "1px solid var(--brd)" }}>Drží</th>
-                </tr></thead>
-                <tbody>{PATTERNS.map(pat => { const holder = employees.find(e => e.pattern === pat.key && e.role !== "admin"); return <tr key={pat.key} style={{ borderBottom: "1px solid var(--brd)" }}>
-                  <td style={{ padding: "10px 14px", fontWeight: 600, color: "var(--acc2)", fontFamily: "'IBM Plex Mono',monospace" }}>{pat.key}</td>
-                  {pat.plan.map((v, i) => <td key={i} style={{ padding: 6, textAlign: "center" }}><span style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 12, color: v === "HO" ? "var(--grn)" : "var(--tx)", border: `1px solid ${v === "HO" ? "var(--grn)" : "var(--brd)"}`, padding: "2px 6px" }}>{v === "HO" ? "HO" : v.slice(0, 2)}</span></td>)}
-                  <td style={{ padding: "10px 14px", color: holder ? "var(--w)" : "var(--tx3)", fontWeight: holder ? 500 : 400 }}>{holder?.name || "—"}</td>
-                </tr>; })}</tbody>
-              </table>
-            </div>
-            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10, fontFamily: "'Barlow Condensed',sans-serif" }}>Přiřazení</div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(240px,1fr))", gap: 10 }}>
-              {employees.filter(e => e.role !== "admin").map(emp => <Card key={emp.id} style={{ padding: 14 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <span style={{ fontWeight: 600, color: "var(--w)", flex: 1 }}>{emp.name}</span>
-                  <select value={emp.pattern || ""} onChange={e => e.target.value && assignPattern(emp.id, e.target.value)} style={{ padding: "8px 10px", border: "1px solid var(--brd2)", background: "var(--bg)", color: "var(--w)", fontFamily: "'IBM Plex Mono',monospace", fontSize: 14, minHeight: 40 }}>
-                    <option value="">—</option>
-                    {PATTERNS.map(p => <option key={p.key} value={p.key}>{p.key}</option>)}
-                  </select>
-                </div>
-              </Card>)}
-            </div>
-          </div>}
-
           {view === "swaps" && <div>
             <div style={{ fontSize: 20, fontWeight: 600, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 2, marginBottom: 20, borderBottom: "1px solid var(--brd)", paddingBottom: 12 }}>Výměny</div>
             {!isA && <Card style={{ marginBottom: 20 }}><Btn warm onClick={() => setModal({ type: "swap", day: DAYS[selDay], shift: SHIFTS[0] })}>+ Nová žádost</Btn></Card>}
-            {openSw.map(sw => { const re = ge(sw.rid); const me = profile.id === sw.rid; const tgt = sw.targetId ? ge(sw.targetId) : null; const isTarget = sw.targetId === profile.id; const can = !isA && !me && (!sw.targetId ? true : isTarget); const dateLabel = sw.dateISO ? new Date(sw.dateISO + "T00:00:00").toLocaleDateString("cs", { weekday: "short", day: "numeric", month: "numeric" }) : `${sw.day} (týden ${sw.week})`; return <Card key={sw.id} style={{ padding: 16, marginBottom: 8 }}><div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}><div><div style={{ fontWeight: 600, fontSize: 17, color: "var(--w)" }}>{re?.name}</div><div style={{ display: "flex", gap: 6, marginTop: 4, alignItems: "center", flexWrap: "wrap" }}><Badge small color="var(--acc2)">{dateLabel} · {sw.sh}</Badge>{re?.team && <Badge small color={re.team === "L1" ? "var(--l1)" : "var(--sd)"}>{re.team}</Badge>}{tgt && <Badge small color="var(--amb)">→ {tgt.name}</Badge>}</div></div><div style={{ display: "flex", gap: 6, alignItems: "center" }}>{can && <Btn warm small onClick={() => doSwap(sw.id, profile.id)}>Přijmout</Btn>}{me && <><Badge color="var(--amb)">Tvoje</Badge><Btn small danger onClick={async () => { if (!confirm("Zrušit žádost?")) return; try { await deleteDoc(doc(db, "swapRequests", sw.id)); notify("Zrušeno"); log(`Zrušena žádost: ${dateLabel}`); } catch (err) { notify("Chyba: " + err.message); } }}>✕ Zrušit</Btn></>}{isA && !me && <Btn small danger onClick={async () => { if (!confirm("Smazat žádost?")) return; try { await deleteDoc(doc(db, "swapRequests", sw.id)); notify("Smazáno"); } catch { notify("Chyba"); } }}>✕</Btn>}</div></div>{sw.comment && <div style={{ marginTop: 8, fontSize: 13, color: "var(--tx2)", padding: "6px 10px", border: "1px solid var(--brd)", background: "var(--bg3)" }}>💬 {sw.comment}</div>}</Card>; })}
+            {openSw.map(sw => { const re = ge(sw.rid); const me = profile.id === sw.rid; const tgt = sw.targetId ? ge(sw.targetId) : null; const isTarget = sw.targetId === profile.id; const can = !isA && !me && (!sw.targetId ? true : isTarget); const dateLabel = sw.dateISO ? new Date(sw.dateISO + "T00:00:00").toLocaleDateString("cs", { weekday: "short", day: "numeric", month: "numeric" }) : `${sw.day} (týden ${sw.week})`; return <Card key={sw.id} style={{ padding: 16, marginBottom: 8 }}><div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}><div><div style={{ fontWeight: 600, fontSize: 17, color: "var(--w)" }}>{re?.name}</div><div style={{ display: "flex", gap: 6, marginTop: 4, alignItems: "center", flexWrap: "wrap" }}><Badge small color="var(--acc2)">{dateLabel} · {sw.sh}</Badge>{tgt && <Badge small color="var(--amb)">→ {tgt.name}</Badge>}</div></div><div style={{ display: "flex", gap: 6, alignItems: "center" }}>{can && <Btn warm small onClick={() => doSwap(sw.id, profile.id)}>Přijmout</Btn>}{me && <><Badge color="var(--amb)">Tvoje</Badge><Btn small danger onClick={async () => { if (!confirm("Zrušit žádost?")) return; try { await deleteDoc(doc(db, "swapRequests", sw.id)); notify("Zrušeno"); log(`Zrušena žádost: ${dateLabel}`); } catch (err) { notify("Chyba: " + err.message); } }}>✕ Zrušit</Btn></>}{isA && !me && <Btn small danger onClick={async () => { if (!confirm("Smazat žádost?")) return; try { await deleteDoc(doc(db, "swapRequests", sw.id)); notify("Smazáno"); } catch { notify("Chyba"); } }}>✕</Btn>}</div></div>{sw.comment && <div style={{ marginTop: 8, fontSize: 13, color: "var(--tx2)", padding: "6px 10px", border: "1px solid var(--brd)", background: "var(--bg3)" }}>💬 {sw.comment}</div>}</Card>; })}
             {!openSw.length && <p style={{ color: "var(--tx3)" }}>Žádné žádosti.</p>}
           </div>}
 
@@ -1324,7 +1427,7 @@ export default function App() {
             <div style={{ marginBottom: 24 }}>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 12 }}>{employees.filter(e => e.role !== "admin").map(emp => <Card key={emp.id}>
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <div style={{ fontWeight: 600, fontSize: 17, color: "var(--w)" }}>{emp.name}{emp.pattern && <Badge small color="var(--acc2)" style={{ marginLeft: 8 }}>{emp.pattern}</Badge>}</div>
+                  <div style={{ fontWeight: 600, fontSize: 17, color: "var(--w)" }}>{emp.name}</div>
                   <div style={{ display: "flex", gap: 4 }}><button onClick={() => setModal({ type: "editDays", emp })} style={{ background: "none", border: "1px solid var(--brd2)", color: "var(--tx3)", cursor: "pointer", width: 34, height: 34, display: "flex", alignItems: "center", justifyContent: "center" }}>✏</button><button onClick={() => delUser(emp.id)} style={{ background: "none", border: "1px solid rgba(192,48,48,.3)", color: "var(--red)", cursor: "pointer", width: 34, height: 34, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button></div>
                 </div>
                 <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>{[{ l: "Dovol.", v: (emp.vacationTotal || 20) - (emp.vacationUsed || 0), c: "var(--sd)" }, { l: "Sick", v: (emp.sickTotal || 5) - (emp.sickUsed || 0), c: "var(--red)" }, { l: "What.", v: (emp.whateverTotal || 3) - (emp.whateverUsed || 0), c: "var(--amb)" }].map(b => <div key={b.l} style={{ textAlign: "center", padding: 8, border: "1px solid var(--brd)" }}><div style={{ fontSize: 20, fontWeight: 600, color: b.c, fontFamily: "'IBM Plex Mono',monospace" }}>{b.v}</div><div style={{ fontSize: 10, color: "var(--tx3)", textTransform: "uppercase" }}>{b.l}</div></div>)}</div>
@@ -1338,11 +1441,42 @@ export default function App() {
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}><div style={{ fontSize: 16, fontWeight: 600, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase" }}>Moje dny</div><button onClick={() => setModal({ type: "editDays", emp: profile })} style={{ background: "none", border: "1px solid var(--brd2)", color: "var(--tx3)", cursor: "pointer", width: 34, height: 34 }}>✏</button></div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>{[{ l: "Dovolená", v: (profile.vacationTotal || 20) - (profile.vacationUsed || 0), t: profile.vacationTotal || 20, c: "var(--sd)" }, { l: "Sick", v: (profile.sickTotal || 5) - (profile.sickUsed || 0), t: profile.sickTotal || 5, c: "var(--red)" }, { l: "Whatever", v: (profile.whateverTotal || 3) - (profile.whateverUsed || 0), t: profile.whateverTotal || 3, c: "var(--amb)" }].map(b => <div key={b.l} style={{ textAlign: "center", padding: 12, border: "1px solid var(--brd)", background: "var(--bg3)" }}><div style={{ fontSize: 28, fontWeight: 600, color: b.c, fontFamily: "'IBM Plex Mono',monospace" }}>{b.v}</div><div style={{ fontSize: 11, color: "var(--tx3)", textTransform: "uppercase" }}>{b.l} (z {b.t})</div></div>)}</div>
             </Card>}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))", gap: 12 }}>{[{ l: "Crew", v: employees.filter(e => e.role !== "admin").length, c: "var(--l1)" }, { l: "Active", v: employees.filter(e => e.setupDone).length, c: "var(--sd)" }, { l: "Swaps", v: openSw.length, c: "var(--amb)" }].map(s => <Card key={s.l}><div style={{ fontSize: 32, fontWeight: 600, color: s.c, fontFamily: "'IBM Plex Mono',monospace" }}>{s.v}</div><div style={{ fontSize: 12, color: "var(--tx3)", textTransform: "uppercase", marginTop: 4 }}>{s.l}</div></Card>)}</div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))", gap: 12 }}>{[{ l: "Crew", v: employees.filter(e => e.role !== "admin").length, c: "var(--acc2)" }, { l: "Active", v: employees.filter(e => e.setupDone).length, c: "var(--grn)" }, { l: "Swaps", v: openSw.length, c: "var(--amb)" }].map(s => <Card key={s.l}><div style={{ fontSize: 32, fontWeight: 600, color: s.c, fontFamily: "'IBM Plex Mono',monospace" }}>{s.v}</div><div style={{ fontSize: 12, color: "var(--tx3)", textTransform: "uppercase", marginTop: 4 }}>{s.l}</div></Card>)}</div>
+
+            {/* ═══ FÉROVOST ═══ */}
+            <div style={{ fontSize: 16, fontWeight: 600, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 1, margin: "28px 0 6px" }}>Férovost · posledních {FAIR_WEEKS} týdnů</div>
+            <p style={{ fontSize: 12, color: "var(--tx3)", marginBottom: 12 }}>Počty odpracovaných směn od 8:00, od 10:00 a dnů home office. Hlídač upozorní, když se rozdíl mezi lidmi zvětší nad {FAIR_SPREAD}.</p>
+            {fairness.warn.length > 0 && <div className="gl" style={{ padding: "10px 14px", marginBottom: 12, borderLeft: "3px solid var(--amb)" }}>
+              {fairness.warn.map((w, i) => <div key={i} style={{ fontSize: 13, color: "var(--amb)", padding: "2px 0" }}>⚠️ {w.msg}</div>)}
+            </div>}
+            {fairness.warn.length === 0 && fairness.rows.some(r => r.weeks > 0) && <div className="gl" style={{ padding: "10px 14px", marginBottom: 12, borderLeft: "3px solid var(--grn)", fontSize: 13, color: "var(--grn)" }}>✓ Rozložení směn i HO je vyrovnané.</div>}
+            <div className="gl" style={{ overflow: "auto", padding: 0 }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14, minWidth: 420 }}>
+                <thead><tr>
+                  {["Člen", "8:00", "10:00", "HO", "Týdnů"].map((h, i) => <th key={h} style={{ padding: "10px 12px", textAlign: i === 0 ? "left" : "center", color: "var(--tx3)", borderBottom: "1px solid var(--brd)", fontFamily: "'Barlow Condensed',sans-serif", letterSpacing: 1 }}>{h}</th>)}
+                </tr></thead>
+                <tbody>{fairness.rows.map(r => {
+                  const maxV = Math.max(1, ...fairness.rows.map(x => Math.max(x.eight, x.ten, x.ho)));
+                  const bar = (v, c) => <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "center" }}><div style={{ width: 40, height: 6, background: "var(--brd)", position: "relative" }}><div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${100 * v / maxV}%`, background: c }} /></div><span style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 13, minWidth: 18, textAlign: "right" }}>{v}</span></div>;
+                  return <tr key={r.id} style={{ borderBottom: "1px solid var(--brd)" }}>
+                    <td style={{ padding: "8px 12px", fontWeight: 600, color: "var(--w)" }}>{r.name}</td>
+                    <td style={{ padding: "8px 12px" }}>{bar(r.eight, "var(--acc2)")}</td>
+                    <td style={{ padding: "8px 12px" }}>{bar(r.ten, "var(--amb)")}</td>
+                    <td style={{ padding: "8px 12px" }}>{bar(r.ho, "var(--grn)")}</td>
+                    <td style={{ padding: "8px 12px", textAlign: "center", fontFamily: "'IBM Plex Mono',monospace", fontSize: 13, color: "var(--tx3)" }}>{r.weeks}</td>
+                  </tr>; })}</tbody>
+              </table>
+            </div>
           </div>}
 
           {view === "log" && <div><div style={{ fontSize: 20, fontWeight: 600, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 2, marginBottom: 20, borderBottom: "1px solid var(--brd)", paddingBottom: 12 }}>Log</div>{logs.map(h => <div key={h.id} style={{ display: "flex", gap: 10, padding: "10px 12px", borderBottom: "1px solid var(--brd)", fontSize: 14 }}><span style={{ fontSize: 12, color: "var(--tx3)", fontFamily: "'IBM Plex Mono',monospace", minWidth: 130 }}>{h.time ? new Date(h.time).toLocaleString("cs") : ""}</span><span style={{ flex: 1 }}>{h.msg}</span></div>)}</div>}
-          {view === "defaults" && isA && <div><div style={{ fontSize: 20, fontWeight: 600, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 2, marginBottom: 20, borderBottom: "1px solid var(--brd)", paddingBottom: 12 }}>Stálý rozvrh</div><DefEditor employees={employees} /></div>}
+          {view === "defaults" && isA && <div><div style={{ fontSize: 20, fontWeight: 600, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 2, marginBottom: 16, borderBottom: "1px solid var(--brd)", paddingBottom: 12 }}>Stálý rozvrh</div>
+            <Card style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--w)", marginBottom: 6 }}>Předvyplnit dle preferencí členů</div>
+              <p style={{ fontSize: 13, color: "var(--tx2)", marginBottom: 12 }}>Nastaví každému výchozí rozvrh podle jeho preferencí (Jirka 8:00 celý týden, Andy nikdy neotevírá, Patrik HO od 8 + páteční 10, Denis ve středu bez 10:00…). Pak lze libovolně ručně upravit níže.</p>
+              <Btn warm onClick={applyPreset}>Předvyplnit rozvrh</Btn>
+            </Card>
+            <DefEditor employees={employees} /></div>}
           {view === "settings" && <div style={{ maxWidth: 560 }}>
             <div style={{ fontSize: 20, fontWeight: 600, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 2, marginBottom: 20, borderBottom: "1px solid var(--brd)", paddingBottom: 12 }}>Nastavení</div>
             <Card style={{ marginBottom: 16 }}>
@@ -1386,7 +1520,7 @@ export default function App() {
             </Card>
             {isA && <Card style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, fontFamily: "'Barlow Condensed',sans-serif" }}>Pravidla směn</div>
-              <Input label="Minimum lidí v kanceláři" type="number" value={rules.officeMin ?? 4} onChange={e => setRules(r => ({ ...r, officeMin: +e.target.value }))} /><Input label="Max HO / den" type="number" value={rules.hoCapDay ?? 3} onChange={e => setRules(r => ({ ...r, hoCapDay: +e.target.value }))} /><Input label="Max HO / osoba / týden" type="number" value={rules.hoPerWeek ?? 2} onChange={e => setRules(r => ({ ...r, hoPerWeek: +e.target.value }))} /><Toggle checked={rules.cover8 !== false} onChange={v => setRules(r => ({ ...r, cover8: v }))} label="8:00 musí být pokryta z kanceláře" /><Toggle checked={rules.cover10 !== false} onChange={v => setRules(r => ({ ...r, cover10: v }))} label="10:00 musí být pokryta z kanceláře" /><div style={{ borderTop: "1px solid var(--brd)", marginTop: 12, paddingTop: 12 }}><Toggle checked={rules.allowAllDnD || false} onChange={v => setRules(r => ({ ...r, allowAllDnD: v }))} label="Povolit Drag & Drop pro všechny" /><p style={{ fontSize: 12, color: "var(--tx3)", marginTop: -8, marginBottom: 12 }}>Zaměstnanci budou moci přesouvat kohokoliv v rozvrhu.</p></div><Btn warm onClick={async () => { await setDoc(doc(db, "rules", "global"), rules); notify("Uloženo"); }}>Uložit pravidla</Btn>
+              <Input label="Minimum lidí v kanceláři" type="number" value={rules.officeMin ?? 4} onChange={e => setRules(r => ({ ...r, officeMin: +e.target.value }))} /><Input label="Minimum v kanceláři od 8:00" type="number" value={rules.min8 ?? 2} onChange={e => setRules(r => ({ ...r, min8: +e.target.value }))} /><Input label="Minimum na 10:00 (vč. HO)" type="number" value={rules.min10 ?? 2} onChange={e => setRules(r => ({ ...r, min10: +e.target.value }))} /><Input label="Max HO / den" type="number" value={rules.hoCapDay ?? 3} onChange={e => setRules(r => ({ ...r, hoCapDay: +e.target.value }))} /><Input label="Max HO / osoba / týden" type="number" value={rules.hoPerWeek ?? 2} onChange={e => setRules(r => ({ ...r, hoPerWeek: +e.target.value }))} /><Toggle checked={rules.cover8 !== false} onChange={v => setRules(r => ({ ...r, cover8: v }))} label="8:00 musí být pokryta z kanceláře" /><Toggle checked={rules.cover10 !== false} onChange={v => setRules(r => ({ ...r, cover10: v }))} label="10:00 musí být pokryta z kanceláře" /><div style={{ borderTop: "1px solid var(--brd)", marginTop: 12, paddingTop: 12 }}><Toggle checked={rules.allowAllDnD || false} onChange={v => setRules(r => ({ ...r, allowAllDnD: v }))} label="Povolit Drag & Drop pro všechny" /><p style={{ fontSize: 12, color: "var(--tx3)", marginTop: -8, marginBottom: 12 }}>Zaměstnanci budou moci přesouvat kohokoliv v rozvrhu.</p></div><Btn warm onClick={async () => { await setDoc(doc(db, "rules", "global"), rules); notify("Uloženo"); }}>Uložit pravidla</Btn>
             </Card>}
             {isA && <Card><div style={{ display: "flex", gap: 8 }}><Btn danger onClick={async () => { await deleteDoc(doc(db, "schedules", wk)); notify("Reset"); }}>Reset týden</Btn><Btn ghost onClick={exportCSV}>CSV</Btn></div></Card>}
           </div>}
@@ -1398,7 +1532,7 @@ export default function App() {
 
     {/* MODALS */}
     <Modal open={!!selCell} onClose={() => setSelCell(null)} title="Akce">{selCell && (() => { const emp = ge(selCell.empId); if (!emp) return null; return <div>
-      <div style={{ padding: 14, background: "var(--bg3)", marginBottom: 16, display: "flex", alignItems: "center", gap: 12 }}><div style={{ width: 40, height: 40, background: emp.team === "L1" ? "var(--l1)" : "var(--sd)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17, fontWeight: 600, color: "#fff" }}>{emp.name.charAt(0)}</div><div><div style={{ fontWeight: 600, fontSize: 17, color: "var(--w)" }}>{emp.name}</div><div style={{ fontSize: 14, color: "var(--tx2)" }}>{selCell.day} · {selCell.shift}</div></div></div>
+      <div style={{ padding: 14, background: "var(--bg3)", marginBottom: 16, display: "flex", alignItems: "center", gap: 12 }}><div style={{ width: 40, height: 40, background: "var(--acc2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17, fontWeight: 600, color: "#fff" }}>{emp.name.charAt(0)}</div><div><div style={{ fontWeight: 600, fontSize: 17, color: "var(--w)" }}>{emp.name}</div><div style={{ fontSize: 14, color: "var(--tx2)" }}>{selCell.day} · {selCell.shift}</div></div></div>
       <Btn onClick={() => { togHO(selCell.day, selCell.shift, selCell.empId); setSelCell(null); }} style={{ width: "100%", marginBottom: 8 }}>Toggle HO</Btn>
       <div style={{ fontSize: 12, color: "var(--tx3)", margin: "14px 0 6px", textTransform: "uppercase", letterSpacing: 1 }}>Přesunout</div>
       <div style={{ display: "flex", gap: 8 }}>{SHIFTS.filter(s => s !== selCell.shift).map(s => <Btn key={s} small style={{ flex: 1 }} onClick={() => { moveE(selCell.empId, selCell.day, selCell.shift, selCell.day, s); setSelCell(null); }}>→ {s}</Btn>)}</div>
@@ -1418,18 +1552,58 @@ export default function App() {
         if (pendingHO) return <div style={{ padding: "12px 14px", border: "1px solid var(--amb)", color: "var(--amb)", fontSize: 14, marginBottom: 12 }}>⚑ Žádost o HO na tento den čeká na schválení.</div>;
         return <Btn warm={!isHO} primary={isHO} onClick={() => { requestHO(modal.day, !isHO); setModal(null); }} style={{ width: "100%", marginBottom: 12 }}>{isHO ? "🏠 Požádat o zrušení Home Office" : "🏠 Požádat o Home Office"}</Btn>; })()}
       <div style={{ fontSize: 12, color: "var(--tx3)", margin: "8px 0 6px", textTransform: "uppercase", letterSpacing: 1 }}>Nepřítomnost</div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>{ABS.map(a => <Btn key={a.id} onClick={() => { addAbs(profile.id, modal.day, a.id); setModal(null); }}>{a.icon} {a.label}</Btn>)}</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>{ABS.map(a => <Btn key={a.id} onClick={() => { const d = modal.day; addAbs(profile.id, d, a.id); setModal(null); setResolveTarget({ day: d, kind: "absence", empId: profile.id }); }}>{a.icon} {a.label}</Btn>)}</div>
+      {(() => { const me = cs[modal?.day]?.[modal?.shift]?.find(e => e.empId === profile.id); if (!me || me.ho) return null;
+        return <><div style={{ fontSize: 12, color: "var(--tx3)", margin: "8px 0 6px", textTransform: "uppercase", letterSpacing: 1 }}>Změnit hodinu</div>
+        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>{SHIFTS.filter(s => s !== modal.shift).map(s => <Btn key={s} onClick={() => { setResolveTarget({ day: modal.day, kind: "shift", empId: profile.id, fromShift: modal.shift, toShift: s }); setModal(null); }} style={{ flex: 1 }}>{s}</Btn>)}</div></>; })()}
       <Btn warm onClick={() => setModal({ type: "swap", day: modal?.day, shift: modal?.shift })} style={{ width: "100%", marginBottom: 10 }}>Požádat o výměnu</Btn>
       <div style={{ fontSize: 12, color: "var(--tx3)", margin: "8px 0 6px", textTransform: "uppercase" }}>Poznámka</div>
       <NoteInput onSubmit={n => { saveNote(profile.id, modal.day, modal.shift, n); setModal(null); }} />
     </div></Modal>
     <Modal open={modal === "myabsence"} onClose={() => setModal(null)} title="Nepřítomnost">
-      <MyAbsF profile={profile} wd={wd} onSubmit={(d, t) => { addAbs(profile.id, d, t); setModal(null); }} />
+      <MyAbsF profile={profile} wd={wd} onSubmit={(d, t) => { addAbs(profile.id, d, t); setModal(null); setResolveTarget({ day: d, kind: "absence", empId: profile.id }); }} />
       <div style={{ borderTop: "1px solid var(--brd)", marginTop: 16, paddingTop: 16 }}>
         <Btn ghost onClick={() => setModal("vacrange")} style={{ width: "100%", fontSize: 14 }}>🗓 Dovolená od — do (rozsah)</Btn>
       </div>
     </Modal>
     <Modal open={modal === "vacrange"} onClose={() => setModal(null)} title="Nepřítomnost — rozsah"><VacRangeF onSubmit={(f, t, type) => { addAbsRange(f, t, type); setModal(null); }} /></Modal>
+
+    {/* ═══ RESOLVE: možnosti krytí + koho oslovit ═══ */}
+    {(() => {
+      if (!resolveTarget) return null;
+      const { day, kind, empId, fromShift, toShift } = resolveTarget;
+      const sim = dc(cs);
+      if (kind === "absence") SHIFTS.forEach(sh => { if (sim[day]?.[sh]) sim[day][sh] = sim[day][sh].filter(e => e.empId !== empId); });
+      if (kind === "shift") { const arr = sim[day]?.[fromShift] || []; const i = arr.findIndex(e => e.empId === empId); if (i >= 0) { const [en] = arr.splice(i, 1); if (!sim[day][toShift]) sim[day][toShift] = []; sim[day][toShift].push(en); } }
+      const simAbs = kind === "absence" ? { ...absences, [fsKey(empId, day)]: "vacation" } : absences;
+      const probs = analyzeWeek(sim, simAbs, employees, rules, intake, intakeAllow).problems.filter(p => p.day === day);
+      const title = kind === "absence" ? `Krytí nepřítomnosti — ${day}` : `Změna hodiny — ${day}`;
+      return <Modal open={true} onClose={() => setResolveTarget(null)} title={title}>
+        <div>
+          {kind === "shift" && <div style={{ marginBottom: 14 }}>
+            <p style={{ fontSize: 14, color: "var(--tx2)", marginBottom: 10 }}>Chceš přejít z {fromShift} na {toShift}. Odešli změnu ke schválení a níže domluv případné krytí.</p>
+            <Btn warm onClick={() => { createProposal({ kind: "shift", empId, day, fromShift, toShift }, "změna hodiny", { [empId]: true }); notify("Změna hodiny odeslána ke schválení"); }} style={{ width: "100%" }}>Odeslat změnu {fromShift} → {toShift} ke schválení</Btn>
+          </div>}
+          {probs.length === 0
+            ? <div style={{ padding: "12px 14px", border: "1px solid var(--grn)", color: "var(--grn)", fontSize: 14 }}>✓ {kind === "absence" ? "Tvoje nepřítomnost" : "Tato změna"} nezpůsobí podstav — není třeba nikoho shánět.</div>
+            : <>
+              <p style={{ fontSize: 13, color: "var(--tx2)", marginBottom: 12 }}>Tahle změna něco rozbije. Vyber jednu z možností a oslov kolegu — po jeho i adminově souhlasu se to provede.</p>
+              {probs.map(pr => <div key={pr.key} style={{ border: "1px solid var(--brd)", borderLeft: "3px solid var(--red)", padding: "10px 12px", marginBottom: 10 }}>
+                <div style={{ fontWeight: 600, fontSize: 14, color: "var(--w)", marginBottom: 8 }}>{pr.title}</div>
+                {pr.alts.length === 0 && <p style={{ fontSize: 13, color: "var(--tx3)", margin: 0 }}>Žádné automatické řešení — domluv se s adminem.</p>}
+                {pr.alts.slice(0, 5).map((alt, i) => { const colleague = ge(alt.empId); const mail = colleague?.notifyEmail || colleague?.email;
+                  return <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", background: "var(--bg3)", border: "1px solid var(--brd)", marginBottom: 4, flexWrap: "wrap" }}>
+                    {i === 0 && <Badge small color="var(--grn)">TIP</Badge>}
+                    <span style={{ flex: 1, fontSize: 13, minWidth: 140 }}>{altLabel(alt, ge)}</span>
+                    {mail && <a href={`mailto:${mail}?subject=${encodeURIComponent("Krytí směny " + day)}&body=${encodeURIComponent(`Ahoj ${colleague.name}, potřeboval bych domluvit: ${altLabel(alt, ge)}. Šlo by?`)}`} style={{ fontSize: 12, color: "var(--tx3)", textDecoration: "none", border: "1px solid var(--brd2)", padding: "5px 8px" }}>✉ napsat</a>}
+                    <Btn small warm onClick={() => { createProposal(alt, kind === "absence" ? `krytí nepřítomnosti ${day}` : `krytí změny hodiny ${day}`); notify(`Požádán/a: ${colleague?.name}`); }}>Požádat {colleague?.name?.split(" ")[0]}</Btn>
+                  </div>; })}
+              </div>)}
+            </>}
+          <Btn ghost onClick={() => setResolveTarget(null)} style={{ width: "100%", marginTop: 6 }}>Zavřít</Btn>
+        </div>
+      </Modal>;
+    })()}
     <Modal open={modal === "addMember"} onClose={() => setModal(null)} title="Nový člen"><AddF onDone={m => { notify(m); log(m); setModal(null); }} /></Modal>
     <Modal open={modal?.type === "editDays"} onClose={() => setModal(null)} title="Upravit dny"><EditDF emp={modal?.emp} onDone={() => { notify("Uloženo"); setModal(null); }} /></Modal>
     <Modal open={modal === "changePass"} onClose={() => setModal(null)} title="Změna hesla"><ChangePassF onDone={() => { notify("Heslo změněno"); setModal(null); }} /></Modal>
