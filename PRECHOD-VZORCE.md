@@ -195,3 +195,13 @@ oficiální start. Počítá se na úrovni jednotlivých dnů (ne celých týdn�
 týden po nasazení se do statistiky započítá jen od svého dne 22. 7. dál, ne od
 pondělí. `FAIRNESS_START` je konstanta, snadno se v budoucnu posune. Ověřeno testem
 přes hranici týdne.
+
+---
+
+## Aktualizace v11 — finální stálý rozvrh + Švarc (Vláďa) pondělí volno
+
+PRESET upraven na finálně potvrzený rozvrh (týden 20.–24. 7.). Švarc = Vláďa má
+v pondělí volno — v jeho výchozím rozvrhu chybí klíč Po, takže se v pondělí do rozvrhu
+nezařadí. Důsledek: v pondělí je na 10:00 jen Andy (Švarc byl pondělní HO-10), takže
+appka na pondělní 10:00 hlásí soft-upozornění „na 10:00 jen 1". Ostatní dny čisté,
+kancelář 5, 8:00 ≥2, HO 2/os. (Švarc 1 kvůli volnu, Slavíček a Víťa 0).

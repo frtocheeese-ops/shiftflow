@@ -39,12 +39,12 @@ function buildDef(emps) { const s = {}; DAYS.forEach(day => { s[day] = {}; SHIFT
    HO drží nominální čas ve svém slotu. Klíčováno jménem — seed napasuje na uživatele. */
 const PRESET = {
   "Slavíček": { Po: "08:00", "Út": "08:00", St: "08:00", "Čt": "08:00", "Pá": "08:00" },
-  "Víťa":     { Po: "08:00", "Út": "08:00", St: "08:00", "Čt": "09:00", "Pá": "08:00" },
-  "Stibor":   { Po: "08:00", "Út": "08:00", "Út_ho": true, St: "10:00", "Čt": "10:00", "Čt_ho": true, "Pá": "09:00" },
-  "Lochman":  { Po: "08:00", Po_ho: true, "Út": "09:00", St: "08:00", "Čt": "10:00", "Pá": "10:00", "Pá_ho": true },
+  "Víťa":     { Po: "09:00", "Út": "08:00", St: "09:00", "Čt": "09:00", "Pá": "08:00" },
+  "Stibor":   { Po: "08:00", Po_ho: true, "Út": "08:00", St: "10:00", "Čt": "10:00", "Čt_ho": true, "Pá": "08:00" },
+  "Lochman":  { Po: "08:00", "Út": "10:00", "Út_ho": true, St: "08:00", "Čt": "08:00", "Pá": "09:00", "Pá_ho": true },
   "Frťala":   { Po: "09:00", "Út": "10:00", St: "08:00", St_ho: true, "Čt": "08:00", "Čt_ho": true, "Pá": "10:00" },
-  "Švarc":    { Po: "10:00", "Út": "09:00", St: "10:00", St_ho: true, "Čt": "08:00", "Pá": "08:00", "Pá_ho": true },
-  "Andy":     { Po: "10:00", Po_ho: true, "Út": "10:00", "Út_ho": true, St: "09:00", "Čt": "09:00", "Pá": "09:00" },
+  "Švarc":    { "Út": "09:00", St: "10:00", St_ho: true, "Čt": "10:00", "Pá": "09:00" }, // Vláďa — pondělí volno (bez klíče Po)
+  "Andy":     { Po: "10:00", "Út": "09:00", "Út_ho": true, St: "09:00", "Čt": "09:00", "Pá": "10:00", "Pá_ho": true },
 };
 // Přejmenování člena při seedu (staré jméno v DB → nové). Bezpečné i když se nikdo nejmenuje "Franta".
 const RENAME = { Franta: "Víťa" };
@@ -1196,27 +1196,6 @@ export default function App() {
     for (let i = 0; i < 52; i++) { const d = new Date(start); d.setDate(d.getDate() + i * 7); await applyDefaultToWeek(wKey(d)); done++; if (i % 10 === 0) notify(`Aplikuji… ${done}/52`); }
     notify(`Stálý rozvrh aplikován na ${done} týdnů`); log(`Stálý rozvrh → 52 týdnů od ${wk}`);
   };
-  // Porovnání aktuálního týdne se stálým rozvrhem
-  const compareWeek = (onlyDay = null) => {
-    const diffs = [];
-    const days = onlyDay ? [onlyDay] : DAYS;
-    employees.filter(e => e.role !== "admin").forEach(emp => {
-      days.forEach(day => {
-        // current
-        let cur = null, curHo = false, absent = absences[fsKey(emp.id, day)];
-        SHIFTS.forEach(sh => { const en = (cs[day]?.[sh] || []).find(e => e.empId === emp.id); if (en) { cur = sh; curHo = en.ho; } });
-        // default
-        const defT = emp.setupDone ? emp.defaultSchedule?.[day] : null;
-        const defHo = emp.defaultSchedule?.[`${day}_ho`] || false;
-        const curLabel = absent ? (ABS.find(a => a.id === absent)?.label || "nepřítomen") : cur ? (curHo ? `HO ${cur.slice(0, 2)}` : `${cur.slice(0, 2)} kancl`) : "—";
-        const defLabel = defT ? (defHo ? `HO ${defT.slice(0, 2)}` : `${defT.slice(0, 2)} kancl`) : "—";
-        const same = !absent && cur === defT && curHo === defHo;
-        if (!same && (cur || defT || absent)) diffs.push({ day, name: emp.name, from: defLabel, to: curLabel, absent: !!absent });
-      });
-    });
-    return diffs;
-  };
-
   const exportCSV = () => { let csv = "\ufeffDen,Směna,Jméno,HO\n"; DAYS.forEach(d => SHIFTS.forEach(sh => (cs[d]?.[sh] || []).forEach(en => { const e = ge(en.empId); if (e) csv += `${d},${sh},${e.name},${en.ho ? "Ano" : "Ne"}\n`; }))); const b = new Blob([csv], { type: "text/csv;charset=utf-8;" }); const u = URL.createObjectURL(b); Object.assign(document.createElement("a"), { href: u, download: `rozvrh_${wk}.csv` }).click(); };
 
   if (authUser === undefined) return <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center" }}><style>{CSS}</style><div style={{ color: "var(--tx3)", fontSize: 14, letterSpacing: 4, fontFamily: "'Barlow Condensed',sans-serif", animation: "pulse 1.5s infinite" }}>SHIFTFLOW</div></div>;
@@ -1641,26 +1620,60 @@ export default function App() {
       <Btn ghost onClick={() => setModal(null)} style={{ width: "100%" }}>Zrušit</Btn>
     </Modal>
 
-    {/* ═══ POROVNÁNÍ SE STÁLÝM (pro všechny) ═══ */}
+    {/* ═══ POROVNÁNÍ SE STÁLÝM — dva rozvrhy vedle sebe, změny pulzují ═══ */}
     {showCompare && (() => {
-      const onlyDay = schedView === "day" ? DAYS[selDay] : null;
-      const diffs = compareWeek(onlyDay);
-      const byDay = {}; diffs.forEach(d => { (byDay[d.day] = byDay[d.day] || []).push(d); });
-      return <Modal open={true} onClose={() => setShowCompare(false)} title={`Porovnání se stálým rozvrhem${onlyDay ? ` — ${onlyDay}` : " — týden"}`} wide>
-        {diffs.length === 0
-          ? <div style={{ padding: "12px 14px", border: "1px solid var(--grn)", color: "var(--grn)", fontSize: 14 }}>✓ {onlyDay ? "Tento den se stálým rozvrhem" : "Tento týden se stálým rozvrhem"} nijak neliší.</div>
-          : <>
-            <div style={{ fontSize: 12, color: "var(--tx3)", marginBottom: 10 }}>{diffs.length} odchylek oproti stálému rozvrhu (stálý → nynější).</div>
-            {(onlyDay ? [onlyDay] : DAYS).filter(d => byDay[d]?.length).map(day => <div key={day} style={{ marginBottom: 12 }}>
-              <div style={{ fontFamily: "'Barlow Condensed',sans-serif", fontSize: 14, letterSpacing: 1, color: "var(--acc2)", textTransform: "uppercase", marginBottom: 4 }}>{day}</div>
-              {byDay[day].map((d, i) => <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", background: "var(--bg3)", border: "1px solid var(--brd)", marginBottom: 3, fontSize: 13 }}>
-                <span style={{ fontWeight: 600, color: "var(--w)", minWidth: 90 }}>{d.name}</span>
-                <span style={{ color: "var(--tx3)", fontFamily: "'IBM Plex Mono',monospace", fontSize: 12 }}>{d.from}</span>
-                <span style={{ color: "var(--tx3)" }}>→</span>
-                <span style={{ color: d.absent ? "var(--amb)" : "var(--w)", fontFamily: "'IBM Plex Mono',monospace", fontSize: 12, fontWeight: 600 }}>{d.to}</span>
+      const defAll = buildDef(employees);
+      const daysToShow = schedView === "day" ? [DAYS[selDay]] : DAYS;
+      const buildDay = day => {
+        const side = src => { const m = {}; SHIFTS.forEach(sh => m[sh] = (src[day]?.[sh] || []).filter(en => ge(en.empId)).map(en => ({ empId: en.empId, ho: !!en.ho }))); return m; };
+        const def = side(defAll), cur = side(cs);
+        const stateOf = m => { const o = {}; SHIFTS.forEach(sh => m[sh].forEach(en => o[en.empId] = sh + (en.ho ? "H" : ""))); return o; };
+        const sd = stateOf(def), sc = stateOf(cur);
+        const absent = employees.filter(e => e.role !== "admin" && absences[fsKey(e.id, day)]).map(e => ({ empId: e.id, reason: absences[fsKey(e.id, day)] }));
+        const changed = new Set();
+        employees.filter(e => e.role !== "admin").forEach(e => { const a = sd[e.id] || "—"; const b = absences[fsKey(e.id, day)] ? "ABS" : (sc[e.id] || "—"); if (a !== b) changed.add(e.id); });
+        const origin = eid => { const st = sd[eid]; if (!st) return "nově"; return st.endsWith("H") ? "z HO " + st.slice(0, 2) : "z " + st.slice(0, 2) + ":00"; };
+        return { def, cur, absent, changed, origin };
+      };
+      const CmpChip = ({ en, changed, tag }) => <div className={changed ? "cmp-blink" : ""} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 8px", border: "1px solid var(--brd)", marginBottom: 3, fontSize: 12.5 }}>
+        <span style={{ width: 3, height: 14, background: en.ho ? "var(--grn)" : "var(--acc2)", flexShrink: 0 }} />
+        <span style={{ fontWeight: 600, color: "var(--w)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ge(en.empId)?.name}</span>
+        {en.ho && <span style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 9.5, color: "var(--grn)", border: "1px solid var(--grn)", padding: "0 4px" }}>HO</span>}
+        {tag && <span style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 9.5, color: "var(--amb)" }}>{tag}</span>}
+      </div>;
+      return <Modal open={true} onClose={() => setShowCompare(false)} title={`Stálý rozvrh vs. tento týden${schedView === "day" ? ` — ${DAYS[selDay]}` : ""}`} wide>
+        <style>{`@keyframes cmpPulse { 0%,100% { background: transparent; border-color: var(--brd); } 50% { background: rgba(200,140,40,.22); border-color: var(--amb); } } .cmp-blink { animation: cmpPulse 1.2s ease-in-out infinite; }`}</style>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 12, fontSize: 11.5, color: "var(--tx3)", flexWrap: "wrap" }}>
+          <span><span style={{ color: "var(--tx2)", fontWeight: 600 }}>vlevo</span> stálý rozvrh</span>
+          <span><span style={{ color: "var(--tx2)", fontWeight: 600 }}>vpravo</span> tento týden</span>
+          <span className="cmp-blink" style={{ padding: "2px 8px", border: "1px solid var(--brd)" }}>blikající = změna</span>
+        </div>
+        {daysToShow.map(day => {
+          const d = buildDay(day);
+          const anyChange = d.changed.size > 0;
+          return <div key={day} style={{ marginBottom: 18 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+              <span style={{ fontFamily: "'Barlow Condensed',sans-serif", fontSize: 15, letterSpacing: 1.5, color: "var(--acc2)", textTransform: "uppercase" }}>{day}</span>
+              {!anyChange && <span style={{ fontSize: 11, color: "var(--grn)" }}>✓ beze změn</span>}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              {["def", "cur"].map(sideKey => <div key={sideKey} style={{ border: "1px solid var(--brd)", padding: 8, background: sideKey === "cur" ? "var(--bg3)" : "transparent" }}>
+                <div style={{ fontFamily: "'Barlow Condensed',sans-serif", fontSize: 11, letterSpacing: 1, color: "var(--tx3)", textTransform: "uppercase", marginBottom: 6 }}>{sideKey === "def" ? "Stálý" : "Tento týden"}</div>
+                {SHIFTS.map(sh => { const list = d[sideKey][sh]; return <div key={sh} style={{ marginBottom: 6 }}>
+                  <div style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 10.5, color: "var(--tx3)", marginBottom: 3 }}>{sh}</div>
+                  {list.length ? list.map(en => <CmpChip key={en.empId} en={en} changed={d.changed.has(en.empId)} tag={sideKey === "cur" && d.changed.has(en.empId) ? d.origin(en.empId) : null} />) : <div style={{ fontSize: 11, color: "var(--tx3)", padding: "3px 0 6px" }}>—</div>}
+                </div>; })}
+                {sideKey === "cur" && d.absent.length > 0 && <div>
+                  <div style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 10.5, color: "var(--tx3)", marginBottom: 3 }}>nepřítomni</div>
+                  {d.absent.map(a => <div key={a.empId} className="cmp-blink" style={{ display: "flex", justifyContent: "space-between", gap: 6, padding: "5px 8px", border: "1px solid var(--brd)", marginBottom: 3, fontSize: 12.5 }}>
+                    <span style={{ textDecoration: "line-through", color: "var(--tx3)" }}>{ge(a.empId)?.name}</span>
+                    <span style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 10, color: "var(--amb)" }}>{ABS.find(x => x.id === a.reason)?.label || a.reason}</span>
+                  </div>)}
+                </div>}
               </div>)}
-            </div>)}
-          </>}
+            </div>
+          </div>;
+        })}
         <Btn ghost onClick={() => setShowCompare(false)} style={{ width: "100%", marginTop: 6 }}>Zavřít</Btn>
       </Modal>;
     })()}
