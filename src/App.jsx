@@ -39,12 +39,12 @@ function buildDef(emps) { const s = {}; DAYS.forEach(day => { s[day] = {}; SHIFT
    HO drží nominální čas ve svém slotu. Klíčováno jménem — seed napasuje na uživatele. */
 const PRESET = {
   "Slavíček": { Po: "08:00", "Út": "08:00", St: "08:00", "Čt": "08:00", "Pá": "08:00" },
-  "Víťa":     { Po: "08:00", "Út": "08:00", St: "08:00", "Čt": "09:00", "Pá": "08:00" },
-  "Stibor":   { Po: "08:00", "Út": "08:00", "Út_ho": true, St: "10:00", "Čt": "10:00", "Čt_ho": true, "Pá": "09:00" },
-  "Lochman":  { Po: "08:00", Po_ho: true, "Út": "09:00", St: "08:00", "Čt": "10:00", "Pá": "10:00", "Pá_ho": true },
+  "Víťa":     { Po: "09:00", "Út": "08:00", St: "09:00", "Čt": "09:00", "Pá": "08:00" },
+  "Stibor":   { Po: "08:00", Po_ho: true, "Út": "08:00", St: "10:00", "Čt": "10:00", "Čt_ho": true, "Pá": "08:00" },
+  "Lochman":  { Po: "08:00", "Út": "10:00", "Út_ho": true, St: "08:00", "Čt": "08:00", "Pá": "09:00", "Pá_ho": true },
   "Frťala":   { Po: "09:00", "Út": "10:00", St: "08:00", St_ho: true, "Čt": "08:00", "Čt_ho": true, "Pá": "10:00" },
-  "Švarc":    { Po: "10:00", "Út": "09:00", St: "10:00", St_ho: true, "Čt": "08:00", "Pá": "08:00", "Pá_ho": true },
-  "Andy":     { Po: "10:00", Po_ho: true, "Út": "10:00", "Út_ho": true, St: "09:00", "Čt": "09:00", "Pá": "09:00" },
+  "Švarc":    { "Út": "09:00", St: "10:00", St_ho: true, "Čt": "10:00", "Pá": "09:00" }, // Vláďa — pondělí volno (bez klíče Po)
+  "Andy":     { Po: "10:00", "Út": "09:00", "Út_ho": true, St: "09:00", "Čt": "09:00", "Pá": "10:00", "Pá_ho": true },
 };
 // Přejmenování člena při seedu (staré jméno v DB → nové). Bezpečné i když se nikdo nejmenuje "Franta".
 const RENAME = { Franta: "Víťa" };
