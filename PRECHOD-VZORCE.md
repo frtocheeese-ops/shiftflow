@@ -225,3 +225,30 @@ Nově `clearShiftFlowEvents` načte VŠECHNY události v okně (stránkovaně, b
 na indexu) a smaže ty naše podle značky `extendedProperties.private.shiftflow`, textu
 i názvu — tím padnou i staré události bez značky a duplicity. Nové události značku nesou.
 Používá to jak týdenní, tak roční sync.
+
+---
+
+## Aktualizace v13 — deep debugging / audit
+
+Opraveno:
+- **(vysoká) GCal mazání zúženo** — dřív matchovalo i holé slovo „Směna" v názvu,
+  což mohlo smazat soukromé události uživatele. Nově jen značka
+  `extendedProperties.private.shiftflow`, `[ShiftFlow]` v popisu nebo „ShiftFlow" v názvu.
+- **(vysoká) Nástupy alternativa `cancelHO`** nebyla implementovaná v `applyAlt` ani
+  `altLabel` (prázdný popisek, aplikace by nic neudělala). Engine nyní emituje ověřený
+  `dropHO` — end-to-end otestováno (detekce → popisek → aplikace → problém zmizí).
+- **(střední) Souběh intake zápisů** — `toggleIntake`/`allowIntakeException` přepsány
+  na `runTransaction` (čtou čerstvý objekt uvnitř), dva admini už si nepřepíšou změny.
+- **(střední) `applyProblemFix` guard** — oprava se odmítne i tehdy, když by zvýšila
+  počet kritických porušení v týdnu (nejen když nevyřeší cílový problém).
+- **(nízká) Úklid**: mrtvá `permaDef`; kolize React klíčů v porovnání při duplicitě
+  člověka ve směně; strop 30 zobrazených celoročních problémů s poznámkou.
+- **(UI) Konzistence názvů**: menu „Rozvrh (default)" → „Stálý rozvrh"; prohlížecí
+  tlačítko přejmenováno na „Zobrazit stálý" (admin měl dvě různé věci se stejným
+  názvem); labely přepínačů pravidel („Vyžadovat minimum na 8:00/10:00") odpovídají
+  nové sémantice minim.
+
+Poznámky bez zásahu: prop `ghost` u Btn je vizuální no-op (výchozí styl je už
+„ghost"); tlačítka „+ nástupy" v týdenním záhlaví jsou přiznaně husté — případné
+zjemnění až podle zpětné vazby; celoroční Návrhy čtou jen materializované týdny
+(po „Aplikovat stálý na rok" je pokryto vše).

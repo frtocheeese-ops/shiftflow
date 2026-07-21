@@ -153,7 +153,7 @@ function analyzeWeek(cs, absences, employees, rulesIn, intake = {}, intakeAllow 
     if (intake[day]) {
       const offenders = st.ho.filter(h => !allowed(day, h.empId));
       offenders.forEach(h => violations.push({ sev: "warn", day, empId: h.empId, intake: true, msg: `Nástupy (${day}): ${(employees.find(e => e.id === h.empId) || {}).name || "?"} má HO — doporučeno do kanceláře` }));
-      if (offenders.length) problems.push({ key: `intake:${day}`, day, intake: true, title: `Nástupy ${day}: ${offenders.length}× HO (doporučeno bez HO)`, alts: offenders.map(h => ({ kind: "cancelHO", empId: h.empId, day, toShift: "09:00" })) });
+      if (offenders.length) problems.push({ key: `intake:${day}`, day, intake: true, title: `Nástupy ${day}: ${offenders.length}× HO (doporučeno bez HO)`, alts: offenders.map(h => ({ kind: "dropHO", empId: h.empId, day })) });
     }
   });
   Object.entries(weeklyHO).forEach(([eid, n]) => { if (n > R.hoPerWeek) violations.push({ sev: "warn", day: null, empId: eid, msg: `HO ${n}× v týdnu (strop ${R.hoPerWeek})` }); });
@@ -332,7 +332,7 @@ async function clearShiftFlowEvents(timeMin, timeMax, userId) {
     if (res?.items) {
       for (const ev of res.items) {
         const p = ev.extendedProperties?.private || {};
-        const isSF = p.shiftflow === "1" || ev.description?.includes("ShiftFlow") || ev.summary?.includes("ShiftFlow") || ev.summary?.includes("Směna");
+        const isSF = p.shiftflow === "1" || ev.description?.includes("[ShiftFlow]") || ev.summary?.includes("ShiftFlow");
         const mine = !userId || !p.sfUser || p.sfUser === userId; // starší události bez značky smažeme také
         if (isSF && mine) { try { await gcalRequest("DELETE", `/calendars/primary/events/${ev.id}`); deleted++; } catch { } }
       }
@@ -790,7 +790,8 @@ export default function App() {
         if (!before.problems.some(p => p.key === problemKey)) { status = "gone"; return; }
         const trial = dc(entries); applyAlt(trial, alt);
         const after = analyzeWeek(trial, abs, employees, rules, intk, intkA);
-        if (after.problems.some(p => p.key === problemKey)) { status = "invalid"; return; }
+        const critB = before.violations.filter(v => v.sev === "crit").length, critA = after.violations.filter(v => v.sev === "crit").length;
+        if (after.problems.some(p => p.key === problemKey) || critA > critB) { status = "invalid"; return; }
         t.set(ref, { entries: trial, weekStart: weekKey, modifiedAt: new Date().toISOString(), modifiedBy: profile?.id }, { merge: true });
         status = "ok";
       });
@@ -1200,20 +1201,29 @@ export default function App() {
 
   // ═══ NÁSTUPY (admin) ═══
   const toggleIntake = async day => {
-    const next = { ...intake, [day]: !intake[day] };
-    setIntake(next); // optimistické
+    const on = !intake[day];
+    setIntake(p => ({ ...p, [day]: on })); // optimistické
     try {
-      await setDoc(doc(db, "schedules", wk), { intake: next, weekStart: wk, modifiedAt: new Date().toISOString(), modifiedBy: profile?.id }, { merge: true });
-      notify(next[day] ? `${day} označen jako Nástupy` : `${day} už není Nástupy`); log(`Nástupy ${day}: ${next[day] ? "zapnuto" : "vypnuto"}`);
-    } catch (e) { setIntake(intake); notify("Nepodařilo se uložit"); }
+      await runTransaction(db, async t => {
+        const ref = doc(db, "schedules", wk); const snap = await t.get(ref);
+        const cur = (snap.exists() && snap.data().intake) || {};
+        t.set(ref, { intake: { ...cur, [day]: on }, weekStart: wk, modifiedAt: new Date().toISOString(), modifiedBy: profile?.id }, { merge: true });
+      });
+      notify(on ? `${day} označen jako Nástupy` : `${day} už není Nástupy`); log(`Nástupy ${day}: ${on ? "zapnuto" : "vypnuto"}`);
+    } catch (e) { setIntake(p => ({ ...p, [day]: !on })); notify("Nepodařilo se uložit"); }
   };
   const allowIntakeException = async (day, eid) => {
-    const cur = intakeAllow[day] || [];
-    if (cur.includes(eid)) return;
-    const next = { ...intakeAllow, [day]: [...cur, eid] };
-    setIntakeAllow(next);
-    await setDoc(doc(db, "schedules", wk), { intakeAllow: next, weekStart: wk, modifiedAt: new Date().toISOString() }, { merge: true });
-    notify(`Výjimka pro ${ge(eid)?.name} v ${day}`); log(`Nástupy výjimka: ${ge(eid)?.name} ${day}`);
+    if ((intakeAllow[day] || []).includes(eid)) return;
+    setIntakeAllow(p => ({ ...p, [day]: [...(p[day] || []), eid] }));
+    try {
+      await runTransaction(db, async t => {
+        const ref = doc(db, "schedules", wk); const snap = await t.get(ref);
+        const cur = (snap.exists() && snap.data().intakeAllow) || {};
+        const list = cur[day] || [];
+        if (!list.includes(eid)) t.set(ref, { intakeAllow: { ...cur, [day]: [...list, eid] }, weekStart: wk, modifiedAt: new Date().toISOString() }, { merge: true });
+      });
+      notify(`Výjimka pro ${ge(eid)?.name} v ${day}`); log(`Nástupy výjimka: ${ge(eid)?.name} ${day}`);
+    } catch (e) { notify("Nepodařilo se uložit"); }
   };
 
   // Předvyplnění rozvrhu dle preferencí — napasuje PRESET na uživatele podle jména
@@ -1232,8 +1242,6 @@ export default function App() {
     log(`Rozvrh předvyplněn dle preferencí (${n})${renamed.length ? `, přejmenováno ${renamed.join(", ")}` : ""}`);
   };
 
-  // Stálý rozvrh z výchozích rozvrhů členů (bez absencí)
-  const permaDef = () => buildDef(employees);
   // Aplikace stálého rozvrhu na týden — přepíše entries, ale zachová absence (vyřadí nepřítomné)
   const applyDefaultToWeek = (weekKey = wk) => txSchedule(({ absences }) => {
     const def = buildDef(employees);
@@ -1262,7 +1270,7 @@ export default function App() {
   const visibleProps = openProps.filter(p => isA || p.affected?.includes(profile.id));
   const myPendingProps = openProps.filter(p => isA ? !p.consents?.admin : (p.affected?.includes(profile.id) && !p.consents?.[profile.id]));
   const probBadge = isA ? yearProblems.length : yearProblems.filter(pr => pr.alts.some(a => a.empId === profile.id)).length;
-  const NAV = [{ id: "schedule", l: "Rozvrh", ic: "▦", b: 0 }, { id: "proposals", l: "Návrhy", ic: "⚑", b: myPendingProps.length + probBadge }, { id: "swaps", l: "Výměny", ic: "⇄", b: openSw.length }, ...(isA ? [{ id: "people", l: "Tým", ic: "◉", b: 0 }] : []), { id: "stats", l: "Stats", ic: "◫", b: 0 }, { id: "log", l: "Log", ic: "≡", b: 0 }, ...(isA ? [{ id: "defaults", l: "Rozvrh (default)", ic: "✎", b: 0 }] : []), { id: "settings", l: "Nastavení", ic: "⚙", b: 0 }];
+  const NAV = [{ id: "schedule", l: "Rozvrh", ic: "▦", b: 0 }, { id: "proposals", l: "Návrhy", ic: "⚑", b: myPendingProps.length + probBadge }, { id: "swaps", l: "Výměny", ic: "⇄", b: openSw.length }, ...(isA ? [{ id: "people", l: "Tým", ic: "◉", b: 0 }] : []), { id: "stats", l: "Stats", ic: "◫", b: 0 }, { id: "log", l: "Log", ic: "≡", b: 0 }, ...(isA ? [{ id: "defaults", l: "Stálý rozvrh", ic: "✎", b: 0 }] : []), { id: "settings", l: "Nastavení", ic: "⚙", b: 0 }];
   const dayHol = wh[selDay];
   const getEntries = (day, shift) => (cs[day]?.[shift] || []).filter(e => ge(e.empId));
   const getDayAbs = day => Object.entries(absences).filter(([k]) => k.endsWith(`__${day}`)).map(([k, t]) => ({ empId: k.split("__")[0], type: t })).filter(a => ge(a.empId));
@@ -1365,7 +1373,7 @@ export default function App() {
 
             {/* Filters + actions */}
             <div style={{ display: "flex", gap: 4, marginBottom: 12, flexWrap: "wrap" }}>
-              <Btn small ghost onClick={() => setShowPerma(true)}>Stálý rozvrh</Btn>
+              <Btn small ghost onClick={() => setShowPerma(true)}>Zobrazit stálý</Btn>
               <Btn small ghost onClick={() => setShowCompare(true)}>Porovnat se stálým</Btn>
               {isA && <Btn small onClick={() => setModal("applydefault")}>Aplikovat stálý</Btn>}
               <div style={{ flex: 1 }} />
@@ -1464,7 +1472,7 @@ export default function App() {
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10, fontFamily: "'Barlow Condensed',sans-serif" }}>Problémy k vyřešení · ode dneška</div>
             {yearProblems.length === 0 && <Card style={{ marginBottom: 24, borderLeft: "3px solid var(--grn)" }}><span style={{ fontSize: 14 }}>✓ Žádné otevřené problémy — všechny dny splňují pravidla.</span></Card>}
             {yearProblems.length > 0 && <div style={{ marginBottom: 24 }}>
-              {yearProblems.map((pr, pi) => {
+              {yearProblems.slice(0, 30).map((pr, pi) => {
                 const myAlts = pr.alts.filter(a => isA || a.empId === profile.id);
                 return <Card key={pr.weekKey + pr.key + pi} style={{ marginBottom: 10, borderLeft: `3px solid ${pr.alts.some(a => true) ? "var(--red)" : "var(--amb)"}` }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
@@ -1485,6 +1493,7 @@ export default function App() {
                   {!isA && myAlts.length === 0 && pr.alts.length > 0 && <p style={{ fontSize: 12, color: "var(--tx3)", margin: "4px 0 0" }}>Tenhle problém vyřeší někdo jiný z týmu nebo admin.</p>}
                 </Card>;
               })}
+              {yearProblems.length > 30 && <p style={{ fontSize: 12, color: "var(--tx3)" }}>…a dalších {yearProblems.length - 30} později v roce. Vyřešením prvních se seznam posune.</p>}
             </div>}
 
             {/* Čekající návrhy — admin vidí vše, člen jen svoje */}
@@ -1612,7 +1621,7 @@ export default function App() {
             </Card>
             {isA && <Card style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, fontFamily: "'Barlow Condensed',sans-serif" }}>Pravidla směn</div>
-              <Input label="Minimum lidí v kanceláři" type="number" value={rules.officeMin ?? 4} onChange={e => setRules(r => ({ ...r, officeMin: +e.target.value }))} /><Input label="Minimum v kanceláři od 8:00" type="number" value={rules.min8 ?? 2} onChange={e => setRules(r => ({ ...r, min8: +e.target.value }))} /><Input label="Minimum na 10:00 (vč. HO)" type="number" value={rules.min10 ?? 2} onChange={e => setRules(r => ({ ...r, min10: +e.target.value }))} /><Input label="Max HO / den" type="number" value={rules.hoCapDay ?? 3} onChange={e => setRules(r => ({ ...r, hoCapDay: +e.target.value }))} /><Input label="Max HO / osoba / týden" type="number" value={rules.hoPerWeek ?? 2} onChange={e => setRules(r => ({ ...r, hoPerWeek: +e.target.value }))} /><Toggle checked={rules.cover8 !== false} onChange={v => setRules(r => ({ ...r, cover8: v }))} label="8:00 musí být pokryta z kanceláře" /><Toggle checked={rules.cover10 !== false} onChange={v => setRules(r => ({ ...r, cover10: v }))} label="10:00 musí být pokryta z kanceláře" /><div style={{ borderTop: "1px solid var(--brd)", marginTop: 12, paddingTop: 12 }}><Toggle checked={rules.allowAllDnD || false} onChange={v => setRules(r => ({ ...r, allowAllDnD: v }))} label="Povolit Drag & Drop pro všechny" /><p style={{ fontSize: 12, color: "var(--tx3)", marginTop: -8, marginBottom: 12 }}>Zaměstnanci budou moci přesouvat kohokoliv v rozvrhu.</p></div><Btn warm onClick={async () => { await setDoc(doc(db, "rules", "global"), rules); notify("Uloženo"); }}>Uložit pravidla</Btn>
+              <Input label="Minimum lidí v kanceláři" type="number" value={rules.officeMin ?? 4} onChange={e => setRules(r => ({ ...r, officeMin: +e.target.value }))} /><Input label="Minimum v kanceláři od 8:00" type="number" value={rules.min8 ?? 2} onChange={e => setRules(r => ({ ...r, min8: +e.target.value }))} /><Input label="Minimum na 10:00 (vč. HO)" type="number" value={rules.min10 ?? 2} onChange={e => setRules(r => ({ ...r, min10: +e.target.value }))} /><Input label="Max HO / den" type="number" value={rules.hoCapDay ?? 3} onChange={e => setRules(r => ({ ...r, hoCapDay: +e.target.value }))} /><Input label="Max HO / osoba / týden" type="number" value={rules.hoPerWeek ?? 2} onChange={e => setRules(r => ({ ...r, hoPerWeek: +e.target.value }))} /><Toggle checked={rules.cover8 !== false} onChange={v => setRules(r => ({ ...r, cover8: v }))} label="Vyžadovat minimum na 8:00" /><Toggle checked={rules.cover10 !== false} onChange={v => setRules(r => ({ ...r, cover10: v }))} label="Vyžadovat minimum na 10:00" /><div style={{ borderTop: "1px solid var(--brd)", marginTop: 12, paddingTop: 12 }}><Toggle checked={rules.allowAllDnD || false} onChange={v => setRules(r => ({ ...r, allowAllDnD: v }))} label="Povolit Drag & Drop pro všechny" /><p style={{ fontSize: 12, color: "var(--tx3)", marginTop: -8, marginBottom: 12 }}>Zaměstnanci budou moci přesouvat kohokoliv v rozvrhu.</p></div><Btn warm onClick={async () => { await setDoc(doc(db, "rules", "global"), rules); notify("Uloženo"); }}>Uložit pravidla</Btn>
             </Card>}
             {isA && <Card><div style={{ display: "flex", gap: 8 }}><Btn danger onClick={async () => { await deleteDoc(doc(db, "schedules", wk)); notify("Reset"); }}>Reset týden</Btn><Btn ghost onClick={exportCSV}>CSV</Btn></div></Card>}
           </div>}
@@ -1724,7 +1733,7 @@ export default function App() {
                 <div style={{ fontFamily: "'Barlow Condensed',sans-serif", fontSize: 11, letterSpacing: 1, color: "var(--tx3)", textTransform: "uppercase", marginBottom: 6 }}>{sideKey === "def" ? "Stálý" : "Tento týden"}</div>
                 {SHIFTS.map(sh => { const list = d[sideKey][sh]; return <div key={sh} style={{ marginBottom: 6 }}>
                   <div style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 10.5, color: "var(--tx3)", marginBottom: 3 }}>{sh}</div>
-                  {list.length ? list.map(en => <CmpChip key={en.empId} en={en} changed={d.changed.has(en.empId)} tag={sideKey === "cur" && d.changed.has(en.empId) ? d.origin(en.empId) : null} />) : <div style={{ fontSize: 11, color: "var(--tx3)", padding: "3px 0 6px" }}>—</div>}
+                  {list.length ? list.map((en, ci) => <CmpChip key={en.empId + ci} en={en} changed={d.changed.has(en.empId)} tag={sideKey === "cur" && d.changed.has(en.empId) ? d.origin(en.empId) : null} />) : <div style={{ fontSize: 11, color: "var(--tx3)", padding: "3px 0 6px" }}>—</div>}
                 </div>; })}
                 {sideKey === "cur" && d.absent.length > 0 && <div>
                   <div style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 10.5, color: "var(--tx3)", marginBottom: 3 }}>nepřítomni</div>
