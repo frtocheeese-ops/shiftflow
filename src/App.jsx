@@ -270,6 +270,7 @@ function buildWeekEvents(userId, weekDates, schedule, employees, absences) {
         start: { date },
         end: { date: endStr },
         colorId: "11",
+        extendedProperties: { private: { shiftflow: "1", sfUser: userId } },
       });
       continue;
     }
@@ -284,6 +285,7 @@ function buildWeekEvents(userId, weekDates, schedule, employees, absences) {
           start: { dateTime: `${date}T${shift}:00`, timeZone: "Europe/Prague" },
           end: { dateTime: `${date}T${String(endH).padStart(2, "0")}:00:00`, timeZone: "Europe/Prague" },
           colorId: entry.ho ? "10" : "9",
+          extendedProperties: { private: { shiftflow: "1", sfUser: userId } },
         });
         break;
       }
@@ -320,20 +322,35 @@ function getMondaysForRange(weeksAhead = 52, weeksBack = 0) {
 }
 
 // Sync ONE week (in-memory data already provided)
+// Spolehlivě smaže VŠECHNY ShiftFlow události v rozsahu — nezávisle na Google full-text indexu.
+// Načte vše v okně (stránkovaně) a maže podle značky / textu / názvu → odstraní i staré a duplicitní.
+async function clearShiftFlowEvents(timeMin, timeMax, userId) {
+  let pageToken = null, deleted = 0, guard = 0;
+  do {
+    const url = `/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&maxResults=2500&showDeleted=false${pageToken ? `&pageToken=${pageToken}` : ""}`;
+    const res = await gcalRequest("GET", url);
+    if (res?.items) {
+      for (const ev of res.items) {
+        const p = ev.extendedProperties?.private || {};
+        const isSF = p.shiftflow === "1" || ev.description?.includes("ShiftFlow") || ev.summary?.includes("ShiftFlow") || ev.summary?.includes("Směna");
+        const mine = !userId || !p.sfUser || p.sfUser === userId; // starší události bez značky smažeme také
+        if (isSF && mine) { try { await gcalRequest("DELETE", `/calendars/primary/events/${ev.id}`); deleted++; } catch { } }
+      }
+    }
+    pageToken = res?.nextPageToken;
+  } while (pageToken && ++guard < 30);
+  return deleted;
+}
+
 async function syncWeekToGCal(userId, weekDates, schedule, employees, absences) {
   const emp = employees.find(e => e.id === userId);
   if (!emp) return { ok: false, msg: "Profil nenalezen" };
-  const weekStart = weekDates[0] + "T00:00:00+02:00";
-  const weekEnd = weekDates[4] + "T23:59:59+02:00";
-  const existing = await gcalRequest("GET", `/calendars/primary/events?timeMin=${encodeURIComponent(weekStart)}&timeMax=${encodeURIComponent(weekEnd)}&q=ShiftFlow&singleEvents=true&maxResults=50`);
-  if (existing?.items) {
-    for (const ev of existing.items) {
-      if (ev.description?.includes("[ShiftFlow]")) await gcalRequest("DELETE", `/calendars/primary/events/${ev.id}`);
-    }
-  }
+  const timeMin = weekDates[0] + "T00:00:00+02:00";
+  const timeMax = weekDates[4] + "T23:59:59+02:00";
+  const deleted = await clearShiftFlowEvents(timeMin, timeMax, userId);
   const events = buildWeekEvents(userId, weekDates, schedule, employees, absences);
   for (const evt of events) await gcalRequest("POST", "/calendars/primary/events", evt);
-  return { ok: true, msg: `Synchronizováno: ${events.length} událostí` };
+  return { ok: true, msg: `Synchronizováno: ${events.length} událostí (smazáno ${deleted} starých)` };
 }
 
 // Sync FULL RANGE (default: 52 weeks ahead) — fetches each week from Firestore
@@ -343,24 +360,11 @@ async function syncRangeToGCal(userId, employees, db, weeksAhead = 52, onProgres
   if (!emp) return { ok: false, msg: "Profil nenalezen" };
   const mondays = getMondaysForRange(weeksAhead, 0);
 
-  // Step 1: Delete ALL existing ShiftFlow events in the range (one big query)
+  // Step 1: Delete ALL existing ShiftFlow events in the range (spolehlivě, bez závislosti na q-indexu)
   const startStr = mondays[0] + "T00:00:00+02:00";
   const endDate = weekDatesFromMonday(mondays[mondays.length - 1])[4];
   const endStr = endDate + "T23:59:59+02:00";
-  let deleted = 0, pageToken = null;
-  do {
-    const url = `/calendars/primary/events?timeMin=${encodeURIComponent(startStr)}&timeMax=${encodeURIComponent(endStr)}&q=ShiftFlow&singleEvents=true&maxResults=2500${pageToken ? `&pageToken=${pageToken}` : ""}`;
-    const existing = await gcalRequest("GET", url);
-    if (existing?.items) {
-      for (const ev of existing.items) {
-        if (ev.description?.includes("[ShiftFlow]")) {
-          await gcalRequest("DELETE", `/calendars/primary/events/${ev.id}`);
-          deleted++;
-        }
-      }
-    }
-    pageToken = existing?.nextPageToken;
-  } while (pageToken);
+  const deleted = await clearShiftFlowEvents(startStr, endStr, userId);
 
   if (onProgress) onProgress(`Smazáno ${deleted} starých událostí, vytvářím nové...`);
 
@@ -747,6 +751,56 @@ export default function App() {
       weeklyHO: res.weeklyHO,
     };
   }, [cs, absences, employees, rules, wh.join("|"), intake, intakeAllow]);
+
+  // ═══ CELOROČNÍ NÁVRHY: problémy napříč všemi týdny ode dneška dál ═══
+  const yearProblems = useMemo(() => {
+    const todayISO = localISO(new Date());
+    const curMon = wKey(new Date());
+    const out = [];
+    Object.keys(allSchedules).filter(k => k >= curMon).sort().slice(0, 60).forEach(wkKey => {
+      const data = allSchedules[wkKey] || {};
+      const entries = data.entries || buildDef(employees);
+      const abs = data.absences || {};
+      const intk = data.intake || {}, intkA = data.intakeAllow || {};
+      const monday = new Date(wkKey + "T00:00:00");
+      const res = analyzeWeek(entries, abs, employees, rules, intk, intkA);
+      res.problems.forEach(p => {
+        const di = DAYS.indexOf(p.day); if (di < 0) return;
+        const dd = new Date(monday); dd.setDate(monday.getDate() + di);
+        const dISO = localISO(dd);
+        if (dISO < todayISO || HMAP[dISO]) return; // jen ode dneška, bez svátků
+        out.push({ ...p, weekKey: wkKey, dISO, dLabel: dd.toLocaleDateString("cs", { weekday: "short", day: "numeric", month: "numeric" }) });
+      });
+    });
+    return out.sort((a, b) => a.dISO.localeCompare(b.dISO));
+  }, [allSchedules, employees, rules]);
+
+  // Přímá aplikace návrhu — transakce znovu ověří, že problém pořád trvá (žádné dvojí řešení)
+  const applyProblemFix = async (weekKey, problemKey, alt) => {
+    try {
+      let status = "";
+      await runTransaction(db, async t => {
+        const ref = doc(db, "schedules", weekKey);
+        const snap = await t.get(ref);
+        const data = snap.exists() ? snap.data() : {};
+        const entries = data.entries ? dc(data.entries) : dc(buildDef(employees));
+        const abs = data.absences || {};
+        const intk = data.intake || {}, intkA = data.intakeAllow || {};
+        const before = analyzeWeek(entries, abs, employees, rules, intk, intkA);
+        if (!before.problems.some(p => p.key === problemKey)) { status = "gone"; return; }
+        const trial = dc(entries); applyAlt(trial, alt);
+        const after = analyzeWeek(trial, abs, employees, rules, intk, intkA);
+        if (after.problems.some(p => p.key === problemKey)) { status = "invalid"; return; }
+        t.set(ref, { entries: trial, weekStart: weekKey, modifiedAt: new Date().toISOString(), modifiedBy: profile?.id }, { merge: true });
+        status = "ok";
+      });
+      if (status === "ok") {
+        notify("Úprava provedena ✓"); log(`Vyřešeno: ${altLabel(alt, ge)} (${weekKey})`);
+        const e = ge(alt.empId); if (e && e.id !== profile.id) eN(e, `Úprava tvé směny: ${altLabel(alt, ge)} (${weekKey})`);
+      } else if (status === "gone") notify("Tento problém už někdo vyřešil");
+      else if (status === "invalid") notify("Rozvrh se mezitím změnil — otevři Návrhy znovu");
+    } catch (err) { console.error("applyProblemFix:", err); notify("Nepodařilo se uložit"); }
+  };
 
   // ═══ FÉROVOST: počítadla 8:00 / 10:00 / HO od pevného data (nový model) + hlídač ═══
   const FAIRNESS_START = "2026-07-22"; // počítá se jen od tohoto dne (včetně)
@@ -1207,7 +1261,7 @@ export default function App() {
   const openProps = proposals.filter(p => p.status === "open").sort((a, b) => (a.created || "").localeCompare(b.created || ""));
   const visibleProps = openProps.filter(p => isA || p.affected?.includes(profile.id));
   const myPendingProps = openProps.filter(p => isA ? !p.consents?.admin : (p.affected?.includes(profile.id) && !p.consents?.[profile.id]));
-  const probBadge = isA ? analysis.problems.length : 0;
+  const probBadge = isA ? yearProblems.length : yearProblems.filter(pr => pr.alts.some(a => a.empId === profile.id)).length;
   const NAV = [{ id: "schedule", l: "Rozvrh", ic: "▦", b: 0 }, { id: "proposals", l: "Návrhy", ic: "⚑", b: myPendingProps.length + probBadge }, { id: "swaps", l: "Výměny", ic: "⇄", b: openSw.length }, ...(isA ? [{ id: "people", l: "Tým", ic: "◉", b: 0 }] : []), { id: "stats", l: "Stats", ic: "◫", b: 0 }, { id: "log", l: "Log", ic: "≡", b: 0 }, ...(isA ? [{ id: "defaults", l: "Rozvrh (default)", ic: "✎", b: 0 }] : []), { id: "settings", l: "Nastavení", ic: "⚙", b: 0 }];
   const dayHol = wh[selDay];
   const getEntries = (day, shift) => (cs[day]?.[shift] || []).filter(e => ge(e.empId));
@@ -1406,23 +1460,32 @@ export default function App() {
           {view === "proposals" && <div>
             <div style={{ fontSize: 20, fontWeight: 600, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 2, marginBottom: 20, borderBottom: "1px solid var(--brd)", paddingBottom: 12 }}>Návrhy změn</div>
 
-            {/* Detekované problémy — pouze admin, týká se zobrazeného týdne */}
-            {isA && analysis.problems.length > 0 && <div style={{ marginBottom: 24 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10, fontFamily: "'Barlow Condensed',sans-serif" }}>Detekované problémy · {fmtW(cw)}</div>
-              {analysis.problems.map(pr => <Card key={pr.key} style={{ marginBottom: 10, borderLeft: "3px solid var(--red)" }}>
-                <div style={{ fontWeight: 600, fontSize: 16, color: "var(--w)", marginBottom: 10 }}>{pr.title}</div>
-                {pr.alts.length === 0 && <p style={{ fontSize: 13, color: "var(--tx3)", margin: 0 }}>Žádné automatické řešení — vyřešte ručně v rozvrhu.</p>}
-                {pr.alts.map((alt, i) => {
-                  const already = openProps.some(p => p.label === altLabel(alt, ge) && p.week === wk);
-                  return <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", background: "var(--bg3)", border: "1px solid var(--brd)", marginBottom: 4 }}>
-                    {i === 0 && <Badge small color="var(--grn)">TIP</Badge>}
-                    <span style={{ flex: 1, fontSize: 14 }}>{altLabel(alt, ge)}</span>
-                    {already ? <Badge small color="var(--amb)">Odesláno</Badge> : <Btn small warm onClick={() => createProposal(alt, pr.title)}>Ke schválení →</Btn>}
-                  </div>;
-                })}
-              </Card>)}
+            {/* Celoroční detekované problémy — ode dneška dál, přímá aplikace */}
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10, fontFamily: "'Barlow Condensed',sans-serif" }}>Problémy k vyřešení · ode dneška</div>
+            {yearProblems.length === 0 && <Card style={{ marginBottom: 24, borderLeft: "3px solid var(--grn)" }}><span style={{ fontSize: 14 }}>✓ Žádné otevřené problémy — všechny dny splňují pravidla.</span></Card>}
+            {yearProblems.length > 0 && <div style={{ marginBottom: 24 }}>
+              {yearProblems.map((pr, pi) => {
+                const myAlts = pr.alts.filter(a => isA || a.empId === profile.id);
+                return <Card key={pr.weekKey + pr.key + pi} style={{ marginBottom: 10, borderLeft: `3px solid ${pr.alts.some(a => true) ? "var(--red)" : "var(--amb)"}` }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
+                    <Badge small color="var(--acc2)">{pr.dLabel}</Badge>
+                    <span style={{ fontWeight: 600, fontSize: 15, color: "var(--w)" }}>{pr.title}</span>
+                  </div>
+                  {pr.alts.length === 0 && <p style={{ fontSize: 13, color: "var(--tx3)", margin: 0 }}>Žádné automatické řešení — vyřešte ručně v rozvrhu daného týdne.</p>}
+                  {(isA ? pr.alts : myAlts).map((alt, i) => {
+                    const canApply = isA || alt.empId === profile.id;
+                    return <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", background: "var(--bg3)", border: "1px solid var(--brd)", marginBottom: 4, flexWrap: "wrap" }}>
+                      {i === 0 && <Badge small color="var(--grn)">TIP</Badge>}
+                      <span style={{ flex: 1, fontSize: 14, minWidth: 160 }}>{altLabel(alt, ge)}</span>
+                      {canApply
+                        ? <Btn small warm onClick={() => applyProblemFix(pr.weekKey, pr.key, alt)}>Provést úpravu</Btn>
+                        : <span style={{ fontSize: 11, color: "var(--tx3)" }}>vyřeší {ge(alt.empId)?.name} nebo admin</span>}
+                    </div>;
+                  })}
+                  {!isA && myAlts.length === 0 && pr.alts.length > 0 && <p style={{ fontSize: 12, color: "var(--tx3)", margin: "4px 0 0" }}>Tenhle problém vyřeší někdo jiný z týmu nebo admin.</p>}
+                </Card>;
+              })}
             </div>}
-            {isA && analysis.problems.length === 0 && <Card style={{ marginBottom: 24, borderLeft: "3px solid var(--grn)" }}><span style={{ fontSize: 14 }}>✓ Týden {fmtW(cw)} splňuje všechna pravidla.</span></Card>}
 
             {/* Čekající návrhy — admin vidí vše, člen jen svoje */}
             <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10, fontFamily: "'Barlow Condensed',sans-serif" }}>Čeká na schválení</div>
