@@ -271,3 +271,25 @@ UŽ ROZEPSANÉ (materializované) týdny zůstávají na staré verzi, a právě
 čte. Jednorázová náprava: „Aplikovat stálý → na příštích 52 týdnů", pak roční GCal
 sync. Produktová pojistka: `applyPreset` nově po úspěchu sám nabídne přepsání
 52 týdnů (`applyDefaultYear(true)` bez druhého confirmu).
+
+---
+
+## Aktualizace v15 — admin login bez hardcoded hesla + serializace GCal
+
+**Admin login (kritické, částečná náprava P0).** `doLogin` měl zkratku
+`Admin + "0000" → přihlášení hardcoded heslem AP` uloženým přímo v klientském bundlu
+(a ve veřejném repu). Po změně hesla ve Firebase proto: staré „0000" → pokus o už
+neplatné AP → „Neplatné údaje"; nové heslo → zkratka se nechytla → poslal se e-mail
+doslova „Admin" → `auth/invalid-email`. Oprava: konstanta AP ODSTRANĚNA; jméno
+„Admin"/„admin" se mapuje na `admin@shiftflow.app` a heslo se VŽDY bere z formuláře.
+Uniklé heslo v historii repa je změnou ve Firebase mrtvé. (Pozn.: biometrické
+přihlášení stále drží heslo v localStorage — zbývající dluh.)
+
+**GCal duplicity ze souběhu.** Po každé editaci se za 1,5 s spouští týdenní auto-sync;
+dvě rychlé editace = dva souběžné syncy, které si proloží list→delete→create → duplicitní
+události (na screenshotu 2×–3× táž směna). Oprava: všechny GCal synchronizace
+(týdenní i roční) jedou přes jednu serializační frontu `gcalSerial`; navíc 60ms pauza
+mezi mazáními jako rate-limit pojistka. Světle modré pozůstatky (staré colorId 7 z éry
+týmů) přežily, protože dřívější velký úklid běžel ještě na staré verzi kódu (PWA cache,
+q-based hledání) — po nasazení je příští roční sync spolehlivě smaže (mají „ShiftFlow"
+v názvu).
