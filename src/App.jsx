@@ -23,7 +23,7 @@ const HMAP = {
   '2026-01-01':'Nový rok','2026-04-03':'Velký pátek','2026-04-06':'Vel. pondělí','2026-05-01':'Svátek práce','2026-05-08':'Den vítězství','2026-07-05':'Cyril a Metoděj','2026-07-06':'Jan Hus','2026-09-28':'Den české státnosti','2026-10-28':'Den vzniku ČSR','2026-11-17':'Den svobody','2026-12-24':'Štědrý den','2026-12-25':'1. svátek vánoční','2026-12-26':'2. svátek vánoční',
   '2027-01-01':'Nový rok','2027-03-26':'Velký pátek','2027-03-29':'Vel. pondělí','2027-05-01':'Svátek práce','2027-05-08':'Den vítězství','2027-07-05':'Cyril a Metoděj','2027-07-06':'Jan Hus','2027-09-28':'Den české státnosti','2027-10-28':'Den vzniku ČSR','2027-11-17':'Den svobody','2027-12-24':'Štědrý den','2027-12-25':'1. svátek vánoční','2027-12-26':'2. svátek vánoční',
 };
-const AE = "admin@shiftflow.app", AP = "ShiftFlowAdmin2026!";
+const AE = "admin@shiftflow.app"; // admin se přihlašuje svým skutečným heslem (žádné heslo v kódu)
 
 /* ═══ HELPERS ═══ */
 const dc = o => JSON.parse(JSON.stringify(o));
@@ -322,6 +322,11 @@ function getMondaysForRange(weeksAhead = 52, weeksBack = 0) {
 }
 
 // Sync ONE week (in-memory data already provided)
+// Všechny GCal synchronizace jedou přes jednu frontu — dvě souběžné (např. dvě rychlé
+// editace po sobě) by si jinak vzájemně proložily mazání a vytváření → duplicity.
+let _gcalChain = Promise.resolve();
+const gcalSerial = job => { const p = _gcalChain.then(job, job); _gcalChain = p.catch(() => { }); return p; };
+
 // Spolehlivě smaže VŠECHNY ShiftFlow události v rozsahu — nezávisle na Google full-text indexu.
 // Načte vše v okně (stránkovaně) a maže podle značky / textu / názvu → odstraní i staré a duplicitní.
 async function clearShiftFlowEvents(timeMin, timeMax, userId) {
@@ -334,7 +339,7 @@ async function clearShiftFlowEvents(timeMin, timeMax, userId) {
         const p = ev.extendedProperties?.private || {};
         const isSF = p.shiftflow === "1" || ev.description?.includes("[ShiftFlow]") || ev.summary?.includes("ShiftFlow");
         const mine = !userId || !p.sfUser || p.sfUser === userId; // starší události bez značky smažeme také
-        if (isSF && mine) { try { await gcalRequest("DELETE", `/calendars/primary/events/${ev.id}`); deleted++; } catch { } }
+        if (isSF && mine) { try { await gcalRequest("DELETE", `/calendars/primary/events/${ev.id}`); deleted++; await new Promise(r => setTimeout(r, 60)); } catch { } }
       }
     }
     pageToken = res?.nextPageToken;
@@ -342,7 +347,10 @@ async function clearShiftFlowEvents(timeMin, timeMax, userId) {
   return deleted;
 }
 
-async function syncWeekToGCal(userId, weekDates, schedule, employees, absences) {
+function syncWeekToGCal(userId, weekDates, schedule, employees, absences) {
+  return gcalSerial(() => _syncWeekCore(userId, weekDates, schedule, employees, absences));
+}
+async function _syncWeekCore(userId, weekDates, schedule, employees, absences) {
   const emp = employees.find(e => e.id === userId);
   if (!emp) return { ok: false, msg: "Profil nenalezen" };
   const timeMin = weekDates[0] + "T00:00:00+02:00";
@@ -354,7 +362,10 @@ async function syncWeekToGCal(userId, weekDates, schedule, employees, absences) 
 }
 
 // Sync FULL RANGE (default: 52 weeks ahead) — fetches each week from Firestore
-async function syncRangeToGCal(userId, employees, db, weeksAhead = 52, onProgress) {
+function syncRangeToGCal(userId, employees, db, weeksAhead = 52, onProgress) {
+  return gcalSerial(() => _syncRangeCore(userId, employees, db, weeksAhead, onProgress));
+}
+async function _syncRangeCore(userId, employees, db, weeksAhead = 52, onProgress) {
   const { doc, getDoc } = await import("firebase/firestore");
   const emp = employees.find(e => e.id === userId);
   if (!emp) return { ok: false, msg: "Profil nenalezen" };
@@ -541,7 +552,15 @@ function AuthScreen() {
   const [err, setErr] = useState(""); const [loading, setLoading] = useState(false);
   const [rn, setRn] = useState(""); const [rEmail, setREmail] = useState(""); const [rp, setRp] = useState(""); const [rp2, setRp2] = useState("");
   const [rNotify, setRNotify] = useState(false); const [rNotifEmail, setRNotifEmail] = useState("");
-  const doLogin = async () => { setErr(""); setLoading(true); try { if (login === "Admin" && pass === "0000") await signInWithEmailAndPassword(auth, AE, AP); else await signInWithEmailAndPassword(auth, login, pass); } catch (e) { setErr(e.code === "auth/invalid-credential" ? "Neplatné údaje" : e.message); } setLoading(false); };
+  const doLogin = async () => {
+    setErr(""); setLoading(true);
+    try {
+      const id = login.trim();
+      const email = id.toLowerCase() === "admin" ? AE : id; // zkratka "Admin" → admin účet, heslo VŽDY to zadané
+      await signInWithEmailAndPassword(auth, email, pass);
+    } catch (e) { setErr(e.code === "auth/invalid-credential" || e.code === "auth/wrong-password" ? "Neplatné údaje" : e.message); }
+    setLoading(false);
+  };
   const doReg = async () => { setErr(""); setLoading(true); try { if (!rn.trim() || !rEmail || !rp) { setErr("Vyplňte pole"); setLoading(false); return; } if (rp !== rp2) { setErr("Hesla neshodují"); setLoading(false); return; } if (rp.length < 6) { setErr("Min. 6 znaků"); setLoading(false); return; } const c = await createUserWithEmailAndPassword(auth, rEmail, rp); await updateProfile(c.user, { displayName: rn.trim() }); await setDoc(doc(db, "users", c.user.uid), { name: rn.trim(), email: rEmail, role: "employee", notify: rNotify, notifyEmail: rNotify ? rNotifEmail : "", fcmToken: null, defaultSchedule: null, setupDone: false, vacationTotal: 20, sickTotal: 5, whateverTotal: 3, vacationUsed: 0, sickUsed: 0, whateverUsed: 0, createdAt: new Date().toISOString() }); } catch (e) { setErr(e.message); } setLoading(false); };
   return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg)", padding: 16 }}><style>{CSS}</style><ParallaxBg />
     <div className="gl" style={{ width: "100%", maxWidth: 440, padding: "40px 28px", animation: "mu .5s", position: "relative", zIndex: 1 }}>
