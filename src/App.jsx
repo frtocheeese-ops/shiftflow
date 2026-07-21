@@ -748,24 +748,28 @@ export default function App() {
     };
   }, [cs, absences, employees, rules, wh.join("|"), intake, intakeAllow]);
 
-  // ═══ FÉROVOST: počítadla 8:00 / 10:00 / HO napříč posledními ~16 týdny + hlídač ═══
-  const FAIR_WEEKS = 16, FAIR_SPREAD = 3;
+  // ═══ FÉROVOST: počítadla 8:00 / 10:00 / HO od pevného data (nový model) + hlídač ═══
+  const FAIRNESS_START = "2026-07-22"; // počítá se jen od tohoto dne (včetně)
+  const FAIR_SPREAD = 3;
   const fairness = useMemo(() => {
-    const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - FAIR_WEEKS * 7);
-    const cutoffKey = wKey(cutoff);
     const tally = {};
     const active = employees.filter(e => e.role !== "admin");
     active.forEach(e => tally[e.id] = { eight: 0, ten: 0, ho: 0, weeks: 0 });
-    Object.entries(allSchedules).forEach(([wkKey, data]) => {
-      if (wkKey < cutoffKey || !data.entries) return;
+    Object.entries(allSchedules).forEach(([wkKeyStr, data]) => {
+      if (!data.entries) return;
+      const monday = new Date(wkKeyStr + "T00:00:00");
       const seen = new Set();
-      DAYS.forEach(day => SHIFTS.forEach(sh => (data.entries[day]?.[sh] || []).forEach(en => {
-        const t = tally[en.empId]; if (!t) return;
-        seen.add(en.empId);
-        if (en.ho) t.ho++;
-        else if (sh === "08:00") t.eight++;
-        else if (sh === "10:00") t.ten++;
-      })));
+      DAYS.forEach((day, i) => {
+        const dd = new Date(monday); dd.setDate(monday.getDate() + i);
+        if (localISO(dd) < FAIRNESS_START) return; // den před startem se nepočítá
+        SHIFTS.forEach(sh => (data.entries[day]?.[sh] || []).forEach(en => {
+          const t = tally[en.empId]; if (!t) return;
+          seen.add(en.empId);
+          if (en.ho) t.ho++;
+          else if (sh === "08:00") t.eight++;
+          else if (sh === "10:00") t.ten++;
+        }));
+      });
       seen.forEach(id => tally[id] && tally[id].weeks++);
     });
     const rows = active.map(e => ({ id: e.id, name: e.name, ...tally[e.id] })).sort((a, b) => b.eight - a.eight);
@@ -1490,8 +1494,8 @@ export default function App() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))", gap: 12 }}>{[{ l: "Crew", v: employees.filter(e => e.role !== "admin").length, c: "var(--acc2)" }, { l: "Active", v: employees.filter(e => e.setupDone).length, c: "var(--grn)" }, { l: "Swaps", v: openSw.length, c: "var(--amb)" }].map(s => <Card key={s.l}><div style={{ fontSize: 32, fontWeight: 600, color: s.c, fontFamily: "'IBM Plex Mono',monospace" }}>{s.v}</div><div style={{ fontSize: 12, color: "var(--tx3)", textTransform: "uppercase", marginTop: 4 }}>{s.l}</div></Card>)}</div>
 
             {/* ═══ FÉROVOST ═══ */}
-            <div style={{ fontSize: 16, fontWeight: 600, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 1, margin: "28px 0 6px" }}>Férovost · posledních {FAIR_WEEKS} týdnů</div>
-            <p style={{ fontSize: 12, color: "var(--tx3)", marginBottom: 12 }}>Počty odpracovaných směn od 8:00, od 10:00 a dnů home office. Hlídač upozorní, když se rozdíl mezi lidmi zvětší nad {FAIR_SPREAD}.</p>
+            <div style={{ fontSize: 16, fontWeight: 600, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 1, margin: "28px 0 6px" }}>Férovost · od 22. 7. 2026</div>
+            <p style={{ fontSize: 12, color: "var(--tx3)", marginBottom: 12 }}>Počty odpracovaných směn od 8:00, od 10:00 a dnů home office, počítané od 22. 7. 2026 (start nového modelu). Hlídač upozorní, když se rozdíl mezi lidmi zvětší nad {FAIR_SPREAD}.</p>
             {fairness.warn.length > 0 && <div className="gl" style={{ padding: "10px 14px", marginBottom: 12, borderLeft: "3px solid var(--amb)" }}>
               {fairness.warn.map((w, i) => <div key={i} style={{ fontSize: 13, color: "var(--amb)", padding: "2px 0" }}>⚠️ {w.msg}</div>)}
             </div>}
