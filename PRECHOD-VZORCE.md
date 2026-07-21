@@ -252,3 +252,22 @@ Poznámky bez zásahu: prop `ghost` u Btn je vizuální no-op (výchozí styl je
 „ghost"); tlačítka „+ nástupy" v týdenním záhlaví jsou přiznaně husté — případné
 zjemnění až podle zpětné vazby; celoroční Návrhy čtou jen materializované týdny
 (po „Aplikovat stálý na rok" je pokryto vše).
+
+---
+
+## Aktualizace v14 — oprava mazání absencí + stálý rozvrh vs. rozepsané týdny
+
+**Zrušení dovolené nechávalo absenci v DB (kritické).** `txSchedule` zapisoval přes
+`set(..., {merge:true})` — merge u mapy `absences` slučuje po klíčích, takže klíč
+smazaný v `removeAbs` v dokumentu přežil a snapshot ho vrátil do UI (člověk v rozvrhu
+i s dovolenou zároveň). Oprava: `mergeFields` — vyjmenovaná pole (entries, absences…)
+se nahrazují CELÁ, ostatní (intake, notes, events) zůstávají. Stejná sémantika i
+v `applyProblemFix`. Pozor: každé opakované kliknutí na zrušení dřív vracelo den
+do počítadla → počty dovolených u dotčených lidí můžou být nižší, srovnat ručně.
+
+**GCal ukazoval staré směny.** Příčina není v syncu — ten věrně kopíruje týdenní
+dokumenty ve Firestore. Ale „Předvyplnit rozvrh" mění jen výchozí rozvrhy lidí;
+UŽ ROZEPSANÉ (materializované) týdny zůstávají na staré verzi, a právě z nich sync
+čte. Jednorázová náprava: „Aplikovat stálý → na příštích 52 týdnů", pak roční GCal
+sync. Produktová pojistka: `applyPreset` nově po úspěchu sám nabídne přepsání
+52 týdnů (`applyDefaultYear(true)` bez druhého confirmu).

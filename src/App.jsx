@@ -792,7 +792,7 @@ export default function App() {
         const after = analyzeWeek(trial, abs, employees, rules, intk, intkA);
         const critB = before.violations.filter(v => v.sev === "crit").length, critA = after.violations.filter(v => v.sev === "crit").length;
         if (after.problems.some(p => p.key === problemKey) || critA > critB) { status = "invalid"; return; }
-        t.set(ref, { entries: trial, weekStart: weekKey, modifiedAt: new Date().toISOString(), modifiedBy: profile?.id }, { merge: true });
+        t.set(ref, { entries: trial, weekStart: weekKey, modifiedAt: new Date().toISOString(), modifiedBy: profile?.id }, { mergeFields: ["entries", "weekStart", "modifiedAt", "modifiedBy"] });
         status = "ok";
       });
       if (status === "ok") {
@@ -906,8 +906,11 @@ export default function App() {
       const absences = data.absences ? { ...data.absences } : {};
       const res = mutate({ entries, absences }) || {};
       const payload = { entries: res.entries || entries, weekStart: weekKey, modifiedAt: new Date().toISOString(), modifiedBy: profile?.id };
-      if (res.absences) payload.absences = res.absences;
-      t.set(ref, payload, { merge: true });
+      const fields = ["entries", "weekStart", "modifiedAt", "modifiedBy"];
+      if (res.absences) { payload.absences = res.absences; fields.push("absences"); }
+      // mergeFields: vyjmenovaná pole se NAHRADÍ celá (smazané klíče absencí opravdu zmizí),
+      // nevyjmenovaná (intake, intakeAllow, events, notes) zůstávají nedotčená.
+      t.set(ref, payload, { mergeFields: fields });
     });
   };
   // Optimistické zobrazení pro autora + autoritativní transakce; onSnapshot pak sladí všechny
@@ -1240,6 +1243,10 @@ export default function App() {
     }
     notify(`Předvyplněno pro ${n} lidí${renamed.length ? ` · přejmenováno: ${renamed.join(", ")}` : ""}${miss.length ? ` (bez předvolby: ${miss.join(", ")})` : ""}`);
     log(`Rozvrh předvyplněn dle preferencí (${n})${renamed.length ? `, přejmenováno ${renamed.join(", ")}` : ""}`);
+    // Už rozepsané týdny by jinak zůstaly na staré verzi (a nesedělo by nic, co z nich čte — např. Google Kalendář)
+    if (n > 0 && confirm("Přepsat novým stálým rozvrhem i už rozepsané týdny (52 týdnů dopředu)? Absence zůstanou zachované. Doporučeno — jinak budoucí týdny zůstanou podle staré verze.")) {
+      await applyDefaultYear(true);
+    }
   };
 
   // Aplikace stálého rozvrhu na týden — přepíše entries, ale zachová absence (vyřadí nepřítomné)
@@ -1252,8 +1259,8 @@ export default function App() {
     if (!confirm(`Aplikovat stálý rozvrh na týden ${fmtW(cw)}? Přepíše ruční úpravy tohoto týdne (absence zůstanou zohledněné).`)) return;
     await applyDefaultToWeek(wk); notify("Stálý rozvrh aplikován na týden"); log(`Stálý rozvrh → ${wk}`);
   };
-  const applyDefaultYear = async () => {
-    if (!confirm("Aplikovat stálý rozvrh na příštích 52 týdnů od zobrazeného? Přepíše rozvrhy těchto týdnů. Může chvíli trvat.")) return;
+  const applyDefaultYear = async (skipConfirm = false) => {
+    if (!skipConfirm && !confirm("Aplikovat stálý rozvrh na příštích 52 týdnů od zobrazeného? Přepíše rozvrhy těchto týdnů. Může chvíli trvat.")) return;
     const start = new Date(wk + "T00:00:00"); let done = 0;
     for (let i = 0; i < 52; i++) { const d = new Date(start); d.setDate(d.getDate() + i * 7); await applyDefaultToWeek(wKey(d)); done++; if (i % 10 === 0) notify(`Aplikuji… ${done}/52`); }
     notify(`Stálý rozvrh aplikován na ${done} týdnů`); log(`Stálý rozvrh → 52 týdnů od ${wk}`);
