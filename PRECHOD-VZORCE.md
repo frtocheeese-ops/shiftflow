@@ -184,3 +184,14 @@ na skutečná jména dle dodaného rozvrhu: Slavíček (8:00 celý týden), Ví�
 Stibor, Lochman (středa bez 10:00), Frťala (HO od 8, páteční 10), Švarc, Andy (neotevírá).
 Ověřeno, že „Předvyplnit rozvrh" nyní vytvoří přesně cílový rozpis (0 porušení, 8:00 ≥2,
 10:00 ≥2 vč. HO, HO 2/os. kromě Slavíčka a Víti).
+
+---
+
+## Aktualizace v9 — férovost od pevného data
+
+Počítadla férovosti (8:00 / 10:00 / HO) už nejedou jako plovoucí okno posledních
+16 týdnů, ale počítají se **jen od 22. 7. 2026 včetně** — nový model má tímto dnem
+oficiální start. Počítá se na úrovni jednotlivých dnů (ne celých týdnů), takže první
+týden po nasazení se do statistiky započítá jen od svého dne 22. 7. dál, ne od
+pondělí. `FAIRNESS_START` je konstanta, snadno se v budoucnu posune. Ověřeno testem
+přes hranici týdne.
