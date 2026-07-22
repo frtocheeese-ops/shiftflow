@@ -1512,7 +1512,7 @@ export default function App() {
             </>}
 
             {/* ── WEEK VIEW (table) ── */}
-            {schedView === "week" && <div className="gl" style={{ overflow: "hidden", padding: 0 }}>
+            {schedView === "week" && <div id="week-grid" className="gl" style={{ overflow: "hidden", padding: 0 }}>
               <div style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
                 <table style={{ width: "100%", minWidth: 700, borderCollapse: "collapse" }}>
                   <thead><tr>
