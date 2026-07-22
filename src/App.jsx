@@ -488,10 +488,19 @@ const Toggle = ({ checked, onChange, label }) => <label style={{ display: "flex"
 const Modal = ({ open, onClose, title, children, wide }) => { if (!open) return null; return <div style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,.35)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end", justifyContent: "center", animation: "fi .2s" }} onClick={onClose}><div onClick={e => e.stopPropagation()} className="gl" style={{ borderBottom: "none", padding: "28px 24px 36px", width: "100%", maxWidth: wide ? 760 : 520, maxHeight: "85vh", overflowY: "auto", animation: "mu .3s cubic-bezier(.22,.68,.36,1)" }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, borderBottom: "1px solid var(--brd)", paddingBottom: 16 }}><h3 style={{ margin: 0, fontSize: 18, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", fontWeight: 600, textTransform: "uppercase", letterSpacing: 2 }}>{title}</h3><button onClick={onClose} style={{ background: "none", border: "1px solid var(--brd2)", color: "var(--tx3)", width: 40, height: 40, cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button></div>{children}</div></div>; };
 const Card = ({ children, style: sx }) => <div className="gl" style={{ padding: 20, ...sx }}>{children}</div>;
 
+/* ═══ PWA INSTALACE ═══ */
+let deferredInstall = null;
+if (typeof window !== "undefined") {
+  window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); deferredInstall = e; window.dispatchEvent(new Event("sf-install")); });
+  window.addEventListener("appinstalled", () => { deferredInstall = null; window.dispatchEvent(new Event("sf-install")); });
+}
+const isStandalone = () => typeof window !== "undefined" && (window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true);
+const isIOS = () => typeof navigator !== "undefined" && /iphone|ipad|ipod/i.test(navigator.userAgent);
+
 /* ═══ PARALLAX ═══ */
 // KILL-SWITCH: přepni na false a mobil je zcela bez parallaxu (přesně chování před gyro experimentem).
 // Jednořádkový revert — žádné další změny nejsou potřeba.
-const MOBILE_GYRO_PARALLAX = true;
+const MOBILE_GYRO_PARALLAX = false; // gyro experiment vypnut 22.7. — na reálných zařízeních trhal
 const gyroPref = () => localStorage.getItem("sf_gyro") !== "0"; // uživatelský vypínač v Nastavení (výchozí: zapnuto)
 function ParallaxBg() {
   const ref = useRef(null);
@@ -764,6 +773,8 @@ export default function App() {
   const [theme, setTheme] = useState(() => localStorage.getItem("sf_theme") || "light");
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 900);
   const [gyroOn, setGyroOn] = useState(gyroPref());
+  const [installable, setInstallable] = useState(() => !!deferredInstall);
+  useEffect(() => { const f = () => setInstallable(!!deferredInstall); window.addEventListener("sf-install", f); return () => window.removeEventListener("sf-install", f); }, []);
   const [selDay, setSelDay] = useState(Math.max(0, todayIdx));
   const [slideDir, setSlideDir] = useState('right');
   const viewKey = useRef(0);
@@ -1676,6 +1687,16 @@ export default function App() {
                 <Btn ghost onClick={() => setModal("changePass")}>Změnit heslo</Btn>
                 <Btn ghost onClick={() => setModal("changeNotif")}>Email notifikace</Btn>
               </div>
+            </Card>
+            <Card style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, fontFamily: "'Barlow Condensed',sans-serif" }}>Aplikace</div>
+              {isStandalone() ? <p style={{ fontSize: 13, color: "var(--grn)", margin: 0 }}>✓ Běžíš v nainstalované aplikaci.</p>
+                : installable ? <>
+                  <Btn warm onClick={async () => { const p = deferredInstall; if (!p) return; p.prompt(); const { outcome } = await p.userChoice; deferredInstall = null; setInstallable(false); notify(outcome === "accepted" ? "Aplikace se instaluje ✓" : "Instalace zrušena"); }}>📲 Nainstalovat aplikaci</Btn>
+                  <p style={{ fontSize: 12, color: "var(--tx3)", margin: "10px 0 0" }}>Přidá ShiftFlow na plochu — spouští se pak na celou obrazovku jako běžná aplikace, bez lišty prohlížeče.</p>
+                </>
+                : isIOS() ? <p style={{ fontSize: 13, color: "var(--tx2)", margin: 0 }}>Na iPhonu: <b>Sdílet</b> (čtvereček se šipkou) → <b>Přidat na plochu</b>. Safari přímé tlačítko nenabízí.</p>
+                : <p style={{ fontSize: 13, color: "var(--tx2)", margin: 0 }}>Instalaci nabídne menu prohlížeče (⋮ → „Přidat na plochu" / „Nainstalovat aplikaci"). Pokud už je nainstalovaná, tlačítko se tady nezobrazuje.</p>}
             </Card>
             {isMobile && MOBILE_GYRO_PARALLAX && <Card style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, fontFamily: "'Barlow Condensed',sans-serif" }}>Vzhled</div>
