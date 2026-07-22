@@ -489,18 +489,49 @@ const Modal = ({ open, onClose, title, children, wide }) => { if (!open) return 
 const Card = ({ children, style: sx }) => <div className="gl" style={{ padding: 20, ...sx }}>{children}</div>;
 
 /* ═══ PARALLAX ═══ */
+// KILL-SWITCH: přepni na false a mobil je zcela bez parallaxu (přesně chování před gyro experimentem).
+// Jednořádkový revert — žádné další změny nejsou potřeba.
+const MOBILE_GYRO_PARALLAX = true;
+const gyroPref = () => localStorage.getItem("sf_gyro") !== "0"; // uživatelský vypínač v Nastavení (výchozí: zapnuto)
 function ParallaxBg() {
   const ref = useRef(null);
   const mob = typeof window !== 'undefined' && window.innerWidth < 900;
+  const [gyro, setGyro] = useState(() => MOBILE_GYRO_PARALLAX && gyroPref());
+  useEffect(() => { const f = () => setGyro(MOBILE_GYRO_PARALLAX && gyroPref()); window.addEventListener("sf-gyro", f); return () => window.removeEventListener("sf-gyro", f); }, []);
   useEffect(() => {
-    if (mob) return;
     const el = ref.current; if (!el) return;
-    const upd = (x, y) => { el.style.transform = `translate(${x * 20}px,${y * 14}px) scale(1.08)`; };
-    const onM = e => requestAnimationFrame(() => upd(e.clientX / window.innerWidth - .5, e.clientY / window.innerHeight - .5));
-    window.addEventListener('mousemove', onM, { passive: true });
-    return () => window.removeEventListener('mousemove', onM);
-  }, [mob]);
-  return <div ref={ref} style={{ position: 'fixed', inset: mob ? '0' : '-60px', zIndex: 0, pointerEvents: 'none', backgroundImage: 'var(--moon)', backgroundSize: mob ? '400px' : 'cover', willChange: mob ? 'auto' : 'transform' }} />;
+    if (!mob) {
+      const upd = (x, y) => { el.style.transform = `translate(${x * 20}px,${y * 14}px) scale(1.08)`; };
+      const onM = e => requestAnimationFrame(() => upd(e.clientX / window.innerWidth - .5, e.clientY / window.innerHeight - .5));
+      window.addEventListener('mousemove', onM, { passive: true });
+      return () => window.removeEventListener('mousemove', onM);
+    }
+    // ── Mobil: gyroskop. Zásady plynulosti: žádný React state, jediná rAF smyčka s lerpem,
+    // zápis jen composited transformu (translate3d) a jen když se hodnota reálně změní.
+    if (!gyro || matchMedia("(prefers-reduced-motion: reduce)").matches) { el.style.transform = ""; return; }
+    let tx = 0, ty = 0, cx = 0, cy = 0, raf = 0, base = null, running = false, lastW = "";
+    const loop = () => {
+      cx += (tx - cx) * .08; cy += (ty - cy) * .08;
+      const s = `translate3d(${(cx * 14).toFixed(1)}px,${(cy * 10).toFixed(1)}px,0)`;
+      if (s !== lastW) { el.style.transform = s; lastW = s; } // kvantizace na 0.1px → identické snímky se nezapisují
+      raf = requestAnimationFrame(loop);
+    };
+    const start = () => { if (!running) { running = true; raf = requestAnimationFrame(loop); } };
+    const stop = () => { running = false; cancelAnimationFrame(raf); };
+    const onO = e => {
+      if (e.gamma == null || e.beta == null) return;
+      if (base === null) base = { g: e.gamma, b: e.beta }; // kalibrace na výchozí držení telefonu
+      base.g += (e.gamma - base.g) * .003; base.b += (e.beta - base.b) * .003; // pomalé překalibrování (~10 s) při změně úchopu
+      tx = Math.max(-1, Math.min(1, (e.gamma - base.g) / 25));
+      ty = Math.max(-1, Math.min(1, (e.beta - base.b) / 25));
+      start(); // smyčka běží až od první gyro události → zařízení bez senzoru má nulovou režii
+    };
+    const onVis = () => document.hidden ? stop() : (base = null); // na pozadí nic nepočítáme; po návratu rekalibrace
+    window.addEventListener("deviceorientation", onO, { passive: true });
+    document.addEventListener("visibilitychange", onVis);
+    return () => { stop(); window.removeEventListener("deviceorientation", onO); document.removeEventListener("visibilitychange", onVis); el.style.transform = ""; };
+  }, [mob, gyro]);
+  return <div ref={ref} style={{ position: 'fixed', inset: mob ? (gyro ? '-24px' : '0') : '-60px', zIndex: 0, pointerEvents: 'none', backgroundImage: 'var(--moon)', backgroundSize: mob ? '400px' : 'cover', willChange: (mob && !gyro) ? 'auto' : 'transform' }} />;
 }
 
 /* ═══ NAV ═══ */
@@ -732,6 +763,7 @@ export default function App() {
   const [rules, setRules] = useState({ ...RULE_DEFAULTS, allowAllDnD: false });
   const [theme, setTheme] = useState(() => localStorage.getItem("sf_theme") || "light");
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 900);
+  const [gyroOn, setGyroOn] = useState(gyroPref());
   const [selDay, setSelDay] = useState(Math.max(0, todayIdx));
   const [slideDir, setSlideDir] = useState('right');
   const viewKey = useRef(0);
@@ -1645,6 +1677,17 @@ export default function App() {
                 <Btn ghost onClick={() => setModal("changeNotif")}>Email notifikace</Btn>
               </div>
             </Card>
+            {isMobile && MOBILE_GYRO_PARALLAX && <Card style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, fontFamily: "'Barlow Condensed',sans-serif" }}>Vzhled</div>
+              <Toggle checked={gyroOn} label="Parallax pozadí (gyroskop)" onChange={async v => {
+                if (v && typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") {
+                  try { if (await DeviceOrientationEvent.requestPermission() !== "granted") { notify("Přístup ke gyroskopu zamítnut"); return; } }
+                  catch { notify("Gyroskop není dostupný"); return; }
+                }
+                localStorage.setItem("sf_gyro", v ? "1" : "0"); setGyroOn(v); window.dispatchEvent(new Event("sf-gyro"));
+              }} />
+              <p style={{ fontSize: 12, color: "var(--tx3)", margin: 0 }}>Experiment: pozadí se lehce hýbe podle náklonu telefonu. Pokud by aplikace ztratila plynulost, vypni to tady — projeví se okamžitě, bez restartu.</p>
+            </Card>}
             <Card style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, fontFamily: "'Barlow Condensed',sans-serif" }}>Google Calendar</div>
               {!GCAL_CLIENT_ID ? <p style={{ fontSize: 13, color: "var(--tx3)" }}>Google Calendar integrace není nakonfigurována (chybí VITE_GOOGLE_CLIENT_ID).</p> : <>
