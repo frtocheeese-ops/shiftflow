@@ -1,0 +1,50 @@
+name: Patecni nahled rozvrhu
+on:
+  schedule:
+    - cron: "0 16 * * 5"   # 18:00 CEST (letni cas)
+    - cron: "0 17 * * 5"   # 18:00 CET (zimni cas) — skript si pražskou 18. hodinu ověří sám
+  workflow_dispatch: {}     # ruční test kdykoliv
+
+permissions:
+  contents: write
+
+jobs:
+  nahled:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Instalace Puppeteeru
+        run: npm install puppeteer@23 --no-save
+      - name: Screenshot rozvrhu na příští týden
+        env:
+          BOT_EMAIL: ${{ secrets.NAHLED_BOT_EMAIL }}
+          BOT_PASSWORD: ${{ secrets.NAHLED_BOT_PASSWORD }}
+          FORCE: ${{ github.event_name == 'workflow_dispatch' && '1' || '' }}
+        run: node scripts/nahled.mjs
+      - name: Commit screenshotu (stálá adresa /nahled/rozvrh.png)
+        id: commit
+        run: |
+          if [ ! -f public/nahled/rozvrh.png ]; then echo "made=0" >> $GITHUB_OUTPUT; exit 0; fi
+          git config user.name "nahled-bot"
+          git config user.email "actions@github.com"
+          git add public/nahled/rozvrh.png
+          git commit -m "nahled: rozvrh na tyden od $(date -d 'next monday' +%d.%m.%Y)" || { echo "made=0" >> $GITHUB_OUTPUT; exit 0; }
+          git push
+          echo "made=1" >> $GITHUB_OUTPUT
+      - name: Počkat na Netlify deploy
+        if: steps.commit.outputs.made == '1'
+        run: sleep 120
+      - name: E-mail s odkazem přes GAS relay
+        if: steps.commit.outputs.made == '1'
+        env:
+          NAHLED_EMAIL: ${{ secrets.NAHLED_EMAIL }}
+        run: |
+          GAS=$(cat gas_url.txt)
+          if [ -z "$GAS" ]; then echo "GAS URL nenalezena — e-mail přeskočen"; exit 0; fi
+          MONDAY=$(date -d 'next monday' +%d.%m.%Y)
+          LINK="https://smenyjt.netlify.app/nahled/rozvrh.png?t=$(date +%s)"
+          curl -s -X POST "$GAS" -H "Content-Type: text/plain" --data "{\"action\":\"sendEmail\",\"data\":{\"to\":\"$NAHLED_EMAIL\",\"employeeName\":\"ShiftFlow náhled\",\"changeDescription\":\"Rozvrh na týden od $MONDAY je připravený: $LINK — stačí přeposlat do WhatsApp skupiny.\",\"weekLabel\":\"týden od $MONDAY\"}}"
+          echo "E-mail odeslán na $NAHLED_EMAIL"

@@ -1,0 +1,76 @@
+// Páteční náhled rozvrhu — běží v GitHub Actions (viz .github/workflows/nahled.yml)
+// 1) config (Firebase apiKey, GAS URL) si vytáhne z živého bundlu na Netlify → nikdy nezastará
+// 2) při prvním běhu si sám založí účet bota (setupDone:true, defaultSchedule:null → nikdy není v rozvrhu)
+// 3) Puppeteer: login → další týden → screenshot do public/nahled/rozvrh.png
+import puppeteer from "puppeteer";
+import { mkdirSync, writeFileSync } from "fs";
+
+const SITE = "https://smenyjt.netlify.app";
+const { BOT_EMAIL, BOT_PASSWORD, FORCE } = process.env;
+if (!BOT_EMAIL || !BOT_PASSWORD) { console.error("Chybí BOT_EMAIL / BOT_PASSWORD"); process.exit(1); }
+
+// ── Guard na pražský čas (cron běží v UTC dvakrát kvůli DST — projít smí jen běh v 18:00) ──
+const praha = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Prague" }));
+if (FORCE !== "1" && praha.getHours() !== 18) { console.log(`Pražský čas ${praha.getHours()}h ≠ 18h — druhá DST větev, končím.`); process.exit(0); }
+
+// ── Config z živého bundlu ──
+const html = await (await fetch(SITE + "/?v=" + Date.now())).text();
+const asset = html.match(/\/assets\/index-[\w-]+\.js/)?.[0];
+if (!asset) throw new Error("Nenalezen bundle v index.html");
+const js = await (await fetch(SITE + asset)).text();
+const apiKey = js.match(/apiKey:"([^"]+)"/)?.[1];
+const projectId = js.match(/projectId:"([^"]+)"/)?.[1] || "shifts-79d6c";
+const gasUrl = js.match(/https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec/)?.[0] || "";
+if (!apiKey) throw new Error("Nenalezen Firebase apiKey v bundlu");
+writeFileSync("gas_url.txt", gasUrl); // pro e-mailový krok workflow
+console.log("Config OK — projectId:", projectId, "| GAS:", gasUrl ? "nalezen" : "CHYBÍ");
+
+// ── Účet bota: přihlásit, případně založit ──
+const idt = (ep, body) => fetch(`https://identitytoolkit.googleapis.com/v1/accounts:${ep}?key=${apiKey}`, {
+  method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
+}).then(r => r.json());
+
+let r = await idt("signInWithPassword", { email: BOT_EMAIL, password: BOT_PASSWORD, returnSecureToken: true });
+if (r.error && /EMAIL_NOT_FOUND|INVALID_LOGIN_CREDENTIALS|INVALID_EMAIL/.test(r.error.message)) {
+  console.log("Bot neexistuje — zakládám…");
+  r = await idt("signUp", { email: BOT_EMAIL, password: BOT_PASSWORD, displayName: "📸 Bot", returnSecureToken: true });
+  if (r.error) throw new Error("signUp: " + r.error.message);
+  const fields = {
+    name: { stringValue: "📸 Bot" }, email: { stringValue: BOT_EMAIL }, role: { stringValue: "employee" },
+    notify: { booleanValue: false }, notifyEmail: { stringValue: "" }, fcmToken: { nullValue: null },
+    defaultSchedule: { nullValue: null }, setupDone: { booleanValue: true },
+    vacationTotal: { integerValue: "0" }, sickTotal: { integerValue: "0" }, whateverTotal: { integerValue: "0" },
+    vacationUsed: { integerValue: "0" }, sickUsed: { integerValue: "0" }, whateverUsed: { integerValue: "0" },
+    createdAt: { stringValue: new Date().toISOString() }
+  };
+  const fs = await fetch(`https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/users/${r.localId}`, {
+    method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${r.idToken}` },
+    body: JSON.stringify({ fields })
+  });
+  if (!fs.ok) throw new Error("Firestore users doc: " + await fs.text());
+  console.log("Bot založen:", r.localId);
+} else if (r.error) throw new Error("signIn: " + r.error.message);
+else console.log("Bot přihlášen (REST) — účet existuje.");
+
+// ── Screenshot ──
+const browser = await puppeteer.launch({ args: ["--no-sandbox", "--font-render-hinting=none"] });
+const page = await browser.newPage();
+await page.setViewport({ width: 1440, height: 1150, deviceScaleFactor: 2 });
+await page.goto(SITE + "/?v=" + Date.now(), { waitUntil: "networkidle2", timeout: 60000 });
+
+await page.waitForSelector("input[type=password]", { timeout: 30000 });
+const emailSel = "input:not([type=password])";
+await page.type(emailSel, BOT_EMAIL, { delay: 10 });
+await page.type("input[type=password]", BOT_PASSWORD, { delay: 10 });
+await page.keyboard.press("Enter");
+
+// hlavní obrazovka = tlačítko „Další týden"
+await page.waitForSelector('[aria-label="Další týden"]', { timeout: 45000 });
+await new Promise(s => setTimeout(s, 2500)); // doběhnutí onSnapshot aktuálního týdne
+await page.click('[aria-label="Další týden"]');
+await new Promise(s => setTimeout(s, 3500)); // načtení dokumentu příštího týdne
+
+mkdirSync("public/nahled", { recursive: true });
+await page.screenshot({ path: "public/nahled/rozvrh.png", fullPage: true });
+await browser.close();
+console.log("Screenshot uložen: public/nahled/rozvrh.png");
