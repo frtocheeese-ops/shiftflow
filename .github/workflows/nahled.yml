@@ -46,5 +46,9 @@ jobs:
           if [ -z "$GAS" ]; then echo "GAS URL nenalezena — e-mail přeskočen"; exit 0; fi
           MONDAY=$(date -d 'next monday' +%d.%m.%Y)
           LINK="https://smenyjt.netlify.app/nahled/rozvrh.png?t=$(date +%s)"
-          curl -s -X POST "$GAS" -H "Content-Type: text/plain" --data "{\"action\":\"sendEmail\",\"data\":{\"to\":\"$NAHLED_EMAIL\",\"employeeName\":\"ShiftFlow náhled\",\"changeDescription\":\"Rozvrh na týden od $MONDAY je připravený: $LINK — stačí přeposlat do WhatsApp skupiny.\",\"weekLabel\":\"týden od $MONDAY\"}}"
-          echo "E-mail odeslán na $NAHLED_EMAIL"
+          if [ -s recipients.txt ]; then RCPT=$(cat recipients.txt); else RCPT="$NAHLED_EMAIL"; fi
+          for TO in $RCPT; do
+            curl -s -X POST "$GAS" -H "Content-Type: text/plain" --data "{\"action\":\"sendEmail\",\"data\":{\"to\":\"$TO\",\"employeeName\":\"ShiftFlow náhled\",\"changeDescription\":\"Rozvrh na týden od $MONDAY je připravený: $LINK\",\"weekLabel\":\"týden od $MONDAY\"}}"
+            echo "→ $TO"
+            sleep 2
+          done
