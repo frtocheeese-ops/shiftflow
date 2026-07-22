@@ -705,6 +705,17 @@ function DirectSwapF({ targetEmp, dateLabel, dateISO, targetDay, targetShift, on
 }
 
 /* ═══ MAIN APP ═══ */
+// ═══ RANKY za vyřešené problémy (fixCount) ═══
+const RANK_TIERS = [10, 20, 30, 45, 60, 80, 100, 130, 160, 200];
+const rankOf = n => { let r = 0; for (let i = 0; i < RANK_TIERS.length; i++) if ((n || 0) >= RANK_TIERS[i]) r = i + 1; return r; };
+const RankBadge = ({ fixes, size = 20 }) => {
+  const r = rankOf(fixes);
+  if (!r) return null;
+  const next = RANK_TIERS[r] ? ` · další rank od ${RANK_TIERS[r]}` : " · maximální rank";
+  return <img src={`/badges/rank${r}.png`} alt={`Rank ${r}`} title={`Rank ${r} · ${fixes} vyřešených problémů${next}`} loading="lazy"
+    style={{ width: size, height: size, flexShrink: 0, verticalAlign: "middle", objectFit: "contain" }} />;
+};
+
 export default function App() {
   const [authUser, setAuthUser] = useState(undefined); const [profile, setProfile] = useState(null);
   const [view, setView] = useState("schedule"); const [schedView, setSchedView] = useState("day");
@@ -1319,7 +1330,7 @@ export default function App() {
           onClick={() => isA ? setSelCell({ day, shift, empId: en.empId }) : isMe && setModal({ type: "myshift", day, shift })}
           style={{ gap: 10, padding: "12px 14px", borderBottom: idx < entries.length - 1 ? "1px solid var(--brd)" : "none" }}>
           <div style={{ width: 3, height: 24, background: en.ho ? "var(--grn)" : "var(--acc2)" }} />
-          <span style={{ fontWeight: 500, color: "var(--w)", flex: 1 }}>{emp.name}</span>
+          <span style={{ fontWeight: 500, color: "var(--w)", flex: 1, display: "inline-flex", alignItems: "center", gap: 6, minWidth: 0 }}><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{emp.name}</span><RankBadge fixes={emp.fixCount} /></span>
           {!isA && !isMe && <button title={`Požádat ${emp.name} o výměnu`} onClick={e => { e.stopPropagation(); setModal({ type: "directSwap", targetEmp: emp, targetDay: day, targetShift: shift }); }} style={{ background: "none", border: "1px solid var(--acc2)", color: "var(--acc2)", width: 26, height: 26, cursor: "pointer", fontSize: 13, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontFamily: "'IBM Plex Mono',monospace" }}>⇄</button>}
           {note && <span title={note} style={{ color: "var(--acc2)", cursor: "help", fontSize: 15, fontWeight: 700, border: "1px solid var(--acc2)", width: 22, height: 22, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>i</span>}
           {en.ho && <Badge small color="var(--grn)">HO</Badge>}
@@ -1566,7 +1577,7 @@ export default function App() {
             <div style={{ marginBottom: 24 }}>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 12 }}>{employees.filter(e => e.role !== "admin").map(emp => <Card key={emp.id}>
                 <div style={{ display: "flex", justifyContent: "space-between" }}>
-                  <div style={{ fontWeight: 600, fontSize: 17, color: "var(--w)" }}>{emp.name}</div>
+                  <div style={{ fontWeight: 600, fontSize: 17, color: "var(--w)", display: "flex", alignItems: "center", gap: 8 }}>{emp.name}<RankBadge fixes={emp.fixCount} size={26} /></div>
                   <div style={{ display: "flex", gap: 4 }}><button onClick={() => setModal({ type: "editDays", emp })} style={{ background: "none", border: "1px solid var(--brd2)", color: "var(--tx3)", cursor: "pointer", width: 34, height: 34, display: "flex", alignItems: "center", justifyContent: "center" }}>✏</button><button onClick={() => delUser(emp.id)} style={{ background: "none", border: "1px solid rgba(192,48,48,.3)", color: "var(--red)", cursor: "pointer", width: 34, height: 34, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button></div>
                 </div>
                 <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>{[{ l: "Dovol.", v: (emp.vacationTotal || 20) - (emp.vacationUsed || 0), c: "var(--sd)" }, { l: "Sick", v: (emp.sickTotal || 5) - (emp.sickUsed || 0), c: "var(--red)" }, { l: "What.", v: (emp.whateverTotal || 3) - (emp.whateverUsed || 0), c: "var(--amb)" }].map(b => <div key={b.l} style={{ textAlign: "center", padding: 8, border: "1px solid var(--brd)" }}><div style={{ fontSize: 20, fontWeight: 600, color: b.c, fontFamily: "'IBM Plex Mono',monospace" }}>{b.v}</div><div style={{ fontSize: 10, color: "var(--tx3)", textTransform: "uppercase" }}>{b.l}</div></div>)}</div>
@@ -1604,7 +1615,7 @@ export default function App() {
                   const maxV = Math.max(1, ...fairness.rows.map(x => Math.max(x.eight, x.ten, x.ho)));
                   const bar = (v, c) => <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "center" }}><div style={{ width: 40, height: 6, background: "var(--brd)", position: "relative" }}><div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${100 * v / maxV}%`, background: c }} /></div><span style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 13, minWidth: 18, textAlign: "right" }}>{v}</span></div>;
                   return <tr key={r.id} style={{ borderBottom: "1px solid var(--brd)" }}>
-                    <td style={{ padding: "8px 12px", fontWeight: 600, color: "var(--w)" }}>{r.name}</td>
+                    <td style={{ padding: "8px 12px", fontWeight: 600, color: "var(--w)" }}><span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>{r.name}<RankBadge fixes={r.fixes} /></span></td>
                     <td style={{ padding: "8px 12px" }}>{bar(r.eight, "var(--acc2)")}</td>
                     <td style={{ padding: "8px 12px" }}>{bar(r.ten, "var(--amb)")}</td>
                     <td style={{ padding: "8px 12px" }}>{bar(r.ho, "var(--grn)")}</td>
@@ -1722,7 +1733,7 @@ export default function App() {
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 460 }}>
           <thead><tr><th style={{ padding: "8px 10px", textAlign: "left", color: "var(--tx3)", borderBottom: "1px solid var(--brd)", fontFamily: "'Barlow Condensed',sans-serif", letterSpacing: 1 }}>Člen</th>{DAYS.map(d => <th key={d} style={{ padding: "8px 6px", textAlign: "center", color: "var(--tx3)", borderBottom: "1px solid var(--brd)", fontFamily: "'IBM Plex Mono',monospace" }}>{d}</th>)}</tr></thead>
           <tbody>{employees.filter(e => e.role !== "admin").map(emp => <tr key={emp.id} style={{ borderBottom: "1px solid var(--brd)" }}>
-            <td style={{ padding: "8px 10px", fontWeight: 600, color: "var(--w)" }}>{emp.name}</td>
+            <td style={{ padding: "8px 10px", fontWeight: 600, color: "var(--w)" }}><span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>{emp.name}<RankBadge fixes={emp.fixCount} size={18} /></span></td>
             {DAYS.map(d => { const t = emp.setupDone ? emp.defaultSchedule?.[d] : null; const ho = emp.defaultSchedule?.[`${d}_ho`]; return <td key={d} style={{ padding: "6px", textAlign: "center" }}>{t ? <span style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 12, color: ho ? "var(--grn)" : "var(--acc2)", border: `1px solid ${ho ? "var(--grn)" : "var(--brd)"}`, padding: "2px 6px" }}>{ho ? "HO" + t.slice(0, 2) : t.slice(0, 2)}</span> : <span style={{ color: "var(--tx3)" }}>—</span>}</td>; })}
           </tr>)}</tbody>
         </table>
