@@ -706,7 +706,7 @@ function DirectSwapF({ targetEmp, dateLabel, dateISO, targetDay, targetShift, on
 
 /* ═══ MAIN APP ═══ */
 // ═══ RANKY za vyřešené problémy (fixCount) ═══
-const RANK_TIERS = [10, 20, 30, 45, 60, 80, 100, 130, 160, 200];
+const RANK_TIERS = [1, 20, 30, 45, 60, 80, 100, 130, 160, 200];
 const rankOf = n => { let r = 0; for (let i = 0; i < RANK_TIERS.length; i++) if ((n || 0) >= RANK_TIERS[i]) r = i + 1; return r; };
 const RankBadge = ({ fixes, size = 20 }) => {
   const r = rankOf(fixes);
