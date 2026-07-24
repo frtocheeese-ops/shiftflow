@@ -1350,16 +1350,6 @@ export default function App() {
   };
   const exportCSV = () => { let csv = "\ufeffDen,Směna,Jméno,HO\n"; DAYS.forEach(d => SHIFTS.forEach(sh => (cs[d]?.[sh] || []).forEach(en => { const e = ge(en.empId); if (e) csv += `${d},${sh},${e.name},${en.ho ? "Ano" : "Ne"}\n`; }))); const b = new Blob([csv], { type: "text/csv;charset=utf-8;" }); const u = URL.createObjectURL(b); Object.assign(document.createElement("a"), { href: u, download: `rozvrh_${wk}.csv` }).click(); };
 
-  if (authUser === undefined) return <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center" }}><style>{CSS}</style><div style={{ color: "var(--tx3)", fontSize: 14, letterSpacing: 4, fontFamily: "'Barlow Condensed',sans-serif", animation: "pulse 1.5s infinite" }}>SHIFTFLOW</div></div>;
-  if (!authUser) return <AuthScreen />;
-  if (!profile) return <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--tx3)" }}><style>{CSS}</style>Načítání…</div>;
-  if (!isA && !profile.setupDone) return <Setup profile={profile} onDone={() => setProfile(p => ({ ...p, setupDone: true }))} />;
-
-  const openSw = swaps.filter(s => s.status === "open").sort((a, b) => (a.dateISO || a.week || "").localeCompare(b.dateISO || b.week || ""));
-  const openProps = proposals.filter(p => p.status === "open").sort((a, b) => (a.created || "").localeCompare(b.created || ""));
-  const visibleProps = openProps.filter(p => isA || p.affected?.includes(profile.id));
-  const myPendingProps = openProps.filter(p => isA ? !p.consents?.admin : (p.affected?.includes(profile.id) && !p.consents?.[profile.id]));
-  const probBadge = isA ? yearProblems.length : yearProblems.filter(pr => pr.alts.some(a => a.empId === profile.id)).length;
   // ── Přehled dovolených: mapa empId → { "YYYY-MM-DD": typ } pro zvolený rok ──
   const [vacYear, setVacYear] = useState(new Date().getFullYear());
   const vacMap = useMemo(() => {
@@ -1381,6 +1371,16 @@ export default function App() {
     return m;
   }, [allSchedules, vacYear]);
 
+  if (authUser === undefined) return <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center" }}><style>{CSS}</style><div style={{ color: "var(--tx3)", fontSize: 14, letterSpacing: 4, fontFamily: "'Barlow Condensed',sans-serif", animation: "pulse 1.5s infinite" }}>SHIFTFLOW</div></div>;
+  if (!authUser) return <AuthScreen />;
+  if (!profile) return <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--tx3)" }}><style>{CSS}</style>Načítání…</div>;
+  if (!isA && !profile.setupDone) return <Setup profile={profile} onDone={() => setProfile(p => ({ ...p, setupDone: true }))} />;
+
+  const openSw = swaps.filter(s => s.status === "open").sort((a, b) => (a.dateISO || a.week || "").localeCompare(b.dateISO || b.week || ""));
+  const openProps = proposals.filter(p => p.status === "open").sort((a, b) => (a.created || "").localeCompare(b.created || ""));
+  const visibleProps = openProps.filter(p => isA || p.affected?.includes(profile.id));
+  const myPendingProps = openProps.filter(p => isA ? !p.consents?.admin : (p.affected?.includes(profile.id) && !p.consents?.[profile.id]));
+  const probBadge = isA ? yearProblems.length : yearProblems.filter(pr => pr.alts.some(a => a.empId === profile.id)).length;
   const NAV = [{ id: "schedule", l: "Rozvrh", ic: "▦", b: 0 }, { id: "proposals", l: "Návrhy", ic: "⚑", b: myPendingProps.length + probBadge }, { id: "swaps", l: "Výměny", ic: "⇄", b: openSw.length }, ...(isA ? [{ id: "people", l: "Tým", ic: "◉", b: 0 }] : []), { id: "stats", l: "Stats", ic: "◫", b: 0 }, { id: "vacation", l: "Dovolená", ic: "🏖", b: 0 }, { id: "log", l: "Log", ic: "≡", b: 0 }, ...(isA ? [{ id: "defaults", l: "Stálý rozvrh", ic: "✎", b: 0 }] : []), { id: "settings", l: "Nastavení", ic: "⚙", b: 0 }];
   const dayHol = wh[selDay];
   const getEntries = (day, shift) => (cs[day]?.[shift] || []).filter(e => ge(e.empId));
