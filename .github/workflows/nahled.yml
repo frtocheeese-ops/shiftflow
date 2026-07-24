@@ -1,8 +1,8 @@
 name: Patecni nahled rozvrhu
 on:
   schedule:
-    - cron: "0 16 * * 5"   # 18:00 CEST (letni cas)
-    - cron: "0 17 * * 5"   # 18:00 CET (zimni cas) — skript si pražskou 18. hodinu ověří sám
+    - cron: "0 10 * * 5"   # 12:00 CEST (letni cas)
+    - cron: "0 11 * * 5"   # 12:00 CET (zimni cas) — skript si pražskou 12. hodinu ověří sám
   workflow_dispatch: {}     # ruční test kdykoliv
 
 permissions:
