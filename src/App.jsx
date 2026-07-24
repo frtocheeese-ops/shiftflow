@@ -1062,8 +1062,8 @@ export default function App() {
   };
 
   // Absence for a date range (vacation etc)
-  const addAbsRange = async (fromISO, toISO, type) => {
-    const eid = profile.id;
+  const addAbsRange = async (fromISO, toISO, type, forId) => {
+    const eid = forId || profile.id;
     let current = new Date(fromISO + "T00:00:00");
     const end = new Date(toISO + "T00:00:00");
     let count = 0;
@@ -1092,10 +1092,10 @@ export default function App() {
     log(`Rozsah: ${type} ${fromISO} — ${toISO}`);
   };
 
-  const removeAbs = async (eid, day) => {
+  const removeAbs = async (eid, day, weekKey, knownType) => {
     const k = fsKey(eid, day);
     const emp = ge(eid);
-    const prevType = absences[k];
+    const prevType = knownType !== undefined ? knownType : absences[k];
     try {
       await txSchedule(({ entries: s, absences: a }) => {
         SHIFTS.forEach(sh => { if (s[day]?.[sh]) s[day][sh] = s[day][sh].filter(e => e.empId !== eid); });
@@ -1105,8 +1105,8 @@ export default function App() {
         }
         const na = { ...a }; delete na[k];
         return { entries: s, absences: na };
-      });
-      setAbsences(prev => { const n = { ...prev }; delete n[k]; return n; });
+      }, weekKey);
+      if (!weekKey || weekKey === wk) setAbsences(prev => { const n = { ...prev }; delete n[k]; return n; });
       // refundace počítadla (dřív se nevracelo)
       if (emp && prevType && !["doctor", "training", "half_ho"].includes(prevType)) {
         const f = prevType === "sick" ? "sickUsed" : prevType === "vacation" || prevType === "half_vacation" ? "vacationUsed" : prevType === "whatever" ? "whateverUsed" : null;
@@ -1352,6 +1352,7 @@ export default function App() {
 
   // ── Přehled dovolených: mapa empId → { "YYYY-MM-DD": typ } pro zvolený rok ──
   const [vacYear, setVacYear] = useState(new Date().getFullYear());
+  const [vacSel, setVacSel] = useState(null); // klik na buňku v přehledu dovolených
   const vacMap = useMemo(() => {
     const m = {};
     Object.entries(allSchedules).forEach(([mon, data]) => {
@@ -1560,7 +1561,7 @@ export default function App() {
                         onDrop={e => handleDrop(day, shift, e)}>
                         {entries.map(en => { const emp = ge(en.empId); if (!emp) return null; const isMe = en.empId === profile.id;
                           return <div key={en.empId} className="ent" draggable={canDrag(en.empId)} onDragStart={e => e.dataTransfer.setData("text/plain", JSON.stringify({ empId: en.empId, day, shift }))} onClick={() => isA ? setSelCell({ day, shift, empId: en.empId }) : isMe && setModal({ type: "myshift", day, shift })} style={{ gap: 4, padding: "6px 8px", marginBottom: 2, background: "var(--bg3)", border: "1px solid var(--brd)", fontSize: 14 }}>
-                            <span style={{ width: 8, height: 3, background: en.ho ? "var(--grn)" : "var(--acc2)" }} /><span style={{ fontWeight: 500, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--w)" }}>{emp.name?.split(" ").pop()}</span>
+                            <span style={{ width: 8, height: 3, background: en.ho ? "var(--grn)" : "var(--acc2)" }} /><span style={{ fontWeight: 500, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--w)" }}>{emp.name?.split(" ").pop()}</span><RankBadge fixes={emp.fixCount} size={15} />
                             {!isA && !isMe && <button title={`Výměna s ${emp.name}`} onClick={e => { e.stopPropagation(); setModal({ type: "directSwap", targetEmp: emp, targetDay: day, targetShift: shift }); }} style={{ background: "none", border: "1px solid var(--acc2)", color: "var(--acc2)", width: 20, height: 20, cursor: "pointer", fontSize: 10, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, padding: 0 }}>⇄</button>}
                             {en.ho && <Badge small color="var(--grn)">HO</Badge>}
                           </div>; })}
@@ -1704,8 +1705,10 @@ export default function App() {
                           const off = wd === 0 || wd === 6 || HMAP[iso];
                           const t = vacMap[e.id]?.[iso];
                           const bg = t === "vacation" ? "var(--sd)" : t === "half_vacation" ? "linear-gradient(135deg,var(--sd) 50%,transparent 50%)" : off ? "var(--brd)" : "transparent";
-                          return <td key={d} title={t ? `${e.name} — ${t === "vacation" ? "Dovolená" : "½ Dovolená"} ${d}.${mi + 1}.${vacYear}` : undefined}
-                            style={{ width: 22, minWidth: 22, height: 22, background: bg, borderBottom: "1px solid var(--brd)", borderRight: "1px solid var(--brd)" }} />;
+                          const can = !off && (isA || e.id === profile.id);
+                          return <td key={d} onClick={can ? () => setVacSel({ empId: e.id, name: e.name, iso, type: t, label: `${d}.${mi + 1}.${vacYear}` }) : undefined}
+                            title={t ? `${e.name} — ${t === "vacation" ? "Dovolená" : "½ Dovolená"} ${d}.${mi + 1}.${vacYear}` : can ? `Zadat nepřítomnost — ${d}.${mi + 1}.` : undefined}
+                            style={{ width: 22, minWidth: 22, height: 22, background: bg, borderBottom: "1px solid var(--brd)", borderRight: "1px solid var(--brd)", cursor: can ? "pointer" : "default" }} />;
                         })}
                       </tr>)}</tbody>
                     </table>
@@ -1878,6 +1881,19 @@ export default function App() {
       <div style={{ borderTop: "1px solid var(--brd)", marginTop: 16, paddingTop: 16 }}>
         <Btn ghost onClick={() => setModal("vacrange")} style={{ width: "100%", fontSize: 14 }}>🗓 Dovolená od — do (rozsah)</Btn>
       </div>
+    </Modal>
+    <Modal open={!!vacSel} onClose={() => setVacSel(null)} title={vacSel ? `${vacSel.name} — ${vacSel.label}` : ""}>
+      {vacSel && <>
+        {vacSel.type ? <>
+          <p style={{ fontSize: 13, color: "var(--tx2)", marginTop: 0 }}>Zadáno: <b>{ABS.find(a => a.id === vacSel.type)?.label || vacSel.type}</b></p>
+          <Btn ghost onClick={async () => { const d = new Date(vacSel.iso + "T00:00:00"); await removeAbs(vacSel.empId, DAYS[d.getDay() - 1], wKey(d), vacSel.type); setVacSel(null); }} style={{ width: "100%", color: "var(--red)", borderColor: "var(--red)" }}>Odebrat nepřítomnost</Btn>
+        </> : <>
+          <p style={{ fontSize: 13, color: "var(--tx2)", marginTop: 0 }}>Vyber typ nepřítomnosti:</p>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            {ABS.filter(a => a.id !== "half_ho").map(a => <Btn key={a.id} ghost onClick={async () => { await addAbsRange(vacSel.iso, vacSel.iso, a.id, vacSel.empId); setVacSel(null); notify(`${a.label} zadáno`); }} style={{ borderColor: a.color, color: a.color }}>{a.icon} {a.label}</Btn>)}
+          </div>
+        </>}
+      </>}
     </Modal>
     <Modal open={modal === "vacrange"} onClose={() => setModal(null)} title="Nepřítomnost — rozsah"><VacRangeF onSubmit={(f, t, type) => { addAbsRange(f, t, type); setModal(null); }} /></Modal>
 
