@@ -929,9 +929,14 @@ export default function App() {
   // Auto-sync GCal when ANY week's schedule changes affecting current user
   // Listens to schedules collection and syncs the affected week if user has events there
   const lastSyncRef = useRef({});
+  const empRef = useRef(employees); useEffect(() => { empRef.current = employees; }, [employees]);
   useEffect(() => {
     if (!profile?.gcalEnabled || !profile?.id) return;
+    // POZOR: první snapshot doručí CELOU kolekci jako "added". Bez tohoto přeskočení
+    // by se při každém načtení appky (a při každém obnovení listeneru) rozjel sync všech ~52 týdnů.
+    let primed = false;
     const u = onSnapshot(collection(db, "schedules"), s => {
+      if (!primed) { primed = true; return; }
       s.docChanges().forEach(change => {
         if (change.type !== "modified" && change.type !== "added") return;
         const data = change.doc.data();
@@ -948,12 +953,12 @@ export default function App() {
         if (!getGcalToken()) return;
         const weekDates = weekDatesFromMonday(weekId);
         setTimeout(() => {
-          syncWeekToGCal(profile.id, weekDates, data.entries || {}, employees, data.absences || {}).catch(() => { });
+          syncWeekToGCal(profile.id, weekDates, data.entries || {}, empRef.current, data.absences || {}).catch(() => { });
         }, 2000);
       });
     });
     return u;
-  }, [profile?.id, profile?.gcalEnabled, employees]);
+  }, [profile?.id, profile?.gcalEnabled]);
   useEffect(() => { const u = onSnapshot(collection(db, "swapRequests"), s => setSwaps(s.docs.map(d => ({ id: d.id, ...d.data() })))); return u; }, []);
   useEffect(() => { const u = onSnapshot(collection(db, "changeProposals"), s => setProposals(s.docs.map(d => ({ id: d.id, ...d.data() })))); return u; }, []);
   // Všechny rozvrhy pro férovostní počítadla (malý tým → pár desítek dokumentů)
@@ -1735,6 +1740,17 @@ export default function App() {
                       const res = await syncRangeToGCal(profile.id, employees, db, 52, msg => notify(msg));
                       notify(res.msg);
                     }}>Sync celý rok</Btn>
+                    <Btn ghost onClick={async () => {
+                      if (!confirm("Smazat VŠECHNY události [ShiftFlow] z tvého Google kalendáře?\n\nProjde 2 roky zpět a 3 roky dopředu. Rozvrh v aplikaci zůstane nedotčený — smažou se jen události v kalendáři.")) return;
+                      notify("Mažu události z kalendáře…");
+                      const now = new Date();
+                      const from = new Date(now.getFullYear() - 2, 0, 1).toISOString();
+                      const to = new Date(now.getFullYear() + 3, 0, 1).toISOString();
+                      try {
+                        const n = await gcalSerial(() => clearShiftFlowEvents(from, to));
+                        notify(n > 0 ? `Smazáno ${n} událostí z kalendáře` : "Žádné události ShiftFlow nenalezeny");
+                      } catch { notify("Mazání selhalo — zkus to znovu"); }
+                    }} style={{ color: "var(--red)", borderColor: "var(--red)" }}>Smazat vše z kalendáře</Btn>
                     <Btn ghost onClick={() => { localStorage.removeItem("sf_gcal_token"); notify("Token odstraněn — při dalším sync budete znovu autorizovat"); }}>Odpojit</Btn>
                   </div>
                 </>}
