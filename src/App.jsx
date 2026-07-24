@@ -1360,7 +1360,28 @@ export default function App() {
   const visibleProps = openProps.filter(p => isA || p.affected?.includes(profile.id));
   const myPendingProps = openProps.filter(p => isA ? !p.consents?.admin : (p.affected?.includes(profile.id) && !p.consents?.[profile.id]));
   const probBadge = isA ? yearProblems.length : yearProblems.filter(pr => pr.alts.some(a => a.empId === profile.id)).length;
-  const NAV = [{ id: "schedule", l: "Rozvrh", ic: "▦", b: 0 }, { id: "proposals", l: "Návrhy", ic: "⚑", b: myPendingProps.length + probBadge }, { id: "swaps", l: "Výměny", ic: "⇄", b: openSw.length }, ...(isA ? [{ id: "people", l: "Tým", ic: "◉", b: 0 }] : []), { id: "stats", l: "Stats", ic: "◫", b: 0 }, { id: "log", l: "Log", ic: "≡", b: 0 }, ...(isA ? [{ id: "defaults", l: "Stálý rozvrh", ic: "✎", b: 0 }] : []), { id: "settings", l: "Nastavení", ic: "⚙", b: 0 }];
+  // ── Přehled dovolených: mapa empId → { "YYYY-MM-DD": typ } pro zvolený rok ──
+  const [vacYear, setVacYear] = useState(new Date().getFullYear());
+  const vacMap = useMemo(() => {
+    const m = {};
+    Object.entries(allSchedules).forEach(([mon, data]) => {
+      if (!data?.absences) return;
+      const monday = new Date(mon + "T00:00:00");
+      if (isNaN(monday)) return;
+      Object.entries(data.absences).forEach(([k, type]) => {
+        if (type !== "vacation" && type !== "half_vacation") return;
+        const idx = k.lastIndexOf("__"); if (idx < 0) return;
+        const empId = k.slice(0, idx), day = k.slice(idx + 2);
+        const di = DAYS.indexOf(day); if (di < 0) return;
+        const d = new Date(monday); d.setDate(monday.getDate() + di);
+        if (d.getFullYear() !== vacYear) return;
+        (m[empId] || (m[empId] = {}))[localISO(d)] = type;
+      });
+    });
+    return m;
+  }, [allSchedules, vacYear]);
+
+  const NAV = [{ id: "schedule", l: "Rozvrh", ic: "▦", b: 0 }, { id: "proposals", l: "Návrhy", ic: "⚑", b: myPendingProps.length + probBadge }, { id: "swaps", l: "Výměny", ic: "⇄", b: openSw.length }, ...(isA ? [{ id: "people", l: "Tým", ic: "◉", b: 0 }] : []), { id: "stats", l: "Stats", ic: "◫", b: 0 }, { id: "vacation", l: "Dovolená", ic: "🏖", b: 0 }, { id: "log", l: "Log", ic: "≡", b: 0 }, ...(isA ? [{ id: "defaults", l: "Stálý rozvrh", ic: "✎", b: 0 }] : []), { id: "settings", l: "Nastavení", ic: "⚙", b: 0 }];
   const dayHol = wh[selDay];
   const getEntries = (day, shift) => (cs[day]?.[shift] || []).filter(e => ge(e.empId));
   const getDayAbs = day => Object.entries(absences).filter(([k]) => k.endsWith(`__${day}`)).map(([k, t]) => ({ empId: k.split("__")[0], type: t })).filter(a => ge(a.empId));
@@ -1639,6 +1660,60 @@ export default function App() {
             </div>
           </div>}
 
+          {view === "vacation" && <div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 20, borderBottom: "1px solid var(--brd)", paddingBottom: 12, flexWrap: "wrap" }}>
+              <div style={{ fontSize: 20, fontWeight: 600, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 2 }}>Dovolená {vacYear}</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <button aria-label="Předchozí rok" onClick={() => setVacYear(y => y - 1)} style={{ background: "none", border: "1px solid var(--brd2)", color: "var(--tx2)", width: 32, height: 32, cursor: "pointer" }}>‹</button>
+                <span style={{ fontFamily: "'IBM Plex Mono',monospace", color: "var(--w)", minWidth: 46, textAlign: "center" }}>{vacYear}</span>
+                <button aria-label="Další rok" onClick={() => setVacYear(y => y + 1)} style={{ background: "none", border: "1px solid var(--brd2)", color: "var(--tx2)", width: 32, height: 32, cursor: "pointer" }}>›</button>
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center", marginBottom: 16, fontSize: 12, color: "var(--tx3)" }}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 14, height: 14, background: "var(--sd)", display: "inline-block" }} /> Dovolená</span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 14, height: 14, background: "linear-gradient(135deg,var(--sd) 50%,transparent 50%)", border: "1px solid var(--brd2)", display: "inline-block" }} /> ½ Dovolená</span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 14, height: 14, background: "var(--brd)", display: "inline-block" }} /> Víkend / svátek</span>
+            </div>
+            {(() => {
+              const team = employees.filter(e => e.setupDone && e.name !== "📸 Bot").sort((a, b) => a.name.localeCompare(b.name, "cs"));
+              if (!team.length) return <Card>Žádní členové týmu.</Card>;
+              const MES = ["Leden", "Únor", "Březen", "Duben", "Květen", "Červen", "Červenec", "Srpen", "Září", "Říjen", "Listopad", "Prosinec"];
+              return <div style={{ display: "grid", gap: 16 }}>{MES.map((mName, mi) => {
+                const dim = new Date(vacYear, mi + 1, 0).getDate();
+                const days = Array.from({ length: dim }, (_, i) => i + 1);
+                const total = team.reduce((n, e) => n + days.filter(d => vacMap[e.id]?.[`${vacYear}-${String(mi + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`]).length, 0);
+                return <Card key={mi} style={{ padding: 0, overflow: "hidden" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderBottom: "1px solid var(--brd)" }}>
+                    <span style={{ fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 1, color: "var(--w)", fontWeight: 600 }}>{mName}</span>
+                    <span style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 12, color: total ? "var(--sd)" : "var(--tx3)" }}>{total} dní</span>
+                  </div>
+                  <div style={{ overflowX: "auto" }}>
+                    <table style={{ borderCollapse: "collapse", fontSize: 11, minWidth: "100%" }}>
+                      <thead><tr>
+                        <th style={{ position: "sticky", left: 0, background: "var(--bg)", zIndex: 1, textAlign: "left", padding: "4px 10px", color: "var(--tx3)", fontWeight: 500, borderBottom: "1px solid var(--brd)", minWidth: 92 }}>Člen</th>
+                        {days.map(d => {
+                          const dt = new Date(vacYear, mi, d); const wd = dt.getDay(); const iso = localISO(dt);
+                          const off = wd === 0 || wd === 6 || HMAP[iso];
+                          return <th key={d} title={HMAP[iso] || undefined} style={{ padding: "4px 0", width: 22, minWidth: 22, textAlign: "center", fontWeight: 500, color: off ? "var(--tx3)" : "var(--tx2)", background: off ? "var(--brd)" : "transparent", borderBottom: "1px solid var(--brd)", fontFamily: "'IBM Plex Mono',monospace" }}>{d}</th>;
+                        })}
+                      </tr></thead>
+                      <tbody>{team.map(e => <tr key={e.id}>
+                        <td style={{ position: "sticky", left: 0, background: "var(--bg)", zIndex: 1, padding: "4px 10px", color: "var(--w)", fontWeight: 500, whiteSpace: "nowrap", borderBottom: "1px solid var(--brd)" }}>{e.name}</td>
+                        {days.map(d => {
+                          const dt = new Date(vacYear, mi, d); const wd = dt.getDay(); const iso = localISO(dt);
+                          const off = wd === 0 || wd === 6 || HMAP[iso];
+                          const t = vacMap[e.id]?.[iso];
+                          const bg = t === "vacation" ? "var(--sd)" : t === "half_vacation" ? "linear-gradient(135deg,var(--sd) 50%,transparent 50%)" : off ? "var(--brd)" : "transparent";
+                          return <td key={d} title={t ? `${e.name} — ${t === "vacation" ? "Dovolená" : "½ Dovolená"} ${d}.${mi + 1}.${vacYear}` : undefined}
+                            style={{ width: 22, minWidth: 22, height: 22, background: bg, borderBottom: "1px solid var(--brd)", borderRight: "1px solid var(--brd)" }} />;
+                        })}
+                      </tr>)}</tbody>
+                    </table>
+                  </div>
+                </Card>;
+              })}</div>;
+            })()}
+          </div>}
           {view === "stats" && <div>
             <div style={{ fontSize: 20, fontWeight: 600, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 2, marginBottom: 20, borderBottom: "1px solid var(--brd)", paddingBottom: 12 }}>Status</div>
             {!isA && <Card style={{ marginBottom: 20 }}>
