@@ -12,7 +12,7 @@ if (!BOT_EMAIL || !BOT_PASSWORD) { console.error("Chybí BOT_EMAIL / BOT_PASSWOR
 
 // ── Guard na pražský čas (cron běží v UTC dvakrát kvůli DST — projít smí jen běh v 18:00) ──
 const praha = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Prague" }));
-if (FORCE !== "1" && praha.getHours() !== 18) { console.log(`Pražský čas ${praha.getHours()}h ≠ 18h — druhá DST větev, končím.`); process.exit(0); }
+if (FORCE !== "1" && praha.getHours() !== 12) { console.log(`Pražský čas ${praha.getHours()}h ≠ 12h — druhá DST větev, končím.`); process.exit(0); }
 
 // ── Config z živého bundlu ──
 const html = await (await fetch(SITE + "/?v=" + Date.now())).text();
