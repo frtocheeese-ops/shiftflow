@@ -87,6 +87,46 @@ await new Promise(s => setTimeout(s, 3500)); // onSnapshot příštího týdne
 mkdirSync("public/nahled", { recursive: true });
 const grid = await page.$("#week-grid");
 if (!grid) throw new Error("#week-grid nenalezen");
+const box = await grid.boundingBox();
 await grid.screenshot({ path: "public/nahled/rozvrh.png" });
 await browser.close();
 console.log("Screenshot mřížky uložen: public/nahled/rozvrh.png");
+
+// ── OG stránka: ve WhatsAppu se u odkazu ukáže rovnou náhled rozvrhu ──
+const nm = new Date(praha); nm.setDate(nm.getDate() + ((8 - nm.getDay()) % 7 || 7));
+const dd = String(nm.getDate()).padStart(2, "0"), mm = String(nm.getMonth() + 1).padStart(2, "0");
+const monday = `${dd}.${mm}.${nm.getFullYear()}`;
+const stamp = Date.now();
+const img = `${SITE}/nahled/rozvrh.png?v=${stamp}`;
+const W = Math.round((box?.width || 968) * 2), H = Math.round((box?.height || 477) * 2);
+writeFileSync("public/nahled/index.html", `<!DOCTYPE html>
+<html lang="cs"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ShiftFlow — rozvrh na týden od ${monday}</title>
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="ShiftFlow">
+<meta property="og:title" content="Rozvrh na týden od ${monday}">
+<meta property="og:description" content="Aktuální rozpis směn pro příští týden. Klepnutím otevřeš plnou velikost.">
+<meta property="og:image" content="${img}">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="${W}">
+<meta property="og:image:height" content="${H}">
+<meta property="og:url" content="${SITE}/nahled/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="${img}">
+<style>
+ body{margin:0;background:#0c0c12;color:#e8e8f0;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;
+      display:flex;flex-direction:column;align-items:center;gap:14px;padding:16px}
+ h1{font-size:17px;font-weight:600;margin:4px 0 0;text-align:center;letter-spacing:.4px}
+ p{margin:0;font-size:12px;color:#8a8a9a}
+ img{max-width:100%;height:auto;border:1px solid #2a2a3a;border-radius:4px}
+ a{color:#6aa8d8;font-size:13px;text-decoration:none;margin-top:6px}
+</style></head>
+<body>
+ <h1>Rozvrh na týden od ${monday}</h1>
+ <img src="rozvrh.png?v=${stamp}" alt="Rozvrh směn na týden od ${monday}">
+ <p>Aktualizováno ${praha.toLocaleString("cs-CZ")}</p>
+ <a href="${SITE}">Otevřít ShiftFlow →</a>
+</body></html>
+`);
+console.log("OG stránka uložena: public/nahled/index.html |", W + "×" + H);
