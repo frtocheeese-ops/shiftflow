@@ -259,7 +259,7 @@ function buildWeekEvents(userId, weekDates, schedule, employees, absences) {
     const day = ["Po", "Út", "St", "Čt", "Pá"][i];
     const date = weekDates[i];
     const absKey = `${userId}__${day}`;
-    if (absences[absKey]) {
+    if (absences[absKey] && !String(absences[absKey]).startsWith("half_")) {
       const absType = ABS.find(a => a.id === absences[absKey]);
       // For absence end date in all-day event, end must be next day
       const endDate = new Date(date + "T00:00:00"); endDate.setDate(endDate.getDate() + 1);
@@ -279,9 +279,11 @@ function buildWeekEvents(userId, weekDates, schedule, employees, absences) {
       if (entry) {
         const endH = parseInt(shift.split(":")[0]) + 8;
         const hoLabel = entry.ho ? " 🏠 HO" : "";
+        const hAbs = entry.halfAbs ? ABS.find(a => a.id === entry.halfAbs) : null;
+        const hLabel = hAbs ? ` · ${hAbs.icon} ${entry.halfPart === "second" ? "2. půle" : "1. půle"}` : "";
         events.push({
-          summary: `${shift} Směna${hoLabel} — ShiftFlow`,
-          description: `[ShiftFlow] ${shift}${hoLabel}`,
+          summary: `${shift} Směna${hoLabel}${hLabel} — ShiftFlow`,
+          description: `[ShiftFlow] ${shift}${hoLabel}${hLabel}`,
           start: { dateTime: `${date}T${shift}:00`, timeZone: "Europe/Prague" },
           end: { dateTime: `${date}T${String(endH).padStart(2, "0")}:00:00`, timeZone: "Europe/Prague" },
           colorId: entry.ho ? "10" : "9",
@@ -748,6 +750,15 @@ function DirectSwapF({ targetEmp, dateLabel, dateISO, targetDay, targetShift, on
 // ═══ RANKY za vyřešené problémy (fixCount) ═══
 const RANK_TIERS = [1, 15, 30, 45, 60, 80, 100, 130, 160, 200];
 const rankOf = n => { let r = 0; for (let i = 0; i < RANK_TIERS.length; i++) if ((n || 0) >= RANK_TIERS[i]) r = i + 1; return r; };
+const HALF_LBL = { first: "1. půle", second: "2. půle" };
+const HalfTag = ({ en, compact }) => {
+  if (!en?.halfAbs) return null;
+  const a = ABS.find(x => x.id === en.halfAbs);
+  const second = en.halfPart === "second";
+  return <span title={`${a?.label || "Půlden"} — ${second ? "druhá" : "první"} polovina směny`}
+    style={{ flexShrink: 0, fontSize: compact ? 9 : 10, padding: compact ? "0 3px" : "1px 5px", border: `1px solid ${a?.color || "var(--brd2)"}`, color: a?.color || "var(--tx2)", fontFamily: "'IBM Plex Mono',monospace", whiteSpace: "nowrap", lineHeight: 1.6 }}>{a?.icon} {second ? "2.p" : "1.p"}</span>;
+};
+
 const RankBadge = ({ fixes, size = 20 }) => {
   const r = rankOf(fixes);
   if (!r) return null;
@@ -788,6 +799,8 @@ export default function App() {
   const cw = useMemo(() => { const d = new Date(); d.setDate(d.getDate() + wo * 7); return d; }, [wo]);
   const wk = wKey(cw); const isA = profile?.role === "admin";
   const ge = id => employees.find(e => e.id === id);
+  // půldenní absence se nejdřív zeptá, která polovina směny
+  const withHalf = (type, run) => String(type).startsWith("half_") ? setHalfSel({ type, run }) : run(null);
   const ds = useMemo(() => buildDef(employees), [employees]);
   // Merge saved schedule with default schedule for any new employees not yet in saved data
   const cs = useMemo(() => {
@@ -1038,13 +1051,25 @@ export default function App() {
   }, "HO přepnuto");
 
   // ABSENCE: transakční zápis (řeší souběh) + increment počítadla
-  const addAbs = async (eid, day, type) => {
+  const addAbs = async (eid, day, type, part) => {
     if (!isA && eid !== profile.id) return;
     const absKey = fsKey(eid, day);
     const emp = ge(eid);
+    const half = String(type).startsWith("half_");
     try {
       await txSchedule(({ entries: s, absences: a }) => {
-        SHIFTS.forEach(sh => { if (s[day]?.[sh]) s[day][sh] = s[day][sh].filter(e => e.empId !== eid); });
+        if (half) {
+          // půlden = člověk zůstává ve směně, jen se označí která polovina chybí
+          let found = false;
+          SHIFTS.forEach(sh => (s[day]?.[sh] || []).forEach(e => { if (e.empId === eid) { e.halfAbs = type; e.halfPart = part || "first"; found = true; } }));
+          const dsh = emp?.defaultSchedule?.[day];
+          if (!found && SHIFTS.includes(dsh)) {
+            if (!s[day]) s[day] = {}; if (!s[day][dsh]) s[day][dsh] = [];
+            s[day][dsh].push({ empId: eid, ho: emp.defaultSchedule[`${day}_ho`] || false, isDefault: true, halfAbs: type, halfPart: part || "first" });
+          }
+        } else {
+          SHIFTS.forEach(sh => { if (s[day]?.[sh]) s[day][sh] = s[day][sh].filter(e => e.empId !== eid); });
+        }
         return { entries: s, absences: { ...a, [absKey]: type } };
       });
       // optimistické lokální sladění
@@ -1062,8 +1087,10 @@ export default function App() {
   };
 
   // Absence for a date range (vacation etc)
-  const addAbsRange = async (fromISO, toISO, type, forId) => {
+  const addAbsRange = async (fromISO, toISO, type, forId, part) => {
     const eid = forId || profile.id;
+    const half = String(type).startsWith("half_");
+    const emp0 = ge(eid);
     let current = new Date(fromISO + "T00:00:00");
     const end = new Date(toISO + "T00:00:00");
     let count = 0;
@@ -1074,7 +1101,17 @@ export default function App() {
         const weekStart = wKey(current);
         const ak = fsKey(eid, dayName);
         await txSchedule(({ entries: s, absences: a }) => {
-          SHIFTS.forEach(sh => { if (s[dayName]?.[sh]) s[dayName][sh] = s[dayName][sh].filter(e => e.empId !== eid); });
+          if (half) {
+            let found = false;
+            SHIFTS.forEach(sh => (s[dayName]?.[sh] || []).forEach(e => { if (e.empId === eid) { e.halfAbs = type; e.halfPart = part || "first"; found = true; } }));
+            const dsh = emp0?.defaultSchedule?.[dayName];
+            if (!found && SHIFTS.includes(dsh)) {
+              if (!s[dayName]) s[dayName] = {}; if (!s[dayName][dsh]) s[dayName][dsh] = [];
+              s[dayName][dsh].push({ empId: eid, ho: emp0.defaultSchedule[`${dayName}_ho`] || false, isDefault: true, halfAbs: type, halfPart: part || "first" });
+            }
+          } else {
+            SHIFTS.forEach(sh => { if (s[dayName]?.[sh]) s[dayName][sh] = s[dayName][sh].filter(e => e.empId !== eid); });
+          }
           return { entries: s, absences: { ...a, [ak]: type } };
         }, weekStart);
         if (weekStart === wk) setAbsences(prev => ({ ...prev, [ak]: type }));
@@ -1084,9 +1121,9 @@ export default function App() {
     }
     // Update day counter
     const emp = ge(eid);
-    if (emp && !["doctor", "training"].includes(type)) {
-      const f = type === "sick" ? "sickUsed" : type === "vacation" ? "vacationUsed" : type === "whatever" ? "whateverUsed" : null;
-      if (f) await updateDoc(doc(db, "users", eid), { [f]: increment(count) });
+    if (emp && !["doctor", "training", "half_ho"].includes(type)) {
+      const f = type === "sick" ? "sickUsed" : (type === "vacation" || type === "half_vacation") ? "vacationUsed" : type === "whatever" ? "whateverUsed" : null;
+      if (f) await updateDoc(doc(db, "users", eid), { [f]: increment(half ? count * 0.5 : count) });
     }
     notify(`${ABS.find(a => a.id === type)?.label}: ${count} dní zadáno`);
     log(`Rozsah: ${type} ${fromISO} — ${toISO}`);
@@ -1353,6 +1390,7 @@ export default function App() {
   // ── Přehled dovolených: mapa empId → { "YYYY-MM-DD": typ } pro zvolený rok ──
   const [vacYear, setVacYear] = useState(new Date().getFullYear());
   const [vacSel, setVacSel] = useState(null); // klik na buňku v přehledu dovolených
+  const [halfSel, setHalfSel] = useState(null); // výběr poloviny směny u půldne
   const vacMap = useMemo(() => {
     const m = {};
     Object.entries(allSchedules).forEach(([mon, data]) => {
@@ -1366,7 +1404,12 @@ export default function App() {
         const di = DAYS.indexOf(day); if (di < 0) return;
         const d = new Date(monday); d.setDate(monday.getDate() + di);
         if (d.getFullYear() !== vacYear) return;
-        (m[empId] || (m[empId] = {}))[localISO(d)] = type;
+        let part = null;
+        if (type === "half_vacation") {
+          const dd = data.entries?.[day] || {};
+          Object.values(dd).forEach(arr => (arr || []).forEach(en => { if (en.empId === empId && en.halfPart) part = en.halfPart; }));
+        }
+        (m[empId] || (m[empId] = {}))[localISO(d)] = { type, part };
       });
     });
     return m;
@@ -1400,7 +1443,7 @@ export default function App() {
           onClick={() => isA ? setSelCell({ day, shift, empId: en.empId }) : isMe && setModal({ type: "myshift", day, shift })}
           style={{ gap: 10, padding: "12px 14px", borderBottom: idx < entries.length - 1 ? "1px solid var(--brd)" : "none" }}>
           <div style={{ width: 3, height: 24, background: en.ho ? "var(--grn)" : "var(--acc2)" }} />
-          <span style={{ fontWeight: 500, color: "var(--w)", flex: 1, display: "inline-flex", alignItems: "center", gap: 6, minWidth: 0 }}><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{emp.name}</span><RankBadge fixes={emp.fixCount} /></span>
+          <span style={{ fontWeight: 500, color: "var(--w)", flex: 1, display: "inline-flex", alignItems: "center", gap: 6, minWidth: 0 }}><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{emp.name}</span><RankBadge fixes={emp.fixCount} /><HalfTag en={en} /></span>
           {!isA && !isMe && <button title={`Požádat ${emp.name} o výměnu`} onClick={e => { e.stopPropagation(); setModal({ type: "directSwap", targetEmp: emp, targetDay: day, targetShift: shift }); }} style={{ background: "none", border: "1px solid var(--acc2)", color: "var(--acc2)", width: 26, height: 26, cursor: "pointer", fontSize: 13, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontFamily: "'IBM Plex Mono',monospace" }}>⇄</button>}
           {note && <span title={note} style={{ color: "var(--acc2)", cursor: "help", fontSize: 15, fontWeight: 700, border: "1px solid var(--acc2)", width: 22, height: 22, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>i</span>}
           {en.ho && <Badge small color="var(--grn)">HO</Badge>}
@@ -1561,7 +1604,7 @@ export default function App() {
                         onDrop={e => handleDrop(day, shift, e)}>
                         {entries.map(en => { const emp = ge(en.empId); if (!emp) return null; const isMe = en.empId === profile.id;
                           return <div key={en.empId} className="ent" draggable={canDrag(en.empId)} onDragStart={e => e.dataTransfer.setData("text/plain", JSON.stringify({ empId: en.empId, day, shift }))} onClick={() => isA ? setSelCell({ day, shift, empId: en.empId }) : isMe && setModal({ type: "myshift", day, shift })} style={{ gap: 4, padding: "6px 8px", marginBottom: 2, background: "var(--bg3)", border: "1px solid var(--brd)", fontSize: 14 }}>
-                            <span style={{ width: 8, height: 3, background: en.ho ? "var(--grn)" : "var(--acc2)" }} /><span style={{ fontWeight: 500, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--w)" }}>{emp.name?.split(" ").pop()}</span><RankBadge fixes={emp.fixCount} size={15} />
+                            <span style={{ width: 8, height: 3, background: en.ho ? "var(--grn)" : "var(--acc2)" }} /><span style={{ fontWeight: 500, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--w)" }}>{emp.name?.split(" ").pop()}</span><RankBadge fixes={emp.fixCount} size={15} /><HalfTag en={en} compact />
                             {!isA && !isMe && <button title={`Výměna s ${emp.name}`} onClick={e => { e.stopPropagation(); setModal({ type: "directSwap", targetEmp: emp, targetDay: day, targetShift: shift }); }} style={{ background: "none", border: "1px solid var(--acc2)", color: "var(--acc2)", width: 20, height: 20, cursor: "pointer", fontSize: 10, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, padding: 0 }}>⇄</button>}
                             {en.ho && <Badge small color="var(--grn)">HO</Badge>}
                           </div>; })}
@@ -1672,7 +1715,7 @@ export default function App() {
             </div>
             <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center", marginBottom: 16, fontSize: 12, color: "var(--tx3)" }}>
               <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 14, height: 14, background: "var(--sd)", display: "inline-block" }} /> Dovolená</span>
-              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 14, height: 14, background: "linear-gradient(135deg,var(--sd) 50%,transparent 50%)", border: "1px solid var(--brd2)", display: "inline-block" }} /> ½ Dovolená</span>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 14, height: 14, background: "linear-gradient(135deg,var(--sd) 50%,transparent 50%)", border: "1px solid var(--brd2)", display: "inline-block" }} /> ½ Dovolená (◤ 1. půle / ◢ 2. půle)</span>
               <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 14, height: 14, background: "var(--brd)", display: "inline-block" }} /> Víkend / svátek</span>
             </div>
             {(() => {
@@ -1704,10 +1747,12 @@ export default function App() {
                           const dt = new Date(vacYear, mi, d); const wd = dt.getDay(); const iso = localISO(dt);
                           const off = wd === 0 || wd === 6 || HMAP[iso];
                           const t = vacMap[e.id]?.[iso];
-                          const bg = t === "vacation" ? "var(--sd)" : t === "half_vacation" ? "linear-gradient(135deg,var(--sd) 50%,transparent 50%)" : off ? "var(--brd)" : "transparent";
+                          const bg = t?.type === "vacation" ? "var(--sd)"
+                            : t?.type === "half_vacation" ? `linear-gradient(${t.part === "second" ? 315 : 135}deg,var(--sd) 50%,transparent 50%)`
+                            : off ? "var(--brd)" : "transparent";
                           const can = !off && (isA || e.id === profile.id);
-                          return <td key={d} onClick={can ? () => setVacSel({ empId: e.id, name: e.name, iso, type: t, label: `${d}.${mi + 1}.${vacYear}` }) : undefined}
-                            title={t ? `${e.name} — ${t === "vacation" ? "Dovolená" : "½ Dovolená"} ${d}.${mi + 1}.${vacYear}` : can ? `Zadat nepřítomnost — ${d}.${mi + 1}.` : undefined}
+                          return <td key={d} onClick={can ? () => setVacSel({ empId: e.id, name: e.name, iso, type: t?.type, part: t?.part, label: `${d}.${mi + 1}.${vacYear}` }) : undefined}
+                            title={t ? `${e.name} — ${t.type === "vacation" ? "Dovolená" : `½ Dovolená (${t.part === "second" ? "2." : "1."} půle směny)`} ${d}.${mi + 1}.${vacYear}` : can ? `Zadat nepřítomnost — ${d}.${mi + 1}.` : undefined}
                             style={{ width: 22, minWidth: 22, height: 22, background: bg, borderBottom: "1px solid var(--brd)", borderRight: "1px solid var(--brd)", cursor: can ? "pointer" : "default" }} />;
                         })}
                       </tr>)}</tbody>
@@ -1853,12 +1898,12 @@ export default function App() {
       <div style={{ fontSize: 12, color: "var(--tx3)", margin: "14px 0 6px", textTransform: "uppercase", letterSpacing: 1 }}>Přesunout</div>
       <div style={{ display: "flex", gap: 8 }}>{SHIFTS.filter(s => s !== selCell.shift).map(s => <Btn key={s} small style={{ flex: 1 }} onClick={() => { moveE(selCell.empId, selCell.day, selCell.shift, selCell.day, s); setSelCell(null); }}>→ {s}</Btn>)}</div>
       <div style={{ fontSize: 12, color: "var(--tx3)", margin: "14px 0 6px", textTransform: "uppercase", letterSpacing: 1 }}>Nepřítomnost</div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>{ABS.map(a => <Btn key={a.id} small onClick={() => { addAbs(selCell.empId, selCell.day, a.id); setSelCell(null); }}>{a.icon} {a.label}</Btn>)}</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>{ABS.map(a => <Btn key={a.id} small onClick={() => { const c = selCell; setSelCell(null); withHalf(a.id, p => addAbs(c.empId, c.day, a.id, p)); }}>{a.icon} {a.label}</Btn>)}</div>
       <div style={{ fontSize: 12, color: "var(--tx3)", margin: "14px 0 6px", textTransform: "uppercase", letterSpacing: 1 }}>Poznámka</div>
       <NoteInput onSubmit={n => { saveNote(selCell.empId, selCell.day, selCell.shift, n); setSelCell(null); }} />
     </div>; })()}</Modal>
 
-    <Modal open={modal === "absence"} onClose={() => setModal(null)} title="Nepřítomnost"><AbsF emps={employees.filter(e => e.role !== "admin")} wd={wd} onSubmit={(e, d, t) => { addAbs(e, d, t); setModal(null); }} /></Modal>
+    <Modal open={modal === "absence"} onClose={() => setModal(null)} title="Nepřítomnost"><AbsF emps={employees.filter(e => e.role !== "admin")} wd={wd} onSubmit={(e, d, t) => { setModal(null); withHalf(t, p => addAbs(e, d, t, p)); }} /></Modal>
     <Modal open={modal === "event"} onClose={() => setModal(null)} title="Událost"><EvF onSubmit={(d, t, n) => { addEv(d, t, n); setModal(null); }} /></Modal>
     <Modal open={modal?.type === "swap"} onClose={() => setModal(null)} title="Výměna"><SwF dDay={modal?.day} dShift={modal?.shift} wd={wd} onSubmit={(d, s, c) => { mkSwap(profile.id, d, s, c); setModal(null); }} /></Modal>
     <Modal open={modal?.type === "myshift"} onClose={() => setModal(null)} title="Moje směna"><div>
@@ -1868,7 +1913,7 @@ export default function App() {
         if (pendingHO) return <div style={{ padding: "12px 14px", border: "1px solid var(--amb)", color: "var(--amb)", fontSize: 14, marginBottom: 12 }}>⚑ Žádost o HO na tento den čeká na schválení.</div>;
         return <Btn warm={!isHO} primary={isHO} onClick={() => { requestHO(modal.day, !isHO); setModal(null); }} style={{ width: "100%", marginBottom: 12 }}>{isHO ? "🏠 Požádat o zrušení Home Office" : "🏠 Požádat o Home Office"}</Btn>; })()}
       <div style={{ fontSize: 12, color: "var(--tx3)", margin: "8px 0 6px", textTransform: "uppercase", letterSpacing: 1 }}>Nepřítomnost</div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>{ABS.map(a => <Btn key={a.id} onClick={() => { const d = modal.day; addAbs(profile.id, d, a.id); setModal(null); setResolveTarget({ day: d, kind: "absence", empId: profile.id }); }}>{a.icon} {a.label}</Btn>)}</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>{ABS.map(a => <Btn key={a.id} onClick={() => { const d = modal.day; setModal(null); withHalf(a.id, p => addAbs(profile.id, d, a.id, p)); setResolveTarget({ day: d, kind: "absence", empId: profile.id }); }}>{a.icon} {a.label}</Btn>)}</div>
       {(() => { const me = cs[modal?.day]?.[modal?.shift]?.find(e => e.empId === profile.id); if (!me || me.ho) return null;
         return <><div style={{ fontSize: 12, color: "var(--tx3)", margin: "8px 0 6px", textTransform: "uppercase", letterSpacing: 1 }}>Změnit hodinu</div>
         <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>{SHIFTS.filter(s => s !== modal.shift).map(s => <Btn key={s} onClick={() => { setResolveTarget({ day: modal.day, kind: "shift", empId: profile.id, fromShift: modal.shift, toShift: s }); setModal(null); }} style={{ flex: 1 }}>{s}</Btn>)}</div></>; })()}
@@ -1877,20 +1922,27 @@ export default function App() {
       <NoteInput onSubmit={n => { saveNote(profile.id, modal.day, modal.shift, n); setModal(null); }} />
     </div></Modal>
     <Modal open={modal === "myabsence"} onClose={() => setModal(null)} title="Nepřítomnost">
-      <MyAbsF profile={profile} wd={wd} onSubmit={(d, t) => { addAbs(profile.id, d, t); setModal(null); setResolveTarget({ day: d, kind: "absence", empId: profile.id }); }} />
+      <MyAbsF profile={profile} wd={wd} onSubmit={(d, t) => { setModal(null); withHalf(t, p => addAbs(profile.id, d, t, p)); setResolveTarget({ day: d, kind: "absence", empId: profile.id }); }} />
       <div style={{ borderTop: "1px solid var(--brd)", marginTop: 16, paddingTop: 16 }}>
         <Btn ghost onClick={() => setModal("vacrange")} style={{ width: "100%", fontSize: 14 }}>🗓 Dovolená od — do (rozsah)</Btn>
       </div>
     </Modal>
+    <Modal open={!!halfSel} onClose={() => setHalfSel(null)} title={halfSel ? `${ABS.find(a => a.id === halfSel.type)?.label} — která polovina?` : ""}>
+      {halfSel && <div style={{ display: "grid", gap: 8 }}>
+        <p style={{ fontSize: 13, color: "var(--tx2)", margin: "0 0 4px" }}>V rozvrhu zůstaneš, u směny se objeví poznámka o chybějící polovině.</p>
+        <Btn onClick={() => { const h = halfSel; setHalfSel(null); h.run("first"); }}>🌅 První polovina směny</Btn>
+        <Btn onClick={() => { const h = halfSel; setHalfSel(null); h.run("second"); }}>🌇 Druhá polovina směny</Btn>
+      </div>}
+    </Modal>
     <Modal open={!!vacSel} onClose={() => setVacSel(null)} title={vacSel ? `${vacSel.name} — ${vacSel.label}` : ""}>
       {vacSel && <>
         {vacSel.type ? <>
-          <p style={{ fontSize: 13, color: "var(--tx2)", marginTop: 0 }}>Zadáno: <b>{ABS.find(a => a.id === vacSel.type)?.label || vacSel.type}</b></p>
+          <p style={{ fontSize: 13, color: "var(--tx2)", marginTop: 0 }}>Zadáno: <b>{ABS.find(a => a.id === vacSel.type)?.label || vacSel.type}</b>{vacSel.part ? ` — ${vacSel.part === "second" ? "2." : "1."} polovina směny` : ""}</p>
           <Btn ghost onClick={async () => { const d = new Date(vacSel.iso + "T00:00:00"); await removeAbs(vacSel.empId, DAYS[d.getDay() - 1], wKey(d), vacSel.type); setVacSel(null); }} style={{ width: "100%", color: "var(--red)", borderColor: "var(--red)" }}>Odebrat nepřítomnost</Btn>
         </> : <>
           <p style={{ fontSize: 13, color: "var(--tx2)", marginTop: 0 }}>Vyber typ nepřítomnosti:</p>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-            {ABS.filter(a => a.id !== "half_ho").map(a => <Btn key={a.id} ghost onClick={async () => { await addAbsRange(vacSel.iso, vacSel.iso, a.id, vacSel.empId); setVacSel(null); notify(`${a.label} zadáno`); }} style={{ borderColor: a.color, color: a.color }}>{a.icon} {a.label}</Btn>)}
+            {ABS.filter(a => a.id !== "half_ho").map(a => <Btn key={a.id} ghost onClick={() => { const sel = vacSel; setVacSel(null); withHalf(a.id, p => addAbsRange(sel.iso, sel.iso, a.id, sel.empId, p)); }} style={{ borderColor: a.color, color: a.color }}>{a.icon} {a.label}</Btn>)}
           </div>
         </>}
       </>}
