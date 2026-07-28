@@ -64,9 +64,11 @@ function dayStats(cs, absences, day, employees) {
   const absSet = new Set(Object.keys(absences).filter(k => k.endsWith(`__${day}`)).map(k => k.split("__")[0]));
   const office = [], ho = [];
   SHIFTS.forEach(sh => (cs[day]?.[sh] || []).forEach(en => {
-    if (absSet.has(en.empId)) return;
+    // Výjimka: půlden na 1. polovinu u směny od 10:00 pokrytí neohrozí → nevyžaduje návrh řešení.
+    const halfCovers = !!en.halfAbs && en.halfPart === "first" && sh === "10:00";
+    if (absSet.has(en.empId) && !halfCovers) return;
     if (!employees.some(e => e.id === en.empId)) return;
-    (en.ho ? ho : office).push({ empId: en.empId, shift: sh });
+    (en.ho ? ho : office).push({ empId: en.empId, shift: sh, half: !!en.halfAbs });
   }));
   return { office, ho, absSet };
 }
@@ -92,6 +94,7 @@ function analyzeWeek(cs, absences, employees, rulesIn, intake = {}, intakeAllow 
 
     // Alternativy: přesun člověka v kanceláři na cílovou směnu (bez rozbití zdrojové)
     const shiftAlts = toShift => st.office
+      .filter(x => !x.half)
       .filter(x => x.shift !== toShift && cnt(x.shift) > shiftMin(x.shift))
       .filter(x => toShift !== "08:00" || canOpen(x.empId))
       .sort((a, b) => ((a.shift === "09:00") ? 0 : 1) - ((b.shift === "09:00") ? 0 : 1))
@@ -100,13 +103,14 @@ function analyzeWeek(cs, absences, employees, rulesIn, intake = {}, intakeAllow 
     const pullAlts = toShift => {
       const out = [];
       st.ho.forEach(h => {
+        if (h.half) return; // půlden nikam nepřesouvat
         if (toShift === "08:00" && !canOpen(h.empId)) return;
         for (let dj = 0; dj < 5; dj++) {
           if (dj === di || intake[DAYS[dj]]) continue;
           const stj = stats[dj];
           if (stj.absSet.has(h.empId)) continue;
           const mine = stj.office.find(x => x.empId === h.empId);
-          if (!mine) continue;
+          if (!mine || mine.half) continue;
           if (stj.ho.length >= R.hoCapDay) continue;
           if (stj.office.length - 1 < R.officeMin) continue;
           if (mine.shift === "08:00" && stj.office.filter(x => x.shift === "08:00").length <= min8) continue;
