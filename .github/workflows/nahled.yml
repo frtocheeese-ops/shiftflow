@@ -1,8 +1,12 @@
 name: Patecni nahled rozvrhu
 on:
   schedule:
-    - cron: "0 10 * * 5"   # 12:00 CEST (letni cas)
-    - cron: "0 11 * * 5"   # 12:00 CET (zimni cas) — skript si pražskou 12. hodinu ověří sám
+    # GitHub cron v celou hodinu casto vypadava (spicka) → 4 pokusy v :07.
+    # Skript pusti prvni pokus od 12:00 prazskeho casu, dalsi uz se samy odstavi.
+    - cron: "7 7 * * 5"    # 09:07 CEST / 08:07 CET
+    - cron: "7 8 * * 5"    # 10:07 CEST / 09:07 CET
+    - cron: "7 9 * * 5"    # zaloha pri zpozdeni
+    - cron: "7 10 * * 5"   # posledni zaloha
   workflow_dispatch: {}     # ruční test kdykoliv
 
 permissions:

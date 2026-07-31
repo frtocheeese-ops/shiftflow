@@ -4,15 +4,24 @@
 // 3) příjemce čte z Firestore: všichni s notify=true (notifyEmail || email)
 // 4) Puppeteer: login → pohled Týden → další týden → screenshot POUZE mřížky (#week-grid)
 import puppeteer from "puppeteer";
-import { mkdirSync, writeFileSync } from "fs";
+import { mkdirSync, writeFileSync, readFileSync, existsSync } from "fs";
 
 const SITE = "https://smenyjt.netlify.app";
 const { BOT_EMAIL, BOT_PASSWORD, FORCE } = process.env;
 if (!BOT_EMAIL || !BOT_PASSWORD) { console.error("Chybí BOT_EMAIL / BOT_PASSWORD"); process.exit(1); }
 
-// ── Guard na pražský čas (cron běží v UTC dvakrát kvůli DST — projít smí jen běh v 18:00) ──
+// ── Guard: cron se pouští 4× (zpoždění GitHub Actions + letní/zimní čas).
+// Projde první pokus od 9:00 pražského času (rezerva před WhatsApp zprávou ve 12:05);
+// značka pak zbytek dne odstaví.
 const praha = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Prague" }));
-if (FORCE !== "1" && praha.getHours() !== 12) { console.log(`Pražský čas ${praha.getHours()}h ≠ 12h — druhá DST větev, končím.`); process.exit(0); }
+const STAMP = "public/nahled/last.txt";
+const dnes = `${praha.getFullYear()}-${String(praha.getMonth() + 1).padStart(2, "0")}-${String(praha.getDate()).padStart(2, "0")}`;
+if (FORCE !== "1") {
+  const h = praha.getHours();
+  if (h < 9 || h > 19) { console.log(`Pražský čas ${h}h mimo okno 9–19 — končím.`); process.exit(0); }
+  if (existsSync(STAMP) && readFileSync(STAMP, "utf8").trim() === dnes) { console.log(`Dnes (${dnes}) už náhled proběhl — končím.`); process.exit(0); }
+  console.log(`Pražský čas ${h}h, dnes ještě neproběhlo → jedeme.`);
+}
 
 // ── Config z živého bundlu ──
 const html = await (await fetch(SITE + "/?v=" + Date.now())).text();
@@ -130,3 +139,4 @@ writeFileSync("public/nahled/index.html", `<!DOCTYPE html>
 </body></html>
 `);
 console.log("OG stránka uložena: public/nahled/index.html |", W + "×" + H);
+writeFileSync(STAMP, dnes + "\n");
