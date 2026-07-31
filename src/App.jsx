@@ -1395,6 +1395,22 @@ export default function App() {
   const [vacYear, setVacYear] = useState(new Date().getFullYear());
   const [vacSel, setVacSel] = useState(null); // klik na buňku v přehledu dovolených
   const [halfSel, setHalfSel] = useState(null); // výběr poloviny směny u půldne
+  const [nahledInfo, setNahledInfo] = useState(null); // stav pátečního snímku rozvrhu
+  useEffect(() => {
+    if (view !== "settings" || !isA) return;
+    let dead = false;
+    (async () => {
+      try {
+        const [d, h] = await Promise.all([
+          fetch("/nahled/last.txt?c=" + Date.now()).then(r => r.ok ? r.text() : ""),
+          fetch("/nahled/?c=" + Date.now()).then(r => r.ok ? r.text() : ""),
+        ]);
+        if (dead) return;
+        setNahledInfo({ date: (d || "").trim(), week: (h.match(/og:title" content="Rozvrh na týden od ([^"]+)"/) || [])[1] || "" });
+      } catch { if (!dead) setNahledInfo({ date: "", week: "" }); }
+    })();
+    return () => { dead = true; };
+  }, [view, isA]);
   const vacMap = useMemo(() => {
     const m = {};
     Object.entries(allSchedules).forEach(([mon, data]) => {
@@ -1820,6 +1836,20 @@ export default function App() {
                 <Btn ghost onClick={() => setModal("changeNotif")}>Email notifikace</Btn>
               </div>
             </Card>
+            {isA && <Card style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, fontFamily: "'Barlow Condensed',sans-serif" }}>Páteční snímek rozvrhu</div>
+              <div style={{ fontSize: 13, color: "var(--tx2)", marginBottom: 12, lineHeight: 1.7 }}>
+                {nahledInfo === null ? <span style={{ color: "var(--tx3)" }}>Načítám stav…</span> : <>
+                  Publikovaný týden: <b style={{ color: "var(--w)" }}>{nahledInfo.week || "neznámý"}</b><br />
+                  Naposledy aktualizováno: <b style={{ color: "var(--w)" }}>{nahledInfo.date || "—"}</b>
+                </>}
+              </div>
+              <Btn warm onClick={() => window.open("https://github.com/frtocheeese-ops/shiftflow/actions/workflows/nahled.yml", "_blank")} style={{ width: "100%", marginBottom: 8 }}>🔄 Aktualizovat snímek teď</Btn>
+              <Btn ghost onClick={() => window.open("https://smenyjt.netlify.app/nahled/?c=" + Date.now(), "_blank")} style={{ width: "100%", marginBottom: 10 }}>👁 Zobrazit aktuální snímek</Btn>
+              <p style={{ fontSize: 12, color: "var(--tx3)", margin: 0, lineHeight: 1.6 }}>
+                Snímek se tvoří automaticky v pátek ráno. Po změnách na poslední chvíli klepni na Aktualizovat — otevře se GitHub, kde dáš <b>Run workflow → Run workflow</b>. Nový snímek je na webu do dvou minut a odkaz ve WhatsAppu zůstává stejný.
+              </p>
+            </Card>}
             <Card style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, fontFamily: "'Barlow Condensed',sans-serif" }}>Aplikace</div>
               {isStandalone() ? <p style={{ fontSize: 13, color: "var(--grn)", margin: 0 }}>✓ Běžíš v nainstalované aplikaci.</p>
