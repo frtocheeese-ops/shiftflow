@@ -34,12 +34,45 @@ const wKey = d => localISO(getMon(d));
 const fmtW = d => { const m = getMon(d), f = new Date(m); f.setDate(f.getDate() + 4); return `${m.getDate()}.${m.getMonth() + 1}. — ${f.getDate()}.${f.getMonth() + 1}.${f.getFullYear()}`; };
 function buildDef(emps) { const s = {}; DAYS.forEach(day => { s[day] = {}; SHIFTS.forEach(sh => s[day][sh] = []); emps.forEach(emp => { if (!emp.defaultSchedule || !emp.setupDone) return; const shift = emp.defaultSchedule[day]; if (shift && SHIFTS.includes(shift)) s[day][shift].push({ empId: emp.id, ho: emp.defaultSchedule[`${day}_ho`] || false, isDefault: true }); }); }); return s; }
 
+/* ═══ ROTACE DVOJIC ═══
+   Dvěma lidem se v daný den každý týden prohodí směna (typicky HO 8:00 ↔ HO 10:00).
+   Parita se počítá od kotvícího pondělí, takže je stabilní dopředu i zpětně.
+   Rotace se uplatní JEN na místa, která nikdo ručně nepřepsal (isDefault) — ruční
+   úprava má vždy přednost. */
+function rotIsSwapped(weekKey, anchor) {
+  const a = new Date((anchor || "2026-01-05") + "T00:00:00"), w = new Date(weekKey + "T00:00:00");
+  const weeks = Math.round((w - a) / (7 * 24 * 3600 * 1000));
+  return ((weeks % 2) + 2) % 2 === 1;
+}
+function applyRotations(entries, weekKey, rotations, absences) {
+  if (!weekKey || !Array.isArray(rotations) || !rotations.length) return entries;
+  rotations.forEach(rot => {
+    const { day, aId, bId, shiftA, shiftB } = rot;
+    if (!day || !aId || !bId || !shiftA || !shiftB) return;
+    if (!entries[day]) return;
+    const find = id => { for (const sh of SHIFTS) { const i = (entries[day][sh] || []).findIndex(e => e.empId === id); if (i >= 0) return { sh, i, en: entries[day][sh][i] }; } return null; };
+    const A = find(aId), B = find(bId);
+    if (!A || !B) return;                                   // někdo chybí (absence/volno) → nerotujeme
+    if (!A.en.isDefault || !B.en.isDefault) return;          // ruční úprava má přednost
+    if ((absences || {})[`${aId}__${day}`] || (absences || {})[`${bId}__${day}`]) return;
+    const swapped = rotIsSwapped(weekKey, rot.anchor);
+    const targetA = swapped ? shiftB : shiftA, targetB = swapped ? shiftA : shiftB;
+    const ho = rot.ho !== false;
+    entries[day][A.sh] = entries[day][A.sh].filter(e => e.empId !== aId);
+    entries[day][B.sh] = entries[day][B.sh].filter(e => e.empId !== bId);
+    if (!entries[day][targetA]) entries[day][targetA] = [];
+    if (!entries[day][targetB]) entries[day][targetB] = [];
+    entries[day][targetA].push({ empId: aId, ho, isDefault: true, rot: true });
+    entries[day][targetB].push({ empId: bId, ho, isDefault: true, rot: true });
+  });
+  return entries;
+}
+
 /* Doplní do uloženého týdne členy, kteří v něm ještě nefigurují (typicky nový kolega,
    který přišel až po materializaci týdne) — podle jejich stálého rozvrhu.
    JEDINÝ zdroj pravdy pro mřížku, engine, návrhy i statistiky, aby se nerozcházely. */
-function withDefaults(entries, absences, emps) {
-  if (!entries) return buildDef(emps);
-  const merged = dc(entries);
+function withDefaults(entries, absences, emps, weekKey, rotations) {
+  const merged = entries ? dc(entries) : buildDef(emps);
   emps.forEach(emp => {
     if (!emp.defaultSchedule || !emp.setupDone) return;
     const inSchedule = DAYS.some(day => SHIFTS.some(sh => merged[day]?.[sh]?.some(e => e.empId === emp.id)));
@@ -53,7 +86,7 @@ function withDefaults(entries, absences, emps) {
       merged[day][shift].push({ empId: emp.id, ho: emp.defaultSchedule[`${day}_ho`] || false, isDefault: true });
     });
   });
-  return merged;
+  return applyRotations(merged, weekKey, rotations, absences);
 }
 
 /* ═══ PŘEDVYPLNĚNÝ ROZVRH dle preferencí členů (upravitelný v editoru Default) ═══
@@ -705,6 +738,34 @@ function EditDF({ emp, onDone }) { const [vac, setVac] = useState(emp?.vacationT
 function AddF({ onDone }) { const [name, setName] = useState(""); const [email, setEmail] = useState(""); const [pass, setPass] = useState(""); const [l, setL] = useState(false); const [err, setErr] = useState(""); return <div><Input label="Jméno" value={name} onChange={e => setName(e.target.value)} /><Input label="Email" value={email} onChange={e => setEmail(e.target.value)} /><Input label="Heslo (min. 6)" type="password" value={pass} onChange={e => setPass(e.target.value)} />{err && <p style={{ color: "var(--red)", fontSize: 14, marginBottom: 8, padding: 10, border: "1px solid var(--red)" }}>{err}</p>}<Btn warm disabled={l} onClick={async () => { setErr(""); if (!name.trim() || !email || !pass) return setErr("Vyplňte vše"); if (pass.length < 6) return setErr("Min. 6 znaků"); setL(true); try { const r = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${import.meta.env.VITE_FIREBASE_API_KEY}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password: pass, displayName: name.trim(), returnSecureToken: false }) }); const d = await r.json(); if (d.error) { setErr(d.error.message); setL(false); return; } await setDoc(doc(db, "users", d.localId), { name: name.trim(), email, role: "employee", notify: false, notifyEmail: "", fcmToken: null, defaultSchedule: null, setupDone: false, vacationTotal: 20, sickTotal: 5, whateverTotal: 3, vacationUsed: 0, sickUsed: 0, whateverUsed: 0, createdAt: new Date().toISOString() }); onDone(`Přidán: ${name.trim()}`); } catch (e) { setErr(e.message); } setL(false); }} style={{ width: "100%" }}>Přidat</Btn></div>; }
 function NoteInput({ onSubmit }) { const [n, setN] = useState(""); return <div><Input value={n} onChange={e => setN(e.target.value)} placeholder="Přijdu o 20 min později" /><Btn warm onClick={() => onSubmit(n)} style={{ width: "100%", marginTop: 4 }}>Uložit poznámku</Btn></div>; }
 
+function RotationForm({ employees, onAdd }) {
+  const staff = employees.filter(e => e.role !== "admin");
+  const [day, setDay] = useState("Út");
+  const [aId, setA] = useState(""); const [bId, setB] = useState("");
+  const [shiftA, setSA] = useState("08:00"); const [shiftB, setSB] = useState("10:00");
+  const [ho, setHo] = useState(true);
+  const opts = staff.map(e => ({ value: e.id, label: e.name }));
+  const shOpts = SHIFTS.map(x => ({ value: x, label: x }));
+  const add = () => {
+    if (!aId || !bId || aId === bId) return alert("Vyber dva různé členy.");
+    if (shiftA === shiftB) return alert("Vyber dvě různé směny.");
+    onAdd({ day, aId, bId, shiftA, shiftB, ho, anchor: wKey(new Date()) });
+    setA(""); setB("");
+  };
+  return <div style={{ border: "1px dashed var(--brd2)", padding: "10px 11px" }}>
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+      <Sel label="Den" value={day} onChange={e => setDay(e.target.value)} options={DAYS.map(d => ({ value: d, label: d }))} />
+      <Sel label="Režim" value={ho ? "ho" : "office"} onChange={e => setHo(e.target.value === "ho")} options={[{ value: "ho", label: "Home office" }, { value: "office", label: "Kancelář" }]} />
+      <Sel label="Člen A" value={aId} onChange={e => setA(e.target.value)} options={[{ value: "", label: "— vyber —" }, ...opts]} />
+      <Sel label="Směna A" value={shiftA} onChange={e => setSA(e.target.value)} options={shOpts} />
+      <Sel label="Člen B" value={bId} onChange={e => setB(e.target.value)} options={[{ value: "", label: "— vyber —" }, ...opts]} />
+      <Sel label="Směna B" value={shiftB} onChange={e => setSB(e.target.value)} options={shOpts} />
+    </div>
+    <p style={{ fontSize: 11.5, color: "var(--tx3)", margin: "4px 0 8px" }}>Tento týden dostane A směnu {shiftA} a B směnu {shiftB}; příští týden se prohodí.</p>
+    <Btn small warm onClick={add} style={{ width: "100%" }}>+ Přidat rotaci</Btn>
+  </div>;
+}
+
 function VacRangeF({ onSubmit }) {
   const [from, setFrom] = useState(""); const [to, setTo] = useState(""); const [type, setType] = useState("vacation");
   return <div>
@@ -827,9 +888,8 @@ export default function App() {
   const ge = id => employees.find(e => e.id === id);
   // půldenní absence se nejdřív zeptá, která polovina směny
   const withHalf = (type, run) => String(type).startsWith("half_") ? setHalfSel({ type, run }) : run(null);
-  const ds = useMemo(() => buildDef(employees), [employees]);
   // Merge saved schedule with default schedule for any new employees not yet in saved data
-  const cs = useMemo(() => schedule ? withDefaults(schedule, absences, employees) : ds, [schedule, ds, employees, absences]);
+  const cs = useMemo(() => withDefaults(schedule, absences, employees, wk, rules.rotations), [schedule, employees, absences, wk, rules.rotations]);
   const wd = useMemo(() => getWeekDates(wo), [wo]);
   const wh = wd.map(d => HMAP[d] || null);
   // Analýza pravidel nového modelu (jen pracovní dny bez svátku)
@@ -851,7 +911,7 @@ export default function App() {
     Object.keys(allSchedules).filter(k => k >= curMon).sort().slice(0, 60).forEach(wkKey => {
       const data = allSchedules[wkKey] || {};
       const abs = data.absences || {};
-      const entries = withDefaults(data.entries, abs, employees); // doplní nové kolegy dle stálého rozvrhu
+      const entries = withDefaults(data.entries, abs, employees, wkKey, rules.rotations); // doplní nové kolegy + rotace dvojic
       const intk = data.intake || {}, intkA = data.intakeAllow || {};
       const monday = new Date(wkKey + "T00:00:00");
       const res = analyzeWeek(entries, abs, employees, rules, intk, intkA);
@@ -875,7 +935,7 @@ export default function App() {
         const snap = await t.get(ref);
         const data = snap.exists() ? snap.data() : {};
         const abs = data.absences || {};
-        const entries = withDefaults(data.entries, abs, employees);
+        const entries = withDefaults(data.entries, abs, employees, weekKey, rules.rotations);
         const intk = data.intake || {}, intkA = data.intakeAllow || {};
         const before = analyzeWeek(entries, abs, employees, rules, intk, intkA);
         if (!before.problems.some(p => p.key === problemKey)) { status = "gone"; return; }
@@ -903,7 +963,7 @@ export default function App() {
     const active = employees.filter(e => e.role !== "admin");
     active.forEach(e => tally[e.id] = { eight: 0, ten: 0, ho: 0, deficit: 0, weeks: 0 });
     Object.entries(allSchedules).forEach(([wkKeyStr, data]) => {
-      const entries = withDefaults(data.entries, data.absences, employees);
+      const entries = withDefaults(data.entries, data.absences, employees, wkKeyStr, rules.rotations);
       const monday = new Date(wkKeyStr + "T00:00:00");
       const seen = new Set();
       DAYS.forEach((day, i) => {
@@ -938,7 +998,7 @@ export default function App() {
       }
     });
     return { rows, warn };
-  }, [allSchedules, employees]);
+  }, [allSchedules, employees, rules]);
 
   useEffect(() => { const u = onAuthStateChanged(auth, async u => { if (u) { setAuthUser(u); const s = await getDoc(doc(db, "users", u.uid)); if (s.exists()) setProfile({ id: u.uid, ...s.data() }); else setProfile({ id: u.uid, name: u.displayName || u.email, role: "employee", setupDone: false }); initPush(u.uid); } else { setAuthUser(null); setProfile(null); } }); return u; }, []);
   useEffect(() => { const u = onSnapshot(collection(db, "users"), s => { const e = s.docs.map(d => ({ id: d.id, ...d.data() })); setEmployees(e); if (profile) { const m = e.find(x => x.id === profile.id); if (m) setProfile(p => ({ ...p, ...m })); } }); return u; }, [profile?.id]);
@@ -1004,7 +1064,7 @@ export default function App() {
       const snap = await t.get(ref);
       const data = snap.exists() ? snap.data() : {};
       const absences = data.absences ? { ...data.absences } : {};
-      const entries = withDefaults(data.entries, absences, employees);
+      const entries = withDefaults(data.entries, absences, employees, weekKey, rules.rotations);
       const res = mutate({ entries, absences }) || {};
       const payload = { entries: res.entries || entries, weekStart: weekKey, modifiedAt: new Date().toISOString(), modifiedBy: profile?.id };
       const fields = ["entries", "weekStart", "modifiedAt", "modifiedBy"];
@@ -1376,7 +1436,7 @@ export default function App() {
 
   // Aplikace stálého rozvrhu na týden — přepíše entries, ale zachová absence (vyřadí nepřítomné)
   const applyDefaultToWeek = (weekKey = wk) => txSchedule(({ absences }) => {
-    const def = buildDef(employees);
+    const def = applyRotations(buildDef(employees), weekKey, rules.rotations, absences);
     Object.keys(absences || {}).forEach(k => { const parts = k.split("__"); const day = parts[parts.length - 1]; const eid = parts.slice(0, -1).join("__"); SHIFTS.forEach(sh => { if (def[day]?.[sh]) def[day][sh] = def[day][sh].filter(e => e.empId !== eid); }); });
     return { entries: def };
   }, weekKey);
@@ -1916,7 +1976,26 @@ export default function App() {
             </Card>
             {isA && <Card style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, fontFamily: "'Barlow Condensed',sans-serif" }}>Pravidla směn</div>
-              <Input label="Minimum lidí v kanceláři" type="number" value={rules.officeMin ?? 4} onChange={e => setRules(r => ({ ...r, officeMin: +e.target.value }))} /><Input label="Minimum v kanceláři od 8:00" type="number" value={rules.min8 ?? 2} onChange={e => setRules(r => ({ ...r, min8: +e.target.value }))} /><Input label="Minimum na 10:00 (vč. HO)" type="number" value={rules.min10 ?? 2} onChange={e => setRules(r => ({ ...r, min10: +e.target.value }))} /><Input label="Max HO / den" type="number" value={rules.hoCapDay ?? 3} onChange={e => setRules(r => ({ ...r, hoCapDay: +e.target.value }))} /><Input label="Max HO / osoba / týden" type="number" value={rules.hoPerWeek ?? 2} onChange={e => setRules(r => ({ ...r, hoPerWeek: +e.target.value }))} /><Toggle checked={rules.cover8 !== false} onChange={v => setRules(r => ({ ...r, cover8: v }))} label="Vyžadovat minimum na 8:00" /><Toggle checked={rules.cover10 !== false} onChange={v => setRules(r => ({ ...r, cover10: v }))} label="Vyžadovat minimum na 10:00" /><div style={{ borderTop: "1px solid var(--brd)", marginTop: 12, paddingTop: 12 }}><Toggle checked={rules.allowAllDnD || false} onChange={v => setRules(r => ({ ...r, allowAllDnD: v }))} label="Povolit Drag & Drop pro všechny" /><p style={{ fontSize: 12, color: "var(--tx3)", marginTop: -8, marginBottom: 12 }}>Zaměstnanci budou moci přesouvat kohokoliv v rozvrhu.</p></div><Btn warm onClick={async () => { await setDoc(doc(db, "rules", "global"), rules); notify("Uloženo"); }}>Uložit pravidla</Btn>
+              <Input label="Minimum lidí v kanceláři" type="number" value={rules.officeMin ?? 4} onChange={e => setRules(r => ({ ...r, officeMin: +e.target.value }))} /><Input label="Minimum v kanceláři od 8:00" type="number" value={rules.min8 ?? 2} onChange={e => setRules(r => ({ ...r, min8: +e.target.value }))} /><Input label="Minimum na 10:00 (vč. HO)" type="number" value={rules.min10 ?? 2} onChange={e => setRules(r => ({ ...r, min10: +e.target.value }))} /><Input label="Max HO / den" type="number" value={rules.hoCapDay ?? 3} onChange={e => setRules(r => ({ ...r, hoCapDay: +e.target.value }))} /><Input label="Max HO / osoba / týden" type="number" value={rules.hoPerWeek ?? 2} onChange={e => setRules(r => ({ ...r, hoPerWeek: +e.target.value }))} /><Toggle checked={rules.cover8 !== false} onChange={v => setRules(r => ({ ...r, cover8: v }))} label="Vyžadovat minimum na 8:00" /><Toggle checked={rules.cover10 !== false} onChange={v => setRules(r => ({ ...r, cover10: v }))} label="Vyžadovat minimum na 10:00" /><div style={{ borderTop: "1px solid var(--brd)", marginTop: 12, paddingTop: 12 }}><Toggle checked={rules.allowAllDnD || false} onChange={v => setRules(r => ({ ...r, allowAllDnD: v }))} label="Povolit Drag & Drop pro všechny" /><p style={{ fontSize: 12, color: "var(--tx3)", marginTop: -8, marginBottom: 12 }}>Zaměstnanci budou moci přesouvat kohokoliv v rozvrhu.</p></div><div style={{ borderTop: "1px solid var(--brd)", marginTop: 16, paddingTop: 12 }}>
+                <div style={{ fontFamily: "'Barlow Condensed',sans-serif", fontSize: 15, letterSpacing: 1, textTransform: "uppercase", color: "var(--w)", marginBottom: 4 }}>Rotace dvojic</div>
+                <p style={{ fontSize: 12, color: "var(--tx3)", marginBottom: 10 }}>Dvojici se v daný den každý týden prohodí směna. Ruční úprava rozvrhu má vždy přednost — rotace se uplatní jen tam, kde nikdo nezasáhl.</p>
+                {(rules.rotations || []).map((rot, i) => {
+                  const nameOf = id => employees.find(e => e.id === id)?.name || "?";
+                  const swapped = rotIsSwapped(wk, rot.anchor);
+                  return <div key={i} style={{ border: "1px solid var(--brd)", padding: "9px 11px", marginBottom: 8 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
+                      <Badge small color="var(--acc2)">{rot.day}</Badge>
+                      <span style={{ fontSize: 13, color: "var(--w)", flex: 1 }}>{nameOf(rot.aId)} ⇄ {nameOf(rot.bId)} · {rot.shiftA} / {rot.shiftB}{rot.ho !== false ? " · HO" : ""}</span>
+                      <Btn small danger onClick={() => setRules(r => ({ ...r, rotations: (r.rotations || []).filter((_, j) => j !== i) }))}>Odebrat</Btn>
+                    </div>
+                    <div style={{ fontSize: 11.5, color: "var(--tx3)", fontFamily: "'IBM Plex Mono',monospace" }}>
+                      tento týden: {nameOf(rot.aId)} {swapped ? rot.shiftB : rot.shiftA} · {nameOf(rot.bId)} {swapped ? rot.shiftA : rot.shiftB}
+                    </div>
+                  </div>;
+                })}
+                <RotationForm employees={employees} onAdd={rot => setRules(r => ({ ...r, rotations: [...(r.rotations || []), rot] }))} />
+              </div>
+              <Btn warm onClick={async () => { await setDoc(doc(db, "rules", "global"), rules); notify("Uloženo"); }}>Uložit pravidla</Btn>
             </Card>}
             {isA && <Card><div style={{ display: "flex", gap: 8 }}><Btn danger onClick={async () => { await deleteDoc(doc(db, "schedules", wk)); notify("Reset"); }}>Reset týden</Btn><Btn ghost onClick={exportCSV}>CSV</Btn></div></Card>}
           </div>}
