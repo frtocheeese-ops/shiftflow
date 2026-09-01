@@ -34,6 +34,28 @@ const wKey = d => localISO(getMon(d));
 const fmtW = d => { const m = getMon(d), f = new Date(m); f.setDate(f.getDate() + 4); return `${m.getDate()}.${m.getMonth() + 1}. — ${f.getDate()}.${f.getMonth() + 1}.${f.getFullYear()}`; };
 function buildDef(emps) { const s = {}; DAYS.forEach(day => { s[day] = {}; SHIFTS.forEach(sh => s[day][sh] = []); emps.forEach(emp => { if (!emp.defaultSchedule || !emp.setupDone) return; const shift = emp.defaultSchedule[day]; if (shift && SHIFTS.includes(shift)) s[day][shift].push({ empId: emp.id, ho: emp.defaultSchedule[`${day}_ho`] || false, isDefault: true }); }); }); return s; }
 
+/* Doplní do uloženého týdne členy, kteří v něm ještě nefigurují (typicky nový kolega,
+   který přišel až po materializaci týdne) — podle jejich stálého rozvrhu.
+   JEDINÝ zdroj pravdy pro mřížku, engine, návrhy i statistiky, aby se nerozcházely. */
+function withDefaults(entries, absences, emps) {
+  if (!entries) return buildDef(emps);
+  const merged = dc(entries);
+  emps.forEach(emp => {
+    if (!emp.defaultSchedule || !emp.setupDone) return;
+    const inSchedule = DAYS.some(day => SHIFTS.some(sh => merged[day]?.[sh]?.some(e => e.empId === emp.id)));
+    const hasAbsence = Object.keys(absences || {}).some(k => k.startsWith(`${emp.id}__`));
+    if (inSchedule || hasAbsence) return;
+    DAYS.forEach(day => {
+      const shift = emp.defaultSchedule[day];
+      if (!shift || !SHIFTS.includes(shift)) return;
+      if (!merged[day]) merged[day] = {};
+      if (!merged[day][shift]) merged[day][shift] = [];
+      merged[day][shift].push({ empId: emp.id, ho: emp.defaultSchedule[`${day}_ho`] || false, isDefault: true });
+    });
+  });
+  return merged;
+}
+
 /* ═══ PŘEDVYPLNĚNÝ ROZVRH dle preferencí členů (upravitelný v editoru Default) ═══
    Entry na den: "08:00"/"09:00"/"10:00" = kancelář; s `${den}_ho:true` = home office.
    HO drží nominální čas ve svém slotu. Klíčováno jménem — seed napasuje na uživatele. */
@@ -807,28 +829,7 @@ export default function App() {
   const withHalf = (type, run) => String(type).startsWith("half_") ? setHalfSel({ type, run }) : run(null);
   const ds = useMemo(() => buildDef(employees), [employees]);
   // Merge saved schedule with default schedule for any new employees not yet in saved data
-  const cs = useMemo(() => {
-    if (!schedule) return ds;
-    const merged = dc(schedule);
-    employees.forEach(emp => {
-      if (!emp.defaultSchedule || !emp.setupDone) return;
-      // Check if employee appears anywhere in saved schedule or absences
-      const inSchedule = DAYS.some(day => SHIFTS.some(sh => merged[day]?.[sh]?.some(e => e.empId === emp.id)));
-      const hasAbsence = Object.keys(absences).some(k => k.startsWith(`${emp.id}__`));
-      if (!inSchedule && !hasAbsence) {
-        // Add their default schedule
-        DAYS.forEach(day => {
-          const shift = emp.defaultSchedule[day];
-          if (shift && SHIFTS.includes(shift)) {
-            if (!merged[day]) merged[day] = {};
-            if (!merged[day][shift]) merged[day][shift] = [];
-            merged[day][shift].push({ empId: emp.id, ho: emp.defaultSchedule[`${day}_ho`] || false, isDefault: true });
-          }
-        });
-      }
-    });
-    return merged;
-  }, [schedule, ds, employees, absences]);
+  const cs = useMemo(() => schedule ? withDefaults(schedule, absences, employees) : ds, [schedule, ds, employees, absences]);
   const wd = useMemo(() => getWeekDates(wo), [wo]);
   const wh = wd.map(d => HMAP[d] || null);
   // Analýza pravidel nového modelu (jen pracovní dny bez svátku)
@@ -849,8 +850,8 @@ export default function App() {
     const out = [];
     Object.keys(allSchedules).filter(k => k >= curMon).sort().slice(0, 60).forEach(wkKey => {
       const data = allSchedules[wkKey] || {};
-      const entries = data.entries || buildDef(employees);
       const abs = data.absences || {};
+      const entries = withDefaults(data.entries, abs, employees); // doplní nové kolegy dle stálého rozvrhu
       const intk = data.intake || {}, intkA = data.intakeAllow || {};
       const monday = new Date(wkKey + "T00:00:00");
       const res = analyzeWeek(entries, abs, employees, rules, intk, intkA);
@@ -873,8 +874,8 @@ export default function App() {
         const ref = doc(db, "schedules", weekKey);
         const snap = await t.get(ref);
         const data = snap.exists() ? snap.data() : {};
-        const entries = data.entries ? dc(data.entries) : dc(buildDef(employees));
         const abs = data.absences || {};
+        const entries = withDefaults(data.entries, abs, employees);
         const intk = data.intake || {}, intkA = data.intakeAllow || {};
         const before = analyzeWeek(entries, abs, employees, rules, intk, intkA);
         if (!before.problems.some(p => p.key === problemKey)) { status = "gone"; return; }
@@ -902,14 +903,14 @@ export default function App() {
     const active = employees.filter(e => e.role !== "admin");
     active.forEach(e => tally[e.id] = { eight: 0, ten: 0, ho: 0, deficit: 0, weeks: 0 });
     Object.entries(allSchedules).forEach(([wkKeyStr, data]) => {
-      if (!data.entries) return;
+      const entries = withDefaults(data.entries, data.absences, employees);
       const monday = new Date(wkKeyStr + "T00:00:00");
       const seen = new Set();
       DAYS.forEach((day, i) => {
         const dd = new Date(monday); dd.setDate(monday.getDate() + i);
         if (localISO(dd) < FAIRNESS_START) return; // den před startem se nepočítá
         const present = {}; // empId → entry toho dne (pro výpočet HO deficitu)
-        SHIFTS.forEach(sh => (data.entries[day]?.[sh] || []).forEach(en => {
+        SHIFTS.forEach(sh => (entries[day]?.[sh] || []).forEach(en => {
           const t = tally[en.empId]; if (!t) return;
           seen.add(en.empId);
           present[en.empId] = en;
@@ -1002,8 +1003,8 @@ export default function App() {
     return runTransaction(db, async t => {
       const snap = await t.get(ref);
       const data = snap.exists() ? snap.data() : {};
-      const entries = data.entries ? dc(data.entries) : dc(buildDef(employees));
       const absences = data.absences ? { ...data.absences } : {};
+      const entries = withDefaults(data.entries, absences, employees);
       const res = mutate({ entries, absences }) || {};
       const payload = { entries: res.entries || entries, weekStart: weekKey, modifiedAt: new Date().toISOString(), modifiedBy: profile?.id };
       const fields = ["entries", "weekStart", "modifiedAt", "modifiedBy"];
