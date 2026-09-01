@@ -293,3 +293,22 @@ mezi mazáními jako rate-limit pojistka. Světle modré pozůstatky (staré col
 týmů) přežily, protože dřívější velký úklid běžel ještě na staré verzi kódu (PWA cache,
 q-based hledání) — po nasazení je příští roční sync spolehlivě smaže (mají „ShiftFlow"
 v názvu).
+
+---
+
+## Aktualizace v16 — nový člen neviditelný pro pravidla i statistiky
+
+**Příznak.** Po odchodu člena hlásil engine podstav (např. Pá 11. 9. „jen 3 lidi").
+Nový kolega se v mřížce zobrazoval a počet doplnil na 4, ale Návrhy problém dál
+hlásily a ve Stats měl samé nuly / 0 týdnů.
+
+**Příčina.** Mřížka (`cs`) si členy chybějící v uloženém týdnu doplňovala z jejich
+stálého rozvrhu, ale `yearProblems`, `fairness` a `applyProblemFix` četly SYROVÉ
+`allSchedules[wk].entries`. Týdny materializované PŘED příchodem nového kolegy ho
+tedy neobsahovaly → mřížka ho viděla, engine a statistiky ne. Dvojí zdroj pravdy.
+
+**Oprava.** Doplňovací logika vytažena do sdílené funkce `withDefaults(entries,
+absences, emps)` a použita ve VŠECH konzumentech: `cs`, `yearProblems`, `fairness`,
+`applyProblemFix` i `txSchedule` (mutace tak vychází z doplněného stavu a zápis
+nového kolegu materializuje). Ověřeno testem: syrová data hlásí „jen 3 lidi",
+po doplnění je porušení pryč a směny se započítají.
