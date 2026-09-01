@@ -312,3 +312,26 @@ absences, emps)` a použita ve VŠECH konzumentech: `cs`, `yearProblems`, `fairn
 `applyProblemFix` i `txSchedule` (mutace tak vychází z doplněného stavu a zápis
 nového kolegu materializuje). Ověřeno testem: syrová data hlásí „jen 3 lidi",
 po doplnění je porušení pryč a směny se započítají.
+
+---
+
+## Aktualizace v17 — rotace dvojic
+
+Nová funkce: dvojici lidí se v daný den každý týden prohodí směna (případ z praxe:
+úterý, Denis HO 8:00 ⇄ Andy HO 10:00).
+
+- **Konfigurace** v Nastavení → Pravidla → „Rotace dvojic": den, režim (HO/kancelář),
+  člen A + jeho směna, člen B + jeho směna. Uloženo v `rules.rotations`, takže platí
+  pro celý tým a je kdykoli upravitelné/odebratelné. U každé rotace je vidět, jak
+  vychází aktuální týden.
+- **Parita** se počítá od kotvícího pondělí (`anchor`, uloží se při vytvoření), takže
+  je stabilní dopředu i zpět — ne od „kolikátý týden v roce", který by přeskočil přes
+  Nový rok.
+- **Ruční úprava má přednost**: rotace se uplatní jen na místa, která nikdo nezměnil
+  (`isDefault`). Pokud někdo dvojici v daném týdnu přehodí ručně, rotace do toho
+  nesahá. Nerotuje se ani při absenci jednoho z dvojice.
+- Aplikuje se přes sdílený `withDefaults`, takže mřížka, engine, Návrhy i statistiky
+  vidí totéž; `applyDefaultToWeek` rotaci respektuje i při materializaci týdnů.
+
+Ověřeno testem: čtyři týdny po sobě se pravidelně střídají, ruční úprava i absence
+rotaci korektně vypnou.
