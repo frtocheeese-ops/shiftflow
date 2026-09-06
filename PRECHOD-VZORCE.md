@@ -335,3 +335,25 @@ Nová funkce: dvojici lidí se v daný den každý týden prohodí směna (pří
 
 Ověřeno testem: čtyři týdny po sobě se pravidelně střídají, ruční úprava i absence
 rotaci korektně vypnou.
+
+---
+
+## Aktualizace v18 — okamžité propsání změn stálého rozvrhu
+
+**Příznak.** Změna stálého rozvrhu se v už rozepsaných budoucích týdnech neprojevila;
+bylo nutné ručně spustit „Aplikovat stálý → 52 týdnů".
+
+**Příčina.** `withDefaults` doplňoval z výchozích rozvrhů POUZE lidi, kteří v uloženém
+týdnu chyběli úplně. Kdo už v týdnu byl (se starou směnou), zůstal beze změny —
+uložené `entries` měly přednost před aktuálním stálým rozvrhem.
+
+**Oprava.** `withDefaults` nově u každého dne porovná nedotčené (`isDefault`) umístění
+s AKTUÁLNÍM stálým rozvrhem a srovná ho — bez jediného zápisu do databáze, takže se
+změna projeví okamžitě všem (mřížka, engine, Návrhy, statistiky). Zachováno:
+- **ruční úprava má přednost** (`isDefault:false` se nikdy nepřepíše),
+- **ručně odebraný člověk se do dne nevrací**,
+- **minulé týdny se nepřepisují** (jinak by se měnily odpracované směny ve statistikách),
+- absence dál vyřazují člověka ze dne.
+
+Ověřeno testem: změna stálého rozvrhu se v budoucím týdnu projeví ihned, ruční úprava
+zůstane a historie se nezmění.
