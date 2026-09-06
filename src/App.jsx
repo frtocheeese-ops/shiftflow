@@ -747,6 +747,19 @@ function SwF({ dDay, dShift, wd, onSubmit }) {
 function MyAbsF({ profile, wd, onSubmit }) { const [dayIdx, setDayIdx] = useState(Math.max(0, todayIdx)); const [t, setT] = useState(ABS[0].id); const r = { sick: (profile.sickTotal || 5) - (profile.sickUsed || 0), vacation: (profile.vacationTotal || 20) - (profile.vacationUsed || 0), whatever: (profile.whateverTotal || 3) - (profile.whateverUsed || 0) }; return <div><div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 20 }}>{[{ l: "Dovol.", v: r.vacation, c: "var(--sd)" }, { l: "Sick", v: r.sick, c: "var(--red)" }, { l: "What.", v: r.whatever, c: "var(--amb)" }].map(b => <div key={b.l} style={{ textAlign: "center", padding: 12, border: "1px solid var(--brd)", background: "var(--bg3)" }}><div style={{ fontSize: 28, fontWeight: 600, color: b.c, fontFamily: "'IBM Plex Mono',monospace" }}>{b.v}</div><div style={{ fontSize: 11, color: "var(--tx3)", textTransform: "uppercase" }}>{b.l}</div></div>)}</div><Sel label="Den" value={dayIdx} onChange={e => setDayIdx(+e.target.value)} options={DAYS.map((d, i) => ({ value: i, label: `${DAYS_F[i]} ${fmtDate(wd[i])}` }))} /><Sel label="Typ" value={t} onChange={e => setT(e.target.value)} options={ABS.map(a => ({ value: a.id, label: `${a.icon} ${a.label}` }))} /><Btn warm onClick={() => onSubmit(DAYS[dayIdx], t)} style={{ width: "100%", marginTop: 8 }}>Zadat</Btn></div>; }
 function EditDF({ emp, onDone }) { const [vac, setVac] = useState(emp?.vacationTotal || 20); const [sick, setSick] = useState(emp?.sickTotal || 5); const [what, setWhat] = useState(emp?.whateverTotal || 3); const [l, setL] = useState(false); if (!emp) return null; return <div><Input label="Dovolená" type="number" value={vac} onChange={e => setVac(+e.target.value)} /><Input label="Sick Days" type="number" value={sick} onChange={e => setSick(+e.target.value)} /><Input label="Whatever Days" type="number" value={what} onChange={e => setWhat(+e.target.value)} /><Btn warm disabled={l} onClick={async () => { setL(true); await updateDoc(doc(db, "users", emp.id), { vacationTotal: vac, sickTotal: sick, whateverTotal: what }); setL(false); onDone(); }} style={{ width: "100%", marginTop: 8 }}>Uložit</Btn></div>; }
 function AddF({ onDone }) { const [name, setName] = useState(""); const [email, setEmail] = useState(""); const [pass, setPass] = useState(""); const [l, setL] = useState(false); const [err, setErr] = useState(""); return <div><Input label="Jméno" value={name} onChange={e => setName(e.target.value)} /><Input label="Email" value={email} onChange={e => setEmail(e.target.value)} /><Input label="Heslo (min. 6)" type="password" value={pass} onChange={e => setPass(e.target.value)} />{err && <p style={{ color: "var(--red)", fontSize: 14, marginBottom: 8, padding: 10, border: "1px solid var(--red)" }}>{err}</p>}<Btn warm disabled={l} onClick={async () => { setErr(""); if (!name.trim() || !email || !pass) return setErr("Vyplňte vše"); if (pass.length < 6) return setErr("Min. 6 znaků"); setL(true); try { const r = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${import.meta.env.VITE_FIREBASE_API_KEY}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password: pass, displayName: name.trim(), returnSecureToken: false }) }); const d = await r.json(); if (d.error) { setErr(d.error.message); setL(false); return; } await setDoc(doc(db, "users", d.localId), { name: name.trim(), email, role: "employee", notify: false, notifyEmail: "", fcmToken: null, defaultSchedule: null, setupDone: false, vacationTotal: 20, sickTotal: 5, whateverTotal: 3, vacationUsed: 0, sickUsed: 0, whateverUsed: 0, createdAt: new Date().toISOString() }); onDone(`Přidán: ${name.trim()}`); } catch (e) { setErr(e.message); } setL(false); }} style={{ width: "100%" }}>Přidat</Btn></div>; }
+function MoveForm({ curDay, curShift, onMove }) {
+  const [day, setDay] = useState(curDay);
+  const [shift, setShift] = useState(SHIFTS.find(s => s !== curShift) || curShift);
+  const same = day === curDay && shift === curShift;
+  return <div>
+    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+      <Sel label="Den" value={day} onChange={e => setDay(e.target.value)} options={DAYS.map(d => ({ value: d, label: d }))} />
+      <Sel label="Směna" value={shift} onChange={e => setShift(e.target.value)} options={SHIFTS.map(s => ({ value: s, label: s }))} />
+    </div>
+    <Btn warm disabled={same} onClick={() => onMove(day, shift)} style={{ width: "100%", marginTop: 4, opacity: same ? .5 : 1 }}>Přesunout sem</Btn>
+  </div>;
+}
+
 function NoteInput({ onSubmit }) { const [n, setN] = useState(""); return <div><Input value={n} onChange={e => setN(e.target.value)} placeholder="Přijdu o 20 min později" /><Btn warm onClick={() => onSubmit(n)} style={{ width: "100%", marginTop: 4 }}>Uložit poznámku</Btn></div>; }
 
 function RotationForm({ employees, onAdd }) {
@@ -872,7 +885,7 @@ export default function App() {
   const [intake, setIntake] = useState({}); const [intakeAllow, setIntakeAllow] = useState({}); const [schedMeta, setSchedMeta] = useState({});
   const [wo, setWo] = useState(0); const [schedule, setSchedule] = useState(null);
   const [absences, setAbsences] = useState({}); const [events, setEvents] = useState({});
-  const [swaps, setSwaps] = useState([]); const [selCell, setSelCell] = useState(null);
+  const [swaps, setSwaps] = useState([]); const [selCell, setSelCell] = useState(null); const [noteView, setNoteView] = useState(null);
   const [proposals, setProposals] = useState([]);
   const [allSchedules, setAllSchedules] = useState({}); const [resolveTarget, setResolveTarget] = useState(null);
   const [showPerma, setShowPerma] = useState(false); const [showCompare, setShowCompare] = useState(false);
@@ -1537,7 +1550,7 @@ export default function App() {
           <div style={{ width: 3, height: 24, background: en.ho ? "var(--grn)" : "var(--acc2)" }} />
           <span style={{ fontWeight: 500, color: "var(--w)", flex: 1, display: "inline-flex", alignItems: "center", gap: 6, minWidth: 0 }}><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{emp.name}</span><RankBadge fixes={emp.fixCount} /><HalfTag en={en} /></span>
           {!isA && !isMe && <button title={`Požádat ${emp.name} o výměnu`} onClick={e => { e.stopPropagation(); setModal({ type: "directSwap", targetEmp: emp, targetDay: day, targetShift: shift }); }} style={{ background: "none", border: "1px solid var(--acc2)", color: "var(--acc2)", width: 26, height: 26, cursor: "pointer", fontSize: 13, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontFamily: "'IBM Plex Mono',monospace" }}>⇄</button>}
-          {note && <span title={note} style={{ color: "var(--acc2)", cursor: "help", fontSize: 15, fontWeight: 700, border: "1px solid var(--acc2)", width: 22, height: 22, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>i</span>}
+          {note && <button aria-label="Zobrazit poznámku" onClick={e => { e.stopPropagation(); setNoteView({ name: emp.name, day, shift, text: note }); }} style={{ background: "none", color: "var(--acc2)", cursor: "pointer", fontSize: 15, fontWeight: 700, border: "1px solid var(--acc2)", width: 28, height: 28, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontFamily: "'IBM Plex Mono',monospace" }}>i</button>}
           {en.ho && <Badge small color="var(--grn)">HO</Badge>}
         </div>; })}
       {entries.length === 0 && <div style={{ padding: "14px", color: "var(--tx3)", fontSize: 14 }}>—</div>}
@@ -1628,6 +1641,7 @@ export default function App() {
               {!isA && <Btn small warm onClick={() => setModal("myabsence")}>+ Nepřítomnost</Btn>}
               <Btn small ghost onClick={exportCSV}>CSV</Btn>
             </div>
+            {isMobile && <div style={{ fontSize: 11.5, color: "var(--tx3)", marginBottom: 10, lineHeight: 1.4 }}>Na mobilu se nepřetahuje — klepnutím na jméno otevřeš akce{isA ? " včetně přesunu na jinou směnu nebo den" : ""}. Ikona „i" zobrazí poznámku.</div>}
 
             {/* ── DAY VIEW ── */}
             {schedView === "day" && <>
@@ -1695,7 +1709,9 @@ export default function App() {
                         onDragLeave={e => e.currentTarget.classList.remove("over")}
                         onDrop={e => handleDrop(day, shift, e)}>
                         {entries.map(en => { const emp = ge(en.empId); if (!emp) return null; const isMe = en.empId === profile.id;
+                          const wNote = notes[fsKey(en.empId, day, shift.replace(":", ""))];
                           return <div key={en.empId} className="ent" draggable={canDrag(en.empId)} onDragStart={e => e.dataTransfer.setData("text/plain", JSON.stringify({ empId: en.empId, day, shift }))} onClick={() => isA ? setSelCell({ day, shift, empId: en.empId }) : isMe && setModal({ type: "myshift", day, shift })} style={{ gap: 4, padding: "6px 8px", marginBottom: 2, background: "var(--bg3)", border: "1px solid var(--brd)", fontSize: 14 }}>
+                            {wNote && <button aria-label="Zobrazit poznámku" onClick={e => { e.stopPropagation(); setNoteView({ name: ge(en.empId)?.name, day, shift, text: wNote }); }} style={{ background: "none", border: "1px solid var(--acc2)", color: "var(--acc2)", width: 20, height: 20, fontSize: 11, fontWeight: 700, cursor: "pointer", flexShrink: 0, display: "inline-flex", alignItems: "center", justifyContent: "center", fontFamily: "'IBM Plex Mono',monospace", order: 9 }}>i</button>}
                             <span style={{ width: 8, height: 3, background: en.ho ? "var(--grn)" : "var(--acc2)" }} /><span style={{ fontWeight: 500, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--w)" }}>{emp.name?.split(" ").pop()}</span><RankBadge fixes={emp.fixCount} size={15} /><HalfTag en={en} compact />
                             {!isA && !isMe && <button title={`Výměna s ${emp.name}`} onClick={e => { e.stopPropagation(); setModal({ type: "directSwap", targetEmp: emp, targetDay: day, targetShift: shift }); }} style={{ background: "none", border: "1px solid var(--acc2)", color: "var(--acc2)", width: 20, height: 20, cursor: "pointer", fontSize: 10, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, padding: 0 }}>⇄</button>}
                             {en.ho && <Badge small color="var(--grn)">HO</Badge>}
@@ -2017,11 +2033,18 @@ export default function App() {
     {isMobile && <PillNav view={view} setView={switchV} NAV={NAV} />}
 
     {/* MODALS */}
+    <Modal open={!!noteView} onClose={() => setNoteView(null)} title="Poznámka">{noteView && <div>
+      <div style={{ fontSize: 13, color: "var(--tx3)", marginBottom: 8 }}>{noteView.name} · {noteView.day} · {noteView.shift}</div>
+      <div style={{ padding: "14px 16px", background: "var(--bg3)", border: "1px solid var(--brd)", fontSize: 15, color: "var(--w)", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{noteView.text}</div>
+      <Btn ghost onClick={() => setNoteView(null)} style={{ width: "100%", marginTop: 12 }}>Zavřít</Btn>
+    </div>}</Modal>
+
     <Modal open={!!selCell} onClose={() => setSelCell(null)} title="Akce">{selCell && (() => { const emp = ge(selCell.empId); if (!emp) return null; return <div>
       <div style={{ padding: 14, background: "var(--bg3)", marginBottom: 16, display: "flex", alignItems: "center", gap: 12 }}><div style={{ width: 40, height: 40, background: "var(--acc2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17, fontWeight: 600, color: "#fff" }}>{emp.name.charAt(0)}</div><div><div style={{ fontWeight: 600, fontSize: 17, color: "var(--w)" }}>{emp.name}</div><div style={{ fontSize: 14, color: "var(--tx2)" }}>{selCell.day} · {selCell.shift}</div></div></div>
       <Btn onClick={() => { togHO(selCell.day, selCell.shift, selCell.empId); setSelCell(null); }} style={{ width: "100%", marginBottom: 8 }}>Toggle HO</Btn>
-      <div style={{ fontSize: 12, color: "var(--tx3)", margin: "14px 0 6px", textTransform: "uppercase", letterSpacing: 1 }}>Přesunout</div>
-      <div style={{ display: "flex", gap: 8 }}>{SHIFTS.filter(s => s !== selCell.shift).map(s => <Btn key={s} small style={{ flex: 1 }} onClick={() => { moveE(selCell.empId, selCell.day, selCell.shift, selCell.day, s); setSelCell(null); }}>→ {s}</Btn>)}</div>
+      <div style={{ fontSize: 12, color: "var(--tx3)", margin: "14px 0 6px", textTransform: "uppercase", letterSpacing: 1 }}>Přesunout (i na jiný den)</div>
+      <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>{SHIFTS.filter(s => s !== selCell.shift).map(s => <Btn key={s} small style={{ flex: 1 }} onClick={() => { moveE(selCell.empId, selCell.day, selCell.shift, selCell.day, s); setSelCell(null); }}>→ {s}</Btn>)}</div>
+      <MoveForm curDay={selCell.day} curShift={selCell.shift} onMove={(d, sh) => { moveE(selCell.empId, selCell.day, selCell.shift, d, sh); setSelCell(null); }} />
       <div style={{ fontSize: 12, color: "var(--tx3)", margin: "14px 0 6px", textTransform: "uppercase", letterSpacing: 1 }}>Nepřítomnost</div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>{ABS.map(a => <Btn key={a.id} small onClick={() => { const c = selCell; setSelCell(null); withHalf(a.id, p => addAbs(c.empId, c.day, a.id, p)); }}>{a.icon} {a.label}</Btn>)}</div>
       <div style={{ fontSize: 12, color: "var(--tx3)", margin: "14px 0 6px", textTransform: "uppercase", letterSpacing: 1 }}>Poznámka</div>
