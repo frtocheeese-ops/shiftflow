@@ -73,16 +73,27 @@ function applyRotations(entries, weekKey, rotations, absences) {
    JEDINÝ zdroj pravdy pro mřížku, engine, návrhy i statistiky, aby se nerozcházely. */
 function withDefaults(entries, absences, emps, weekKey, rotations) {
   const merged = entries ? dc(entries) : buildDef(emps);
+  DAYS.forEach(day => { if (!merged[day]) merged[day] = {}; SHIFTS.forEach(sh => { if (!merged[day][sh]) merged[day][sh] = []; }); });
+  // Minulé týdny jsou historie — ty se aktuálním stálým rozvrhem nepřepisují (jinak by se
+  // měnily i odpracované směny ve statistikách). Obnovuje se jen tento a budoucí týdny.
+  const isPast = weekKey && weekKey < localISO(getMon(new Date()));
   emps.forEach(emp => {
     if (!emp.defaultSchedule || !emp.setupDone) return;
-    const inSchedule = DAYS.some(day => SHIFTS.some(sh => merged[day]?.[sh]?.some(e => e.empId === emp.id)));
+    const placed = {};
+    let anywhere = false;
+    DAYS.forEach(day => { for (const sh of SHIFTS) { const en = merged[day][sh].find(e => e.empId === emp.id); if (en) { placed[day] = { sh, en }; anywhere = true; break; } } });
     const hasAbsence = Object.keys(absences || {}).some(k => k.startsWith(`${emp.id}__`));
-    if (inSchedule || hasAbsence) return;
+    if (!anywhere && hasAbsence) return;  // v týdnu není a má absenci → řeší absenční logika
+
     DAYS.forEach(day => {
+      const cur = placed[day];
+      if (cur && !cur.en.isDefault) return;                    // ruční úprava má přednost
+      if (cur && isPast) return;                               // historii nepřepisujeme
+      if (!cur && anywhere) return;                            // ručně odebrán z toho dne → nevracet
+      if (cur) merged[day][cur.sh] = merged[day][cur.sh].filter(e => e.empId !== emp.id);
+      if (absences?.[`${emp.id}__${day}`]) return;             // ten den je nepřítomen
       const shift = emp.defaultSchedule[day];
-      if (!shift || !SHIFTS.includes(shift)) return;
-      if (!merged[day]) merged[day] = {};
-      if (!merged[day][shift]) merged[day][shift] = [];
+      if (!shift || !SHIFTS.includes(shift)) return;           // stálý rozvrh říká volno
       merged[day][shift].push({ empId: emp.id, ho: emp.defaultSchedule[`${day}_ho`] || false, isDefault: true });
     });
   });
