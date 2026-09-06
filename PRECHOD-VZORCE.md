@@ -357,3 +357,22 @@ změna projeví okamžitě všem (mřížka, engine, Návrhy, statistiky). Zacho
 
 Ověřeno testem: změna stálého rozvrhu se v budoucím týdnu projeví ihned, ruční úprava
 zůstane a historie se nezmění.
+
+---
+
+## Aktualizace v19 — mobil: poznámky a přesun směn
+
+**Poznámka „i" nereagovala.** Byl to `<span title={note}>` — nativní tooltip se na
+dotyku nikdy nezobrazí a prvek neměl žádný `onClick`. Nově je to skutečné tlačítko
+(28×28, `stopPropagation`), které otevře modal s celou poznámkou. Přidán i do
+týdenního pohledu, kde se poznámky dosud nezobrazovaly vůbec.
+
+**Drag & drop na mobilu.** Používá HTML5 `draggable` + `onDragStart/onDrop`, které
+dotykové prohlížeče neemitují — na mobilu tedy principiálně nefunguje (na desktopu
+funguje dál beze změny). Náhrada bez přepisování na touch-eventy: admin klepne na
+jméno → v modalu „Akce" je nově `MoveForm` (výběr dne + směny → „Přesunout sem"),
+takže jde přesouvat i **mezi dny**, což dřív šlo jen tažením. Rychlá tlačítka
+„→ 09:00" pro přesun v rámci dne zůstala. Členové mění svou směnu přes „Změnit
+hodinu" v myshift modalu (návrh ke schválení) jako dosud.
+
+Doplněna mobilní nápověda nad rozvrhem, že se klepe místo tažení.
