@@ -376,3 +376,24 @@ takže jde přesouvat i **mezi dny**, což dřív šlo jen tažením. Rychlá tl
 hodinu" v myshift modalu (návrh ke schválení) jako dosud.
 
 Doplněna mobilní nápověda nad rozvrhem, že se klepe místo tažení.
+
+---
+
+## Aktualizace v20 — GCal sync respektuje stálý rozvrh a rotace
+
+**Příznak.** Po ročním syncu chyběly v Google Kalendáři změny, které se do rozvrhu
+propisují ze stálého rozvrhu (v18) — kalendář ukazoval staré směny.
+
+**Příčina.** `_syncRangeCore` (i `_syncWeekCore`) měly VLASTNÍ kopii slučovací logiky,
+napsanou ještě v původní podobě: doplnily člověka jen tehdy, když v uloženém týdnu
+chyběl úplně. Kdo už v týdnu byl se starou směnou, šel do kalendáře postaru — sync tedy
+neviděl ani propsání stálého rozvrhu, ani rotace dvojic. Duplicitní logika = druhý
+zdroj pravdy.
+
+**Oprava.** Obě sync cesty používají sdílený `withDefaults(entries, absences, employees,
+weekKey, rotations)` — stejný, ze kterého se skládá mřížka, engine i statistiky. Do
+sync funkcí se proto nově předává i klíč týdne a `rules.rotations`; auto-sync z listeneru
+čte rotace přes `rulesRef` (aby nezachytil zastaralou closure).
+
+Ověřeno testem: uložený týden se starou 09:00 vygeneruje po změně stálého rozvrhu
+události 08:00 HO, se správnou značkou pro spolehlivé mazání.

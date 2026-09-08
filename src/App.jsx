@@ -419,8 +419,8 @@ async function clearShiftFlowEvents(timeMin, timeMax, userId) {
   return deleted;
 }
 
-function syncWeekToGCal(userId, weekDates, schedule, employees, absences) {
-  return gcalSerial(() => _syncWeekCore(userId, weekDates, schedule, employees, absences));
+function syncWeekToGCal(userId, weekDates, schedule, employees, absences, weekKey, rotations) {
+  return gcalSerial(() => _syncWeekCore(userId, weekDates, withDefaults(schedule, absences, employees, weekKey || (weekDates && weekDates[0]), rotations), employees, absences));
 }
 async function _syncWeekCore(userId, weekDates, schedule, employees, absences) {
   const emp = employees.find(e => e.id === userId);
@@ -434,10 +434,10 @@ async function _syncWeekCore(userId, weekDates, schedule, employees, absences) {
 }
 
 // Sync FULL RANGE (default: 52 weeks ahead) — fetches each week from Firestore
-function syncRangeToGCal(userId, employees, db, weeksAhead = 52, onProgress) {
-  return gcalSerial(() => _syncRangeCore(userId, employees, db, weeksAhead, onProgress));
+function syncRangeToGCal(userId, employees, db, weeksAhead = 52, onProgress, rotations) {
+  return gcalSerial(() => _syncRangeCore(userId, employees, db, weeksAhead, onProgress, rotations));
 }
-async function _syncRangeCore(userId, employees, db, weeksAhead = 52, onProgress) {
+async function _syncRangeCore(userId, employees, db, weeksAhead = 52, onProgress, rotations) {
   const { doc, getDoc } = await import("firebase/firestore");
   const emp = employees.find(e => e.id === userId);
   if (!emp) return { ok: false, msg: "Profil nenalezen" };
@@ -461,36 +461,9 @@ async function _syncRangeCore(userId, employees, db, weeksAhead = 52, onProgress
       const snap = await getDoc(doc(db, "schedules", monISO));
       if (snap.exists()) weekData = snap.data();
     } catch { }
-    // Build effective schedule: saved entries + default fallback
-    let schedule = weekData?.entries || null;
-    if (!schedule) {
-      // Use default schedule from emp
-      schedule = {};
-      ["Po", "Út", "St", "Čt", "Pá"].forEach(day => {
-        schedule[day] = { "08:00": [], "09:00": [], "10:00": [] };
-        if (emp.defaultSchedule?.[day] && emp.setupDone) {
-          const sh = emp.defaultSchedule[day];
-          if (["08:00", "09:00", "10:00"].includes(sh)) {
-            schedule[day][sh].push({ empId: userId, ho: emp.defaultSchedule[`${day}_ho`] || false, isDefault: true });
-          }
-        }
-      });
-    } else {
-      // Merge: if employee not in saved schedule and not in absences, add default
-      const inSched = ["Po", "Út", "St", "Čt", "Pá"].some(d => ["08:00", "09:00", "10:00"].some(sh => schedule[d]?.[sh]?.some(e => e.empId === userId)));
-      const inAbs = Object.keys(weekData.absences || {}).some(k => k.startsWith(`${userId}__`));
-      if (!inSched && !inAbs && emp.defaultSchedule && emp.setupDone) {
-        ["Po", "Út", "St", "Čt", "Pá"].forEach(day => {
-          const sh = emp.defaultSchedule[day];
-          if (sh && ["08:00", "09:00", "10:00"].includes(sh)) {
-            if (!schedule[day]) schedule[day] = {};
-            if (!schedule[day][sh]) schedule[day][sh] = [];
-            schedule[day][sh].push({ empId: userId, ho: emp.defaultSchedule[`${day}_ho`] || false, isDefault: true });
-          }
-        });
-      }
-    }
+    // Efektivní rozvrh = přesně to, co vidí appka (stálý rozvrh + rotace + nový kolega)
     const absences = weekData?.absences || {};
+    const schedule = withDefaults(weekData?.entries || null, absences, employees, monISO, rotations);
     const events = buildWeekEvents(userId, weekDates, schedule, employees, absences);
     for (const evt of events) {
       await gcalRequest("POST", "/calendars/primary/events", evt);
@@ -1032,6 +1005,7 @@ export default function App() {
   // Listens to schedules collection and syncs the affected week if user has events there
   const lastSyncRef = useRef({});
   const empRef = useRef(employees); useEffect(() => { empRef.current = employees; }, [employees]);
+  const rulesRef = useRef(rules); useEffect(() => { rulesRef.current = rules; }, [rules]);
   useEffect(() => {
     if (!profile?.gcalEnabled || !profile?.id) return;
     // POZOR: první snapshot doručí CELOU kolekci jako "added". Bez tohoto přeskočení
@@ -1055,7 +1029,7 @@ export default function App() {
         if (!getGcalToken()) return;
         const weekDates = weekDatesFromMonday(weekId);
         setTimeout(() => {
-          syncWeekToGCal(profile.id, weekDates, data.entries || {}, empRef.current, data.absences || {}).catch(() => { });
+          syncWeekToGCal(profile.id, weekDates, data.entries || null, empRef.current, data.absences || {}, weekDates[0], rulesRef.current?.rotations).catch(() => { });
         }, 2000);
       });
     });
@@ -1104,7 +1078,7 @@ export default function App() {
     if (opt.entries) setSchedule(opt.entries);
     if (opt.absences) setAbsences(opt.absences);
     txSchedule(mutate)
-      .then(() => { if (msg) notify(msg); if (profile?.gcalEnabled && getGcalToken()) setTimeout(() => syncWeekToGCal(profile.id, wd, opt.entries || cs, employees, opt.absences || absences).catch(() => {}), 1500); })
+      .then(() => { if (msg) notify(msg); if (profile?.gcalEnabled && getGcalToken()) setTimeout(() => syncWeekToGCal(profile.id, wd, opt.entries || cs, employees, opt.absences || absences, wk, rules.rotations).catch(() => {}), 1500); })
       .catch(err => { console.error("editSchedule:", err); notify("Změna se neuložila — zkuste to znovu"); });
   };
   const eN = (emp, msg) => { if (emp?.notify) callGAS("sendEmail", { to: emp.notifyEmail || emp.email, employeeName: emp.name, changeDescription: msg, weekLabel: fmtW(cw) }); };
@@ -1170,7 +1144,7 @@ export default function App() {
       const al = ABS.find(a => a.id === type)?.label;
       notify(`${emp?.name}: ${al}`); log(`${emp?.name}: ${al} ${day}`);
       if (profile?.gcalEnabled && getGcalToken() && eid === profile.id) {
-        setTimeout(() => syncWeekToGCal(profile.id, wd, cs, employees, { ...absences, [absKey]: type }).catch(() => {}), 1500);
+        setTimeout(() => syncWeekToGCal(profile.id, wd, cs, employees, { ...absences, [absKey]: type }, wk, rules.rotations).catch(() => {}), 1500);
       }
     } catch (err) { console.error("addAbs:", err); notify("Chyba: " + err.message); }
   };
@@ -1240,7 +1214,7 @@ export default function App() {
       }
       notify("Nepřítomnost odebrána, směna obnovena");
       if (profile?.gcalEnabled && getGcalToken() && eid === profile.id) {
-        setTimeout(() => syncWeekToGCal(profile.id, wd, cs, employees, absences).catch(() => {}), 1500);
+        setTimeout(() => syncWeekToGCal(profile.id, wd, cs, employees, absences, wk, rules.rotations).catch(() => {}), 1500);
       }
     } catch (err) { console.error("removeAbs:", err); notify("Chyba"); }
   };
@@ -1976,13 +1950,13 @@ export default function App() {
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <Btn warm onClick={async () => {
                       notify("Synchronizuji aktuální týden...");
-                      const res = await syncWeekToGCal(profile.id, wd, cs, employees, absences);
+                      const res = await syncWeekToGCal(profile.id, wd, cs, employees, absences, wk, rules.rotations);
                       notify(res.msg);
                     }}>Sync týden</Btn>
                     <Btn warm onClick={async () => {
                       if (!confirm("Synchronizovat příštích 52 týdnů? Může trvat 1-3 minuty.")) return;
                       notify("Spouštím sync celého roku...");
-                      const res = await syncRangeToGCal(profile.id, employees, db, 52, msg => notify(msg));
+                      const res = await syncRangeToGCal(profile.id, employees, db, 52, msg => notify(msg), rules.rotations);
                       notify(res.msg);
                     }}>Sync celý rok</Btn>
                     <Btn ghost onClick={async () => {
