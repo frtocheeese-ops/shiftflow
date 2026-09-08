@@ -424,3 +424,28 @@ do budoucna, ochrana historie, přednost ruční úpravy, doplnění nového kol
 pondělní mezeru na 10:00 (Švarc má pondělí volno, na desítce zbývá jen Andy). Pondělí
 bylo vyřešeno ručně v appce, ale kdokoli později klikne „Předvyplnit rozvrh", mezera
 se vrátí. Doporučeno srovnat PRESET s realitou.
+
+---
+
+## Aktualizace v22 — „Provést úpravu" hlásila chybu donekonečna
+
+**Příznak.** Klik na „Provést úpravu" vrátil „Rozvrh se mezitím změnil — otevři Návrhy
+znovu"; ani po znovuotevření se úprava neprovedla, hláška se opakovala.
+
+**Příčina.** Kontrola v `applyProblemFix` vyžadovala, aby úprava problém vyřešila ÚPLNĚ.
+Když ale na směně chybí víc než jeden člověk (např. na 8:00 nikdo, minimum 2), žádná
+jednotlivá alternativa problém nevyřeší — každá ho jen zmenší. Transakce proto zápis
+pokaždé odmítla a stav se nikdy nepohnul. Hláška navíc mylně tvrdila, že se rozvrh
+změnil, což znemožňovalo diagnózu.
+
+**Oprava.**
+- `analyzeWeek` u každého problému vrací `deficit` (kolik lidí ještě chybí).
+- `applyProblemFix` přijme i **částečné zlepšení** (deficit klesl) a oznámí
+  „Úprava provedena ✓ — ještě chybí X, vyber další možnost". Druhý klik problém dořeší.
+- Odmítne se jen tehdy, když úprava nic nezlepší („Tahle možnost problém nezlepší —
+  zkus jinou“) nebo by vytvořila NOVÉ kritické porušení („Nelze — vzniklo by: …“).
+- Detekce nového kritického porušení porovnává DRUH hlášky, ne přesné znění —
+  po částečné opravě se čísla v textu mění („jen 0" → „jen 1") a dřívější verze
+  by to chybně vyhodnotila jako nový problém (odhaleno testem).
+
+Ověřeno krokovým testem: den bez kohokoli na 8:00 se vyřeší dvěma úpravami po sobě.
