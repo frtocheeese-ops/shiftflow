@@ -376,3 +376,51 @@ takže jde přesouvat i **mezi dny**, což dřív šlo jen tažením. Rychlá tl
 hodinu" v myshift modalu (návrh ke schválení) jako dosud.
 
 Doplněna mobilní nápověda nad rozvrhem, že se klepe místo tažení.
+
+---
+
+## Aktualizace v20 — GCal sync respektuje stálý rozvrh a rotace
+
+**Příznak.** Po ročním syncu chyběly v Google Kalendáři změny, které se do rozvrhu
+propisují ze stálého rozvrhu (v18) — kalendář ukazoval staré směny.
+
+**Příčina.** `_syncRangeCore` (i `_syncWeekCore`) měly VLASTNÍ kopii slučovací logiky,
+napsanou ještě v původní podobě: doplnily člověka jen tehdy, když v uloženém týdnu
+chyběl úplně. Kdo už v týdnu byl se starou směnou, šel do kalendáře postaru — sync tedy
+neviděl ani propsání stálého rozvrhu, ani rotace dvojic. Duplicitní logika = druhý
+zdroj pravdy.
+
+**Oprava.** Obě sync cesty používají sdílený `withDefaults(entries, absences, employees,
+weekKey, rotations)` — stejný, ze kterého se skládá mřížka, engine i statistiky. Do
+sync funkcí se proto nově předává i klíč týdne a `rules.rotations`; auto-sync z listeneru
+čte rotace přes `rulesRef` (aby nezachytil zastaralou closure).
+
+Ověřeno testem: uložený týden se starou 09:00 vygeneruje po změně stálého rozvrhu
+události 08:00 HO, se správnou značkou pro spolehlivé mazání.
+
+---
+
+## Aktualizace v21 — audit duplicit (hledání dalších kopií slučovací logiky)
+
+Cílený audit celého repa (src, scripts, gas) po opakovaném výskytu chyby „opravím
+logiku na jednom místě, ale existuje její kopie". Nalezeno a opraveno:
+
+- **Přijetí výměny (`acceptSwap`)** četlo syrové `entries` + `buildDef` místo
+  `withDefaults` → v týdnu, kde ještě nefiguroval nový kolega nebo změna stálého
+  rozvrhu / rotace, pracovalo se starým obrazem týdne a zápis ho materializoval.
+- **`applyProposal`** (schválení návrhu) — tentýž problém, tentýž fix.
+- **Zápisy obou** používaly `setDoc(..., {merge:true})` → riziko lost-update
+  a u map i neodstranění klíčů. Sjednoceno na `mergeFields`.
+- **Porovnání se stálým** stavělo základ přes `buildDef` BEZ rotací → rotující dvojice
+  blikala jako „změna" v každém týdnu, i když šlo o řádný stav. Nyní se na základ
+  aplikují rotace daného týdne.
+- **Obcházení konstant**: dvě místa měla inline `["Po","Út",…]` a `["08:00",…]` místo
+  `DAYS`/`SHIFTS`. Sjednoceno.
+
+Ověřeno regresním testem (8 scénářů: validita PRESET, rotace, propsání stálého rozvrhu
+do budoucna, ochrana historie, přednost ruční úpravy, doplnění nového kolegy, absence).
+
+**Otevřený bod (bez zásahu, vyžaduje rozhodnutí):** konstanta `PRESET` stále obsahuje
+pondělní mezeru na 10:00 (Švarc má pondělí volno, na desítce zbývá jen Andy). Pondělí
+bylo vyřešeno ručně v appce, ale kdokoli později klikne „Předvyplnit rozvrh", mezera
+se vrátí. Doporučeno srovnat PRESET s realitou.
