@@ -191,13 +191,13 @@ function analyzeWeek(cs, absences, employees, rulesIn, intake = {}, intakeAllow 
     if (short > 0) {
       violations.push({ sev: "crit", day, msg: `${day}: v kanceláři jen ${st.office.length} (minimum ${R.officeMin})` });
       const toShift = (R.cover8 && off8 < min8) ? "08:00" : (R.cover10 && off10 < 1) ? "10:00" : "09:00";
-      problems.push({ key: `head:${day}`, day, title: `${day}: v kanceláři jen ${st.office.length} lidí (minimum ${R.officeMin})`, alts: pullAlts(toShift) });
+      problems.push({ key: `head:${day}`, day, deficit: short, title: `${day}: v kanceláři jen ${st.office.length} lidí (minimum ${R.officeMin})`, alts: pullAlts(toShift) });
     } else {
       // 8:00 — minimálně min8 v kanceláři
       if (R.cover8 && off8 < min8) {
         violations.push({ sev: "crit", day, msg: `${day}: v kanceláři od 8:00 jen ${off8} (potřeba ${min8})` });
         const alts = [...shiftAlts("08:00"), ...pullAlts("08:00")];
-        if (alts.length) problems.push({ key: `08:00:${day}`, day, title: `${day}: potřeba ${min8} v kanceláři od 8:00`, alts });
+        if (alts.length) problems.push({ key: `08:00:${day}`, day, deficit: min8 - off8, title: `${day}: potřeba ${min8} v kanceláři od 8:00`, alts });
       }
       // 10:00 — minimálně min10, aspoň 1 z kanceláře
       if (R.cover10 && (off10 < 1 || (off10 + ho10) < min10)) {
@@ -206,7 +206,7 @@ function analyzeWeek(cs, absences, employees, rulesIn, intake = {}, intakeAllow 
         const msg = noOffice ? `${day}: od 10:00 nikdo v kanceláři` : `${day}: na 10:00 jen ${total} (potřeba ${min10}, aspoň 1 v kanceláři)`;
         violations.push({ sev: noOffice ? "crit" : "warn", day, msg });
         const alts = [...shiftAlts("10:00"), ...pullAlts("10:00")];
-        if (alts.length) problems.push({ key: `10:00:${day}`, day, title: msg, alts });
+        if (alts.length) problems.push({ key: `10:00:${day}`, day, deficit: Math.max(1 - off10, 0) + Math.max(min10 - total, 0), title: msg, alts });
       }
     }
     if (st.ho.length > R.hoCapDay) violations.push({ sev: "warn", day, msg: `${day}: ${st.ho.length} lidí na HO (strop ${R.hoCapDay})` });
@@ -223,7 +223,7 @@ function analyzeWeek(cs, absences, employees, rulesIn, intake = {}, intakeAllow 
     if (intake[day]) {
       const offenders = st.ho.filter(h => !allowed(day, h.empId));
       offenders.forEach(h => violations.push({ sev: "warn", day, empId: h.empId, intake: true, msg: `Nástupy (${day}): ${(employees.find(e => e.id === h.empId) || {}).name || "?"} má HO — doporučeno do kanceláře` }));
-      if (offenders.length) problems.push({ key: `intake:${day}`, day, intake: true, title: `Nástupy ${day}: ${offenders.length}× HO (doporučeno bez HO)`, alts: offenders.map(h => ({ kind: "dropHO", empId: h.empId, day })) });
+      if (offenders.length) problems.push({ key: `intake:${day}`, day, intake: true, deficit: offenders.length, title: `Nástupy ${day}: ${offenders.length}× HO (doporučeno bez HO)`, alts: offenders.map(h => ({ kind: "dropHO", empId: h.empId, day })) });
     }
   });
   Object.entries(weeklyHO).forEach(([eid, n]) => { if (n > R.hoPerWeek) violations.push({ sev: "warn", day: null, empId: eid, msg: `HO ${n}× v týdnu (strop ${R.hoPerWeek})` }); });
@@ -926,7 +926,7 @@ export default function App() {
   // Přímá aplikace návrhu — transakce znovu ověří, že problém pořád trvá (žádné dvojí řešení)
   const applyProblemFix = async (weekKey, problemKey, alt) => {
     try {
-      let status = "";
+      let status = "", remaining = 0, worseMsg = "";
       await runTransaction(db, async t => {
         const ref = doc(db, "schedules", weekKey);
         const snap = await t.get(ref);
@@ -935,20 +935,31 @@ export default function App() {
         const entries = withDefaults(data.entries, abs, employees, weekKey, rules.rotations);
         const intk = data.intake || {}, intkA = data.intakeAllow || {};
         const before = analyzeWeek(entries, abs, employees, rules, intk, intkA);
-        if (!before.problems.some(p => p.key === problemKey)) { status = "gone"; return; }
+        const pBefore = before.problems.find(p => p.key === problemKey);
+        if (!pBefore) { status = "gone"; return; }
         const trial = dc(entries); applyAlt(trial, alt);
         const after = analyzeWeek(trial, abs, employees, rules, intk, intkA);
-        const critB = before.violations.filter(v => v.sev === "crit").length, critA = after.violations.filter(v => v.sev === "crit").length;
-        if (after.problems.some(p => p.key === problemKey) || critA > critB) { status = "invalid"; return; }
+        // Nové kritické porušení jinde v týdnu (porovnáváme konkrétní hlášky, ne jen počty)
+        // Porovnáváme DRUH kritického porušení, ne přesné znění — čísla v hlášce se po částečné opravě mění
+        const critSet = r => new Set(r.violations.filter(v => v.sev === "crit").map(v => `${v.day}|${v.msg.replace(/\d+/g, "#")}`));
+        const cb = critSet(before), ca = critSet(after);
+        const newCrit = [...ca].filter(x => !cb.has(x));
+        if (newCrit.length) { status = "worse"; worseMsg = newCrit[0].split("|")[1]; return; }
+        const pAfter = after.problems.find(p => p.key === problemKey);
+        // Úpravu bereme i tehdy, když problém jen zmenší (chybí-li víc lidí, řeší se po krocích)
+        const dB = pBefore.deficit ?? 1, dA = pAfter ? (pAfter.deficit ?? 1) : 0;
+        if (pAfter && dA >= dB) { status = "nohelp"; return; }
+        remaining = dA;
         t.set(ref, { entries: trial, weekStart: weekKey, modifiedAt: new Date().toISOString(), modifiedBy: profile?.id }, { mergeFields: ["entries", "weekStart", "modifiedAt", "modifiedBy"] });
         status = "ok";
       });
       if (status === "ok") {
-        notify("Úprava provedena ✓"); log(`Vyřešeno: ${altLabel(alt, ge)} (${weekKey})`);
+        notify(remaining > 0 ? `Úprava provedena ✓ — ještě chybí ${remaining}, vyber další možnost` : "Úprava provedena ✓"); log(`Vyřešeno: ${altLabel(alt, ge)} (${weekKey})`);
         if (alt.empId) updateDoc(doc(db, "users", alt.empId), { fixCount: increment(1) }).catch(() => { });
         const e = ge(alt.empId); if (e && e.id !== profile.id) eN(e, `Úprava tvé směny: ${altLabel(alt, ge)} (${weekKey})`);
       } else if (status === "gone") notify("Tento problém už někdo vyřešil");
-      else if (status === "invalid") notify("Rozvrh se mezitím změnil — otevři Návrhy znovu");
+      else if (status === "worse") notify(`Nelze — vzniklo by: ${worseMsg}`);
+      else if (status === "nohelp") notify("Tahle možnost problém nezlepší — zkus jinou");
     } catch (err) { console.error("applyProblemFix:", err); notify("Nepodařilo se uložit"); }
   };
 
