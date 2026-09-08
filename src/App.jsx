@@ -326,7 +326,7 @@ function buildWeekEvents(userId, weekDates, schedule, employees, absences) {
   if (!emp) return [];
   const events = [];
   for (let i = 0; i < 5; i++) {
-    const day = ["Po", "Út", "St", "Čt", "Pá"][i];
+    const day = DAYS[i];
     const date = weekDates[i];
     const absKey = `${userId}__${day}`;
     if (absences[absKey] && !String(absences[absKey]).startsWith("half_")) {
@@ -344,7 +344,7 @@ function buildWeekEvents(userId, weekDates, schedule, employees, absences) {
       });
       continue;
     }
-    for (const shift of ["08:00", "09:00", "10:00"]) {
+    for (const shift of SHIFTS) {
       const entry = schedule?.[day]?.[shift]?.find(e => e.empId === userId);
       if (entry) {
         const endH = parseInt(shift.split(":")[0]) + 8;
@@ -1262,12 +1262,12 @@ export default function App() {
         const snap = await getDoc(doc(db, "schedules", sw.week));
         if (snap.exists()) {
           const d = snap.data();
-          weekSched = d.entries ? dc(d.entries) : dc(buildDef(employees));
           weekAbs = d.absences || {};
+          weekSched = withDefaults(d.entries, weekAbs, employees, sw.week, rules.rotations);
           console.log("[SWAP] Loaded existing doc, has entries:", !!d.entries);
         } else {
-          weekSched = dc(buildDef(employees));
           weekAbs = {};
+          weekSched = withDefaults(null, weekAbs, employees, sw.week, rules.rotations);
           console.log("[SWAP] Doc doesnt exist, using buildDef");
         }
       }
@@ -1307,7 +1307,7 @@ export default function App() {
         weekSched[sw.day][sw.sh].push({ empId: aid, ho: re.ho || false, isDefault: false });
       }
       console.log("[SWAP] Writing to Firestore week:", sw.week);
-      await setDoc(doc(db, "schedules", sw.week), { entries: weekSched, weekStart: sw.week, modifiedAt: new Date().toISOString(), modifiedBy: profile?.id }, { merge: true });
+      await setDoc(doc(db, "schedules", sw.week), { entries: weekSched, weekStart: sw.week, modifiedAt: new Date().toISOString(), modifiedBy: profile?.id }, { mergeFields: ["entries", "weekStart", "modifiedAt", "modifiedBy"] });
       console.log("[SWAP] Schedule write OK");
       if (sw.week === wk) setSchedule(weekSched);
       await updateDoc(doc(db, 'swapRequests', swId), { status: 'done', aid, resolvedAt: new Date().toISOString() });
@@ -1342,11 +1342,11 @@ export default function App() {
     else {
       const snap = await getDoc(doc(db, "schedules", p.week));
       const d = snap.exists() ? snap.data() : {};
-      entries = d.entries ? dc(d.entries) : dc(buildDef(employees));
       weekAbs = d.absences || {};
+      entries = withDefaults(d.entries, weekAbs, employees, p.week, rules.rotations);
     }
     applyAlt(entries, p.alt);
-    await setDoc(doc(db, "schedules", p.week), { entries, weekStart: p.week, modifiedAt: new Date().toISOString(), modifiedBy: profile?.id }, { merge: true });
+    await setDoc(doc(db, "schedules", p.week), { entries, weekStart: p.week, modifiedAt: new Date().toISOString(), modifiedBy: profile?.id }, { mergeFields: ["entries", "weekStart", "modifiedAt", "modifiedBy"] });
     if (p.week === wk) setSchedule(entries);
     await updateDoc(doc(db, "changeProposals", p.id), { status: "done", resolvedAt: new Date().toISOString() });
     notify("Změna provedena ✓"); log(`Schváleno: ${p.label}`);
@@ -2096,7 +2096,7 @@ export default function App() {
 
     {/* ═══ POROVNÁNÍ SE STÁLÝM — dva rozvrhy vedle sebe, změny pulzují ═══ */}
     {showCompare && (() => {
-      const defAll = buildDef(employees);
+      const defAll = applyRotations(buildDef(employees), wk, rules.rotations, {});
       const daysToShow = schedView === "day" ? [DAYS[selDay]] : DAYS;
       const buildDay = day => {
         const side = src => { const m = {}; SHIFTS.forEach(sh => m[sh] = (src[day]?.[sh] || []).filter(en => ge(en.empId)).map(en => ({ empId: en.empId, ho: !!en.ho }))); return m; };
