@@ -458,7 +458,7 @@ Přidán typ `business_trip` — „✈️ Služební cesta" (barva #3c90a8). Ch
 - Dostupný všude, kde se zadává nepřítomnost (admin i člen, denní i týdenní pohled).
 - **Neodečítá se** z konta dovolené/sick/whatever — jako Lékař a Školení. Přidán
   explicitně do vylučovacích seznamů v `addAbs`, `addAbsRange` i `removeAbs`.
-- Přidán i do **rozsahového** formuláře (od–do), protože služební cesta bývá vícedenní.
+- Ikona 🚗 (auto). Přidán i do **rozsahového** formuláře (od–do), protože služební cesta bývá vícedenní.
 - Do Google Kalendáře se propíše automaticky (`buildWeekEvents` čte z `ABS`).
 - V přehledu Dovolená se nezobrazuje (ten záměrně sleduje jen dovolenou).
 - Nemá půldenní variantu — je celodenní.

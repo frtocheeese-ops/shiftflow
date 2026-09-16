@@ -14,7 +14,7 @@ const ABS = [
   { id: "vacation", label: "Dovolená", icon: "🏖️", color: "#4080b0" },
   { id: "whatever", label: "Whatever", icon: "☕", color: "#8070b0" },
   { id: "training", label: "Školení", icon: "📚", color: "#308060" },
-  { id: "business_trip", label: "Služební cesta", icon: "✈️", color: "#3c90a8" },
+  { id: "business_trip", label: "Služební cesta", icon: "🚗", color: "#3c90a8" },
   { id: "half_vacation", label: "½ Dovolená", icon: "½🏖", color: "#4080b0" },
   { id: "half_ho", label: "½ HO", icon: "½🏠", color: "#50a060" },
 ];
@@ -767,7 +767,7 @@ function RotationForm({ employees, onAdd }) {
 function VacRangeF({ onSubmit }) {
   const [from, setFrom] = useState(""); const [to, setTo] = useState(""); const [type, setType] = useState("vacation");
   return <div>
-    <Sel label="Typ" value={type} onChange={e => setType(e.target.value)} options={[{ value: "vacation", label: "🏖️ Dovolená" }, { value: "sick", label: "🤒 Sick Day" }, { value: "training", label: "📚 Školení" }, { value: "business_trip", label: "✈️ Služební cesta" }]} />
+    <Sel label="Typ" value={type} onChange={e => setType(e.target.value)} options={[{ value: "vacation", label: "🏖️ Dovolená" }, { value: "sick", label: "🤒 Sick Day" }, { value: "training", label: "📚 Školení" }, { value: "business_trip", label: "🚗 Služební cesta" }]} />
     <Input label="Od" type="date" value={from} onChange={e => setFrom(e.target.value)} />
     <Input label="Do" type="date" value={to} onChange={e => setTo(e.target.value)} />
     <Btn warm onClick={() => { if (!from || !to) return; onSubmit(from, to, type); }} style={{ width: "100%", marginTop: 8 }}>Zadat rozsah</Btn>
