@@ -10,17 +10,23 @@ const SITE = "https://smenyjt.netlify.app";
 const { BOT_EMAIL, BOT_PASSWORD, FORCE } = process.env;
 if (!BOT_EMAIL || !BOT_PASSWORD) { console.error("Chybí BOT_EMAIL / BOT_PASSWORD"); process.exit(1); }
 
-// ── Guard: cron se pouští 4× (zpoždění GitHub Actions + letní/zimní čas).
-// Projde první pokus od 9:00 pražského času (rezerva před WhatsApp zprávou ve 12:05);
-// značka pak zbytek dne odstaví.
+// ── Guard: GitHub cron se běžně zpožďuje o desítky minut, proto se pouští často
+// a snímek se PRŮBĚŽNĚ OBNOVUJE. Commit (a tím i nová verze stránky) proběhne jen tehdy,
+// když se obrázek opravdu liší → žádné zbytečné commity.
+//   • 9:00–11:50 pražského času … obnovovací okno (každý běh přepíše snímek čerstvějším)
+//   • 11:50–19:00 ………………………… záchrana, pokud dnes ještě nic neproběhlo
+// E-mail se posílá jen jednou denně, při prvním úspěšném běhu.
 const praha = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Prague" }));
 const STAMP = "public/nahled/last.txt";
 const dnes = `${praha.getFullYear()}-${String(praha.getMonth() + 1).padStart(2, "0")}-${String(praha.getDate()).padStart(2, "0")}`;
+const minuty = praha.getHours() * 60 + praha.getMinutes();
+const OKNO_OD = 9 * 60, OKNO_DO = 11 * 60 + 50, POZDE_DO = 19 * 60;
+const buhloDnes = existsSync(STAMP) && readFileSync(STAMP, "utf8").trim().startsWith(dnes);
 if (FORCE !== "1") {
-  const h = praha.getHours();
-  if (h < 9 || h > 19) { console.log(`Pražský čas ${h}h mimo okno 9–19 — končím.`); process.exit(0); }
-  if (existsSync(STAMP) && readFileSync(STAMP, "utf8").trim() === dnes) { console.log(`Dnes (${dnes}) už náhled proběhl — končím.`); process.exit(0); }
-  console.log(`Pražský čas ${h}h, dnes ještě neproběhlo → jedeme.`);
+  if (minuty < OKNO_OD) { console.log(`Pražský čas ${praha.toTimeString().slice(0, 5)} — před oknem, končím.`); process.exit(0); }
+  if (minuty > POZDE_DO) { console.log(`Pražský čas ${praha.toTimeString().slice(0, 5)} — po okně, končím.`); process.exit(0); }
+  if (minuty > OKNO_DO && buhloDnes) { console.log("Po 11:50 a dnes už snímek vznikl — končím."); process.exit(0); }
+  console.log(`Pražský čas ${praha.toTimeString().slice(0, 5)} → ${minuty <= OKNO_DO ? "obnovuji snímek" : "záchranný běh"}.`);
 }
 
 // ── Config z živého bundlu ──
@@ -139,4 +145,7 @@ writeFileSync("public/nahled/index.html", `<!DOCTYPE html>
 </body></html>
 `);
 console.log("OG stránka uložena: public/nahled/index.html |", W + "×" + H);
-writeFileSync(STAMP, dnes + "\n");
+// ── Příznaky pro workflow: commitovat jen při skutečné změně, e-mail jen poprvé ──
+writeFileSync(STAMP, `${dnes} ${praha.toTimeString().slice(0, 5)}\n`);
+writeFileSync("send_mail.txt", buhloDnes ? "0" : "1");
+console.log(buhloDnes ? "Snímek obnoven (e-mail dnes už šel)." : "První dnešní snímek — e-mail se odešle.");

@@ -462,3 +462,31 @@ Přidán typ `business_trip` — „✈️ Služební cesta" (barva #3c90a8). Ch
 - Do Google Kalendáře se propíše automaticky (`buildWeekEvents` čte z `ABS`).
 - V přehledu Dovolená se nezobrazuje (ten záměrně sleduje jen dovolenou).
 - Nemá půldenní variantu — je celodenní.
+
+---
+
+## Aktualizace v24 — páteční náhled nebyl ve 12:00 aktuální
+
+**Diagnóza z reálných dat** (commity nahled-bota):
+- 11. 9. → commit 10:02 UTC = **12:02 pražského času**
+- 18. 9. → commit 10:29 UTC = **12:29 pražského času**
+
+Workflow přitom počítalo s tím, že projde první pokus v 9:07. Skutečnost: **GitHub
+cron se zpožďoval o 50–80 minut** a proběhl až jeden z pozdních pokusů — tedy až PO
+dvanácté. Na stránce /nahled/ tak ve 12:00 visel ještě snímek z minulého týdne.
+Nebyla to chyba appky ani skriptu, ale křehké spoléhání na přesnost plánovače.
+
+**Oprava — model odolný vůči zpoždění:**
+- cron nově `*/15 6-10 * * 5` (pokus každých 15 min, pokrývá letní i zimní čas);
+  o tom, kdy se pracuje, rozhoduje skript podle pražského času.
+- **9:00–11:50 = průběžná obnova**: každý běh přepíše snímek čerstvějším, takže ve
+  12:00 je k dispozici nejaktuálnější verze bez ohledu na to, které pokusy vypadly.
+- **po 11:50 = záchranný běh** jen tehdy, když dnes ještě nic nevzniklo.
+- **Commit jen při skutečné změně** snímku (`git diff --quiet` na rozvrh.png) →
+  žádné zbytečné commity ani Netlify buildy při nezměněném rozvrhu.
+- **E-mail jen jednou denně** (příznak `send_mail.txt`) — obnovy už mail neposílají.
+- `concurrency: nahled` + `git pull --rebase` před pushem → dva souběžné běhy si
+  navzájem neshodí push (dřív by push selhal a snímek by se nezveřejnil).
+
+Vedlejší efekt: snímek je i čerstvější než dřív — poslední obnova je z ~11:50, takže
+zachytí i ranní změny rozvrhu, které se do 9:07 verze nedostaly.
