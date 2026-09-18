@@ -45,7 +45,7 @@ function rotIsSwapped(weekKey, anchor) {
   const weeks = Math.round((w - a) / (7 * 24 * 3600 * 1000));
   return ((weeks % 2) + 2) % 2 === 1;
 }
-function applyRotations(entries, weekKey, rotations, absences) {
+function applyRotations(entries, weekKey, rotations, absences, intake, intakeAllow) {
   if (!weekKey || !Array.isArray(rotations) || !rotations.length) return entries;
   rotations.forEach(rot => {
     const { day, aId, bId, shiftA, shiftB } = rot;
@@ -58,13 +58,20 @@ function applyRotations(entries, weekKey, rotations, absences) {
     if ((absences || {})[`${aId}__${day}`] || (absences || {})[`${bId}__${day}`]) return;
     const swapped = rotIsSwapped(weekKey, rot.anchor);
     const targetA = swapped ? shiftB : shiftA, targetB = swapped ? shiftA : shiftB;
-    const ho = rot.ho !== false;
+    // V den Nástupů se čas prohodí jako obvykle, ale BEZ home office (pokud nemá výjimku).
+    // Jinak by rotace sama vyrobila porušení pravidla Nástupů, admin by ho „opravil",
+    // tím by z rotovaných míst udělal ruční úpravu a rotace by se v tom týdnu vypnula.
+    const jeNastup = !!(intake || {})[day];
+    const vyjimka = id => ((intakeAllow || {})[day] || []).includes(id);
+    const hoZaklad = rot.ho !== false;
+    const hoA = hoZaklad && (!jeNastup || vyjimka(aId));
+    const hoB = hoZaklad && (!jeNastup || vyjimka(bId));
     entries[day][A.sh] = entries[day][A.sh].filter(e => e.empId !== aId);
     entries[day][B.sh] = entries[day][B.sh].filter(e => e.empId !== bId);
     if (!entries[day][targetA]) entries[day][targetA] = [];
     if (!entries[day][targetB]) entries[day][targetB] = [];
-    entries[day][targetA].push({ empId: aId, ho, isDefault: true, rot: true });
-    entries[day][targetB].push({ empId: bId, ho, isDefault: true, rot: true });
+    entries[day][targetA].push({ empId: aId, ho: hoA, isDefault: true, rot: true });
+    entries[day][targetB].push({ empId: bId, ho: hoB, isDefault: true, rot: true });
   });
   return entries;
 }
@@ -72,7 +79,7 @@ function applyRotations(entries, weekKey, rotations, absences) {
 /* Doplní do uloženého týdne členy, kteří v něm ještě nefigurují (typicky nový kolega,
    který přišel až po materializaci týdne) — podle jejich stálého rozvrhu.
    JEDINÝ zdroj pravdy pro mřížku, engine, návrhy i statistiky, aby se nerozcházely. */
-function withDefaults(entries, absences, emps, weekKey, rotations) {
+function withDefaults(entries, absences, emps, weekKey, rotations, intake, intakeAllow) {
   const merged = entries ? dc(entries) : buildDef(emps);
   DAYS.forEach(day => { if (!merged[day]) merged[day] = {}; SHIFTS.forEach(sh => { if (!merged[day][sh]) merged[day][sh] = []; }); });
   // Minulé týdny jsou historie — ty se aktuálním stálým rozvrhem nepřepisují (jinak by se
@@ -98,7 +105,7 @@ function withDefaults(entries, absences, emps, weekKey, rotations) {
       merged[day][shift].push({ empId: emp.id, ho: emp.defaultSchedule[`${day}_ho`] || false, isDefault: true });
     });
   });
-  return applyRotations(merged, weekKey, rotations, absences);
+  return applyRotations(merged, weekKey, rotations, absences, intake, intakeAllow);
 }
 
 /* ═══ PŘEDVYPLNĚNÝ ROZVRH dle preferencí členů (upravitelný v editoru Default) ═══
@@ -420,8 +427,8 @@ async function clearShiftFlowEvents(timeMin, timeMax, userId) {
   return deleted;
 }
 
-function syncWeekToGCal(userId, weekDates, schedule, employees, absences, weekKey, rotations) {
-  return gcalSerial(() => _syncWeekCore(userId, weekDates, withDefaults(schedule, absences, employees, weekKey || (weekDates && weekDates[0]), rotations), employees, absences));
+function syncWeekToGCal(userId, weekDates, schedule, employees, absences, weekKey, rotations, intake, intakeAllow) {
+  return gcalSerial(() => _syncWeekCore(userId, weekDates, withDefaults(schedule, absences, employees, weekKey || (weekDates && weekDates[0]), rotations, intake, intakeAllow), employees, absences));
 }
 async function _syncWeekCore(userId, weekDates, schedule, employees, absences) {
   const emp = employees.find(e => e.id === userId);
@@ -464,7 +471,7 @@ async function _syncRangeCore(userId, employees, db, weeksAhead = 52, onProgress
     } catch { }
     // Efektivní rozvrh = přesně to, co vidí appka (stálý rozvrh + rotace + nový kolega)
     const absences = weekData?.absences || {};
-    const schedule = withDefaults(weekData?.entries || null, absences, employees, monISO, rotations);
+    const schedule = withDefaults(weekData?.entries || null, absences, employees, monISO, rotations, weekData?.intake, weekData?.intakeAllow);
     const events = buildWeekEvents(userId, weekDates, schedule, employees, absences);
     for (const evt of events) {
       await gcalRequest("POST", "/calendars/primary/events", evt);
@@ -887,7 +894,7 @@ export default function App() {
   // půldenní absence se nejdřív zeptá, která polovina směny
   const withHalf = (type, run) => String(type).startsWith("half_") ? setHalfSel({ type, run }) : run(null);
   // Merge saved schedule with default schedule for any new employees not yet in saved data
-  const cs = useMemo(() => withDefaults(schedule, absences, employees, wk, rules.rotations), [schedule, employees, absences, wk, rules.rotations]);
+  const cs = useMemo(() => withDefaults(schedule, absences, employees, wk, rules.rotations, intake, intakeAllow), [schedule, employees, absences, wk, rules.rotations, intake, intakeAllow]);
   const wd = useMemo(() => getWeekDates(wo), [wo]);
   const wh = wd.map(d => HMAP[d] || null);
   // Analýza pravidel nového modelu (jen pracovní dny bez svátku)
@@ -909,7 +916,7 @@ export default function App() {
     Object.keys(allSchedules).filter(k => k >= curMon).sort().slice(0, 60).forEach(wkKey => {
       const data = allSchedules[wkKey] || {};
       const abs = data.absences || {};
-      const entries = withDefaults(data.entries, abs, employees, wkKey, rules.rotations); // doplní nové kolegy + rotace dvojic
+      const entries = withDefaults(data.entries, abs, employees, wkKey, rules.rotations, intk, intkA); // doplní nové kolegy + rotace dvojic
       const intk = data.intake || {}, intkA = data.intakeAllow || {};
       const monday = new Date(wkKey + "T00:00:00");
       const res = analyzeWeek(entries, abs, employees, rules, intk, intkA);
@@ -933,7 +940,7 @@ export default function App() {
         const snap = await t.get(ref);
         const data = snap.exists() ? snap.data() : {};
         const abs = data.absences || {};
-        const entries = withDefaults(data.entries, abs, employees, weekKey, rules.rotations);
+        const entries = withDefaults(data.entries, abs, employees, weekKey, rules.rotations, intk, intkA);
         const intk = data.intake || {}, intkA = data.intakeAllow || {};
         const before = analyzeWeek(entries, abs, employees, rules, intk, intkA);
         const pBefore = before.problems.find(p => p.key === problemKey);
@@ -972,7 +979,7 @@ export default function App() {
     const active = employees.filter(e => e.role !== "admin");
     active.forEach(e => tally[e.id] = { eight: 0, ten: 0, ho: 0, deficit: 0, weeks: 0 });
     Object.entries(allSchedules).forEach(([wkKeyStr, data]) => {
-      const entries = withDefaults(data.entries, data.absences, employees, wkKeyStr, rules.rotations);
+      const entries = withDefaults(data.entries, data.absences, employees, wkKeyStr, rules.rotations, data.intake, data.intakeAllow);
       const monday = new Date(wkKeyStr + "T00:00:00");
       const seen = new Set();
       DAYS.forEach((day, i) => {
@@ -1041,7 +1048,7 @@ export default function App() {
         if (!getGcalToken()) return;
         const weekDates = weekDatesFromMonday(weekId);
         setTimeout(() => {
-          syncWeekToGCal(profile.id, weekDates, data.entries || null, empRef.current, data.absences || {}, weekDates[0], rulesRef.current?.rotations).catch(() => { });
+          syncWeekToGCal(profile.id, weekDates, data.entries || null, empRef.current, data.absences || {}, weekDates[0], rulesRef.current?.rotations, data.intake, data.intakeAllow).catch(() => { });
         }, 2000);
       });
     });
@@ -1074,8 +1081,8 @@ export default function App() {
       const snap = await t.get(ref);
       const data = snap.exists() ? snap.data() : {};
       const absences = data.absences ? { ...data.absences } : {};
-      const entries = withDefaults(data.entries, absences, employees, weekKey, rules.rotations);
-      const res = mutate({ entries, absences }) || {};
+      const entries = withDefaults(data.entries, absences, employees, weekKey, rules.rotations, data.intake, data.intakeAllow);
+      const res = mutate({ entries, absences, intake: data.intake || {}, intakeAllow: data.intakeAllow || {} }) || {};
       const payload = { entries: res.entries || entries, weekStart: weekKey, modifiedAt: new Date().toISOString(), modifiedBy: profile?.id };
       const fields = ["entries", "weekStart", "modifiedAt", "modifiedBy"];
       if (res.absences) { payload.absences = res.absences; fields.push("absences"); }
@@ -1090,7 +1097,7 @@ export default function App() {
     if (opt.entries) setSchedule(opt.entries);
     if (opt.absences) setAbsences(opt.absences);
     txSchedule(mutate)
-      .then(() => { if (msg) notify(msg); if (profile?.gcalEnabled && getGcalToken()) setTimeout(() => syncWeekToGCal(profile.id, wd, opt.entries || cs, employees, opt.absences || absences, wk, rules.rotations).catch(() => {}), 1500); })
+      .then(() => { if (msg) notify(msg); if (profile?.gcalEnabled && getGcalToken()) setTimeout(() => syncWeekToGCal(profile.id, wd, opt.entries || cs, employees, opt.absences || absences, wk, rules.rotations, intake, intakeAllow).catch(() => {}), 1500); })
       .catch(err => { console.error("editSchedule:", err); notify("Změna se neuložila — zkuste to znovu"); });
   };
   const eN = (emp, msg) => { if (emp?.notify) callGAS("sendEmail", { to: emp.notifyEmail || emp.email, employeeName: emp.name, changeDescription: msg, weekLabel: fmtW(cw) }); };
@@ -1156,7 +1163,7 @@ export default function App() {
       const al = ABS.find(a => a.id === type)?.label;
       notify(`${emp?.name}: ${al}`); log(`${emp?.name}: ${al} ${day}`);
       if (profile?.gcalEnabled && getGcalToken() && eid === profile.id) {
-        setTimeout(() => syncWeekToGCal(profile.id, wd, cs, employees, { ...absences, [absKey]: type }, wk, rules.rotations).catch(() => {}), 1500);
+        setTimeout(() => syncWeekToGCal(profile.id, wd, cs, employees, { ...absences, [absKey]: type }, wk, rules.rotations, intake, intakeAllow).catch(() => {}), 1500);
       }
     } catch (err) { console.error("addAbs:", err); notify("Chyba: " + err.message); }
   };
@@ -1226,7 +1233,7 @@ export default function App() {
       }
       notify("Nepřítomnost odebrána, směna obnovena");
       if (profile?.gcalEnabled && getGcalToken() && eid === profile.id) {
-        setTimeout(() => syncWeekToGCal(profile.id, wd, cs, employees, absences, wk, rules.rotations).catch(() => {}), 1500);
+        setTimeout(() => syncWeekToGCal(profile.id, wd, cs, employees, absences, wk, rules.rotations, intake, intakeAllow).catch(() => {}), 1500);
       }
     } catch (err) { console.error("removeAbs:", err); notify("Chyba"); }
   };
@@ -1275,11 +1282,11 @@ export default function App() {
         if (snap.exists()) {
           const d = snap.data();
           weekAbs = d.absences || {};
-          weekSched = withDefaults(d.entries, weekAbs, employees, sw.week, rules.rotations);
+          weekSched = withDefaults(d.entries, weekAbs, employees, sw.week, rules.rotations, d.intake, d.intakeAllow);
           console.log("[SWAP] Loaded existing doc, has entries:", !!d.entries);
         } else {
           weekAbs = {};
-          weekSched = withDefaults(null, weekAbs, employees, sw.week, rules.rotations);
+          weekSched = withDefaults(null, weekAbs, employees, sw.week, rules.rotations, {}, {});
           console.log("[SWAP] Doc doesnt exist, using buildDef");
         }
       }
@@ -1355,7 +1362,7 @@ export default function App() {
       const snap = await getDoc(doc(db, "schedules", p.week));
       const d = snap.exists() ? snap.data() : {};
       weekAbs = d.absences || {};
-      entries = withDefaults(d.entries, weekAbs, employees, p.week, rules.rotations);
+      entries = withDefaults(d.entries, weekAbs, employees, p.week, rules.rotations, d.intake, d.intakeAllow);
     }
     applyAlt(entries, p.alt);
     await setDoc(doc(db, "schedules", p.week), { entries, weekStart: p.week, modifiedAt: new Date().toISOString(), modifiedBy: profile?.id }, { mergeFields: ["entries", "weekStart", "modifiedAt", "modifiedBy"] });
@@ -1445,8 +1452,8 @@ export default function App() {
   };
 
   // Aplikace stálého rozvrhu na týden — přepíše entries, ale zachová absence (vyřadí nepřítomné)
-  const applyDefaultToWeek = (weekKey = wk) => txSchedule(({ absences }) => {
-    const def = applyRotations(buildDef(employees), weekKey, rules.rotations, absences);
+  const applyDefaultToWeek = (weekKey = wk) => txSchedule(({ absences, intake: intk, intakeAllow: intkA }) => {
+    const def = applyRotations(buildDef(employees), weekKey, rules.rotations, absences, intk, intkA);
     Object.keys(absences || {}).forEach(k => { const parts = k.split("__"); const day = parts[parts.length - 1]; const eid = parts.slice(0, -1).join("__"); SHIFTS.forEach(sh => { if (def[day]?.[sh]) def[day][sh] = def[day][sh].filter(e => e.empId !== eid); }); });
     return { entries: def };
   }, weekKey);
@@ -1962,7 +1969,7 @@ export default function App() {
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                     <Btn warm onClick={async () => {
                       notify("Synchronizuji aktuální týden...");
-                      const res = await syncWeekToGCal(profile.id, wd, cs, employees, absences, wk, rules.rotations);
+                      const res = await syncWeekToGCal(profile.id, wd, cs, employees, absences, wk, rules.rotations, intake, intakeAllow);
                       notify(res.msg);
                     }}>Sync týden</Btn>
                     <Btn warm onClick={async () => {
@@ -2001,8 +2008,15 @@ export default function App() {
                       <span style={{ fontSize: 13, color: "var(--w)", flex: 1 }}>{nameOf(rot.aId)} ⇄ {nameOf(rot.bId)} · {rot.shiftA} / {rot.shiftB}{rot.ho !== false ? " · HO" : ""}</span>
                       <Btn small danger onClick={() => setRules(r => ({ ...r, rotations: (r.rotations || []).filter((_, j) => j !== i) }))}>Odebrat</Btn>
                     </div>
-                    <div style={{ fontSize: 11.5, color: "var(--tx3)", fontFamily: "'IBM Plex Mono',monospace" }}>
-                      tento týden: {nameOf(rot.aId)} {swapped ? rot.shiftB : rot.shiftA} · {nameOf(rot.bId)} {swapped ? rot.shiftA : rot.shiftB}
+                    <div style={{ fontSize: 11.5, color: "var(--tx3)", fontFamily: "'IBM Plex Mono',monospace", lineHeight: 1.6 }}>
+                      {[0, 1, 2, 3].map(k => {
+                        const d = new Date(wk + "T00:00:00"); d.setDate(d.getDate() + k * 7);
+                        const key = localISO(getMon(d)); const sw = rotIsSwapped(key, rot.anchor);
+                        return <div key={k} style={{ color: k === 0 ? "var(--tx2)" : "var(--tx3)" }}>
+                          {k === 0 ? "tento týden" : fmtDate(localISO(d))}: {nameOf(rot.aId)} {sw ? rot.shiftB : rot.shiftA} · {nameOf(rot.bId)} {sw ? rot.shiftA : rot.shiftB}
+                        </div>;
+                      })}
+                      <div style={{ color: "var(--tx3)", marginTop: 3 }}>V den Nástupů se časy prohodí, ale bez HO.</div>
                     </div>
                   </div>;
                 })}
@@ -2108,7 +2122,7 @@ export default function App() {
 
     {/* ═══ POROVNÁNÍ SE STÁLÝM — dva rozvrhy vedle sebe, změny pulzují ═══ */}
     {showCompare && (() => {
-      const defAll = applyRotations(buildDef(employees), wk, rules.rotations, {});
+      const defAll = applyRotations(buildDef(employees), wk, rules.rotations, {}, intake, intakeAllow);
       const daysToShow = schedView === "day" ? [DAYS[selDay]] : DAYS;
       const buildDay = day => {
         const side = src => { const m = {}; SHIFTS.forEach(sh => m[sh] = (src[day]?.[sh] || []).filter(en => ge(en.empId)).map(en => ({ empId: en.empId, ho: !!en.ho }))); return m; };

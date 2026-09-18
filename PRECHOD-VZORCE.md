@@ -490,3 +490,33 @@ Nebyla to chyba appky ani skriptu, ale křehké spoléhání na přesnost pláno
 
 Vedlejší efekt: snímek je i čerstvější než dřív — poslední obnova je z ~11:50, takže
 zachytí i ranní změny rozvrhu, které se do 9:07 verze nedostaly.
+
+---
+
+## Aktualizace v25 — audit rotací: kolize s Nástupy
+
+**Co audit ukázal.** Samotná rotace je v pořádku — střídání po týdnech, parita od
+kotvícího data, materializace i znovunačtení týdne dávají konzistentní výsledek
+(ověřeno testy A–F). Problém vzniká teprve v kombinaci s Nástupy.
+
+**Příčina.** Rotace je HO rotace: v Nástupový den postavila oba členy dvojice na home
+office. Engine to (správně) označil za porušení pravidla Nástupů, admin klikl „Provést
+úpravu" → `dropHO` u obou → z rotovaných míst se staly ruční úpravy (`isDefault:false`)
+→ **rotace se pro ten týden natrvalo vypnula** a den pak nevypadal ani jako rotace,
+ani jako stálý rozvrh. Přesně to se projevilo v /nahled/ (snímek příštího týdne, kde
+byly Nástupy) i jako „špatný sled" v živém rozvrhu.
+
+**Oprava.** `applyRotations` je nově vědomá Nástupů: v takový den **prohodí časy jako
+obvykle, ale bez HO** (oba do kanceláře) — pokud nemá dotyčný udělenou výjimku, ta se
+respektuje. Důsledky: rotace nevyrábí porušení, admin nemusí nic „opravovat",
+umístění zůstávají `isDefault`, takže rotace zůstává aktivní a sled pokračuje.
+`intake`/`intakeAllow` se proto předávají do `withDefaults` a dál do všech konzumentů
+(mřížka, engine, návrhy, statistiky, porovnání, GCal sync, materializace týdne).
+
+**UI.** Karta rotace v Nastavení nově ukazuje **rozpis na 4 týdny dopředu**, takže je
+pořadí vidět na první pohled a dá se ověřit, jestli parita sedí (kdyby byla obráceně,
+stačí rotaci odebrat a přidat s prohozenými směnami). Doplněna poznámka o chování
+v den Nástupů.
+
+Ověřeno: v Nástupovém týdnu 0 porušení, `isDefault` zachováno, sled 6 týdnů vychází
+rovnoměrně (3× / 3× na obou časech).
