@@ -1,16 +1,20 @@
 name: Patecni nahled rozvrhu
 on:
   schedule:
-    # GitHub cron v celou hodinu casto vypadava (spicka) → 4 pokusy v :07.
-    # Skript pusti prvni pokus od 12:00 prazskeho casu, dalsi uz se samy odstavi.
-    - cron: "7 7 * * 5"    # 09:07 CEST / 08:07 CET
-    - cron: "7 8 * * 5"    # 10:07 CEST / 09:07 CET
-    - cron: "7 9 * * 5"    # zaloha pri zpozdeni
-    - cron: "7 10 * * 5"   # posledni zaloha
+    # GitHub cron se bezne zpozduje o desitky minut (namereno 50-80 min na 11. a 18. 9.),
+    # proto pokus kazdych 15 minut. Kdy se opravdu pracuje, rozhoduje skript:
+    #   9:00-11:50 prazskeho casu = prubezna obnova (commit jen pri zmene snimku)
+    #   po 11:50 = zachranny beh, jen kdyz dnes jeste nic nevzniklo
+    # Rozsah 6-10 UTC pokryva letni (8:00-12:45) i zimni cas (7:00-11:45).
+    - cron: "*/15 6-10 * * 5"
   workflow_dispatch: {}     # ruční test kdykoliv
 
 permissions:
   contents: write
+
+concurrency:            # dva soubezne bezy by si pretahovaly push
+  group: nahled
+  cancel-in-progress: false
 
 jobs:
   nahled:
@@ -31,18 +35,25 @@ jobs:
       - name: Commit screenshotu (stálá adresa /nahled/rozvrh.png)
         id: commit
         run: |
-          if [ ! -f public/nahled/rozvrh.png ]; then echo "made=0" >> $GITHUB_OUTPUT; exit 0; fi
+          if [ ! -f send_mail.txt ]; then echo "Skript nepracoval (mimo okno) — konec."; echo "made=0" >> $GITHUB_OUTPUT; exit 0; fi
+          # Commit jen kdyz se snimek opravdu zmenil (index.html se meni vzdy kvuli razitku)
+          if git diff --quiet -- public/nahled/rozvrh.png; then
+            echo "Rozvrh beze zmeny — necommituji."
+            echo "made=0" >> $GITHUB_OUTPUT; exit 0
+          fi
           git config user.name "nahled-bot"
           git config user.email "actions@github.com"
           git add public/nahled
           git commit -m "nahled: rozvrh na tyden od $(date -d 'next monday' +%d.%m.%Y)" || { echo "made=0" >> $GITHUB_OUTPUT; exit 0; }
+          git pull --rebase origin ${{ github.ref_name }} || true
           git push
           echo "made=1" >> $GITHUB_OUTPUT
+          echo "mail=$(cat send_mail.txt)" >> $GITHUB_OUTPUT
       - name: Počkat na Netlify deploy
         if: steps.commit.outputs.made == '1'
         run: sleep 120
       - name: E-mail s odkazem přes GAS relay
-        if: steps.commit.outputs.made == '1'
+        if: steps.commit.outputs.made == '1' && steps.commit.outputs.mail == '1'
         env:
           NAHLED_EMAIL: ${{ secrets.NAHLED_EMAIL }}
         run: |
