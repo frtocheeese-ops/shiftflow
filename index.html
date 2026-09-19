@@ -14,6 +14,20 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // Sebeoprava: instalovaná PWA si občas drží starou index.html, která odkazuje na
+      // asset s hashem, jenž po nasazení už neexistuje → prázdná obrazovka. Když se
+      // hlavní skript nenačte, jednou se přenačteme s cache-bustem.
+      window.addEventListener("error", function (e) {
+        var t = e.target;
+        if (t && t.tagName === "SCRIPT" && t.src && t.src.indexOf("/assets/") > -1) {
+          if (!sessionStorage.getItem("sf_recover")) {
+            sessionStorage.setItem("sf_recover", "1");
+            location.replace(location.pathname + "?v=" + Date.now());
+          }
+        }
+      }, true);
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
