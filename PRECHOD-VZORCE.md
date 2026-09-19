@@ -520,3 +520,28 @@ v den Nástupů.
 
 Ověřeno: v Nástupovém týdnu 0 porušení, `isDefault` zachováno, sled 6 týdnů vychází
 rovnoměrně (3× / 3× na obou časech).
+
+---
+
+## Aktualizace v26 — instalovaná PWA se po nasazení nenačetla
+
+**Příznak.** Po mergi se web v prohlížeči načte normálně, ale aplikace spuštěná z ikony
+na ploše ne.
+
+**Zjištění.** V repu nikdy nebyl žádný cachovací service worker (jen
+`firebase-messaging-sw.js` pro notifikace), takže nešlo o zaseknutý SW. Zbývající
+mechanismus: instalovaná PWA si drží **starou `index.html`**, která odkazuje na
+`/assets/index-<hash>.js`. Po nasazení má bundle nový hash, starý soubor už
+neexistuje → skript 404 → prázdná obrazovka. Prohlížeč si HTML vyžádá znovu, a proto
+tam problém není. `index.html` přitom neměla v `netlify.toml` žádné explicitní
+cache hlavičky (řídila se výchozím chováním).
+
+**Pojistky.**
+1. `netlify.toml`: `/` i `/index.html` nově `Cache-Control: public, max-age=0,
+   must-revalidate` — HTML se tak vždy ověří proti serveru (hashované assety zůstávají
+   `immutable`, ty se cachovat mají).
+2. `index.html`: drobný inline skript hlídá selhání načtení hlavního bundlu a jednou
+   provede přenačtení s cache-bustem (`?v=…`, pojistka proti smyčce přes
+   `sessionStorage`). `main.jsx` po úspěšném startu příznak maže.
+
+Tím se stejná situace v budoucnu opraví sama, bez nutnosti přeinstalovat appku.
