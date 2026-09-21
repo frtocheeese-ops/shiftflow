@@ -545,3 +545,29 @@ cache hlavičky (řídila se výchozím chováním).
    `sessionStorage`). `main.jsx` po úspěšném startu příznak maže.
 
 Tím se stejná situace v budoucnu opraví sama, bez nutnosti přeinstalovat appku.
+
+---
+
+## Aktualizace v27 — HOTFIX: modrá prázdná obrazovka (TDZ)
+
+**Příznak.** Po nasazení v26 zůstávala stránka na modré prázdné obrazovce. Konzole:
+`ReferenceError: Cannot access 'N' before initialization` uvnitř `useMemo`.
+
+**Příčina (moje chyba z v25).** Při předávání `intake` do `withDefaults` jsem na dvou
+místech použil `intk`/`intkA` o řádek DŘÍV, než byly deklarované (`const` je do
+deklarace v „temporal dead zone"):
+- `yearProblems` (useMemo) → běží při každém vykreslení → **pád celé aplikace**,
+- `applyProblemFix` (transakce) → pád až po kliknutí na „Provést úpravu".
+Build to neodhalí — syntakticky je kód v pořádku, chyba vzniká až za běhu.
+Testy engine logiky běžely nad vyříznutými funkcemi, ne nad komponentou, proto
+to také nezachytily.
+
+**Oprava.** Prohozeno pořadí deklarací na obou místech.
+
+**Prevence.** Celý `App.jsx` prověřen ESLintem pravidlem `no-use-before-define`.
+Zbylých 9 nálezů je uvnitř handlerů/async funkcí volaných až po inicializaci
+komponenty (bezpečné). Do ověřovací rutiny před každým pushem přidávám tento lint
+jako povinný krok vedle `vite build`:
+  npx eslint --no-eslintrc --parser-options=ecmaVersion:2022,sourceType:module,ecmaFeatures:{jsx:true}
+    --rule 'no-use-before-define:[error,{functions:false,variables:true}]' src/App.jsx
+a nálezy mimo handlery (useMemo, tělo komponenty, top-level) = blokující chyba.

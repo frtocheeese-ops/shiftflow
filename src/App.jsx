@@ -916,8 +916,8 @@ export default function App() {
     Object.keys(allSchedules).filter(k => k >= curMon).sort().slice(0, 60).forEach(wkKey => {
       const data = allSchedules[wkKey] || {};
       const abs = data.absences || {};
-      const entries = withDefaults(data.entries, abs, employees, wkKey, rules.rotations, intk, intkA); // doplní nové kolegy + rotace dvojic
       const intk = data.intake || {}, intkA = data.intakeAllow || {};
+      const entries = withDefaults(data.entries, abs, employees, wkKey, rules.rotations, intk, intkA); // doplní nové kolegy + rotace dvojic
       const monday = new Date(wkKey + "T00:00:00");
       const res = analyzeWeek(entries, abs, employees, rules, intk, intkA);
       res.problems.forEach(p => {
@@ -940,8 +940,8 @@ export default function App() {
         const snap = await t.get(ref);
         const data = snap.exists() ? snap.data() : {};
         const abs = data.absences || {};
-        const entries = withDefaults(data.entries, abs, employees, weekKey, rules.rotations, intk, intkA);
         const intk = data.intake || {}, intkA = data.intakeAllow || {};
+        const entries = withDefaults(data.entries, abs, employees, weekKey, rules.rotations, intk, intkA);
         const before = analyzeWeek(entries, abs, employees, rules, intk, intkA);
         const pBefore = before.problems.find(p => p.key === problemKey);
         if (!pBefore) { status = "gone"; return; }
