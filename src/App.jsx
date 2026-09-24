@@ -10,7 +10,7 @@ import {
   buildDef, isFullAbs, rotIsSwapped, applyRotations, withDefaults, PRESET,
   RENAME, PERSONAL, personalOf, RULE_DEFAULTS, dayStats, analyzeWeek,
   applyAlt, altLabel, fsKey,
-  computeFairness,
+  computeFairness, fmtDate,
 } from "./schedule";
 import StatsView from "./views/StatsView";
 import LogView from "./views/LogView";
@@ -22,7 +22,6 @@ import { Badge, Btn, Input, Sel, Toggle, Modal, Card, RANK_TIERS, rankOf, HALF_L
 const AE = "admin@shiftflow.app"; // admin se přihlašuje svým skutečným heslem (žádné heslo v kódu)
 
 function getWeekDates(wo) { const d = new Date(); d.setDate(d.getDate() + wo * 7); const mon = getMon(d); return DAYS.map((_, i) => { const x = new Date(mon); x.setDate(mon.getDate() + i); return localISO(x); }); }
-function fmtDate(iso) { const p = iso.split('-'); return `${parseInt(p[2])}.${parseInt(p[1])}.`; }
 const todayIdx = (() => { const d = new Date().getDay(); return d >= 1 && d <= 5 ? d - 1 : -1; })();
 const isTd = (i, wo) => wo === 0 && todayIdx >= 0 && i === todayIdx;
 const GAS = import.meta.env.VITE_GAS_URL;
