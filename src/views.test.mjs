@@ -104,4 +104,17 @@ test("DefaultsView: tabulka stálého rozvrhu, HO a prázdný den", async () => 
   assert.doesNotMatch(html, />Admin</);            // admin v tabulce není
 });
 
+test("PeopleView: členové se zbývajícími dny a fixy, bez admina", async () => {
+  const PeopleView = await loadView("PeopleView");
+  const emps = [
+    { id: "a", name: "Jiří Slavíček", role: "employee", vacationTotal: 20, vacationUsed: 5, fixCount: 4 },
+    { id: "b", name: "Andy", role: "employee" },
+    { id: "adm", name: "Admin", role: "admin" },
+  ];
+  const html = await render(PeopleView, { employees: emps, onAdd() {}, onEditDays() {}, onDelete() {}, onAdjustFixes() {} });
+  assert.match(html, /Jiří Slavíček/); assert.match(html, /Andy/); assert.doesNotMatch(html, />Admin</);
+  assert.match(html, />15</);                        // dovolená 20 − 5
+  assert.match(html, /Vyřešené problémy/);
+});
+
 test.after(() => rmSync(OUT, { recursive: true, force: true }));
