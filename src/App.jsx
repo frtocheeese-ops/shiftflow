@@ -15,6 +15,7 @@ import {
 import StatsView from "./views/StatsView";
 import LogView from "./views/LogView";
 import SwapsView from "./views/SwapsView";
+import DefaultsView from "./views/DefaultsView";
 import { Badge, Btn, Input, Sel, Toggle, Modal, Card, RANK_TIERS, rankOf, HALF_LBL, HalfTag, RankBadge } from "./ui";
 
 const AE = "admin@shiftflow.app"; // admin se přihlašuje svým skutečným heslem (žádné heslo v kódu)
@@ -420,30 +421,6 @@ function AuthScreen() {
   </div>;
 }
 
-function DefEditor({ employees }) {
-  const [editEmp, setEditEmp] = useState(null); const [es, setEs] = useState({}); const [saving, setSaving] = useState(false);
-  const start = emp => { setEditEmp(emp); const s = {}; DAYS.forEach(d => { s[d] = emp.defaultSchedule?.[d] || "09:00"; s[`${d}_ho`] = emp.defaultSchedule?.[`${d}_ho`] || false; }); setEs(s); };
-  return <div><div style={{ marginBottom: 28 }}>
-    <div className="gl" style={{ overflow: "auto", padding: 0 }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}><thead><tr>
-        <th style={{ padding: "12px 14px", textAlign: "left", color: "var(--tx3)", borderBottom: "1px solid var(--brd)" }}>Zaměstnanec</th>
-        {DAYS.map(d => <th key={d} style={{ padding: "12px 8px", textAlign: "center", color: "var(--tx3)", borderBottom: "1px solid var(--brd)" }}>{d}</th>)}
-        <th style={{ padding: 12, borderBottom: "1px solid var(--brd)" }} />
-      </tr></thead><tbody>{employees.filter(e => e.role !== "admin").map(emp => <tr key={emp.id} style={{ borderBottom: "1px solid var(--brd)" }}>
-        <td style={{ padding: "12px 14px", fontWeight: 500, color: "var(--w)" }}>{emp.name}</td>
-        {DAYS.map(d => <td key={d} style={{ padding: 8, textAlign: "center" }}>{emp.setupDone && emp.defaultSchedule?.[d] ? <span style={{ fontFamily: "'IBM Plex Mono',monospace", color: emp.defaultSchedule[`${d}_ho`] ? "var(--grn)" : "var(--acc2)", fontSize: 13 }}>{emp.defaultSchedule[`${d}_ho`] ? "HO" : emp.defaultSchedule[d]}</span> : "—"}</td>)}
-        <td style={{ padding: "8px 12px", textAlign: "right" }}><Btn small onClick={() => start(emp)}>✏</Btn></td>
-      </tr>)}</tbody></table>
-    </div>
-  </div>
-    <Modal open={!!editEmp} onClose={() => setEditEmp(null)} title={editEmp?.name || ""}>{editEmp && <div>
-      {DAYS.map(day => <div key={day} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", background: "var(--bg3)", marginBottom: 4 }}>
-        <span style={{ fontWeight: 600, minWidth: 50, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif" }}>{day}</span>
-        <div style={{ display: "flex", gap: 2, flex: 1 }}>{SHIFTS.map(sh => <button key={sh} onClick={() => setEs(s => ({ ...s, [day]: sh }))} style={{ flex: 1, padding: "10px 0", border: `1px solid ${es[day] === sh ? "var(--acc2)" : "var(--brd)"}`, fontFamily: "'IBM Plex Mono',monospace", cursor: "pointer", background: es[day] === sh ? "var(--adim)" : "transparent", color: es[day] === sh ? "var(--w)" : "var(--tx3)", minHeight: 44 }}>{sh}</button>)}<button onClick={() => setEs(s => ({ ...s, [`${day}_ho`]: !s[`${day}_ho`] }))} style={{ padding: "10px 12px", border: `1px solid ${es[`${day}_ho`] ? "var(--grn)" : "var(--brd)"}`, fontFamily: "'IBM Plex Mono',monospace", cursor: "pointer", background: "transparent", color: es[`${day}_ho`] ? "var(--grn)" : "var(--tx3)", minHeight: 44 }}>HO</button></div>
-      </div>)}
-      <div style={{ display: "flex", gap: 8, marginTop: 16 }}><Btn warm disabled={saving} onClick={async () => { setSaving(true); await updateDoc(doc(db, "users", editEmp.id), { defaultSchedule: es, setupDone: true }); setSaving(false); setEditEmp(null); }} style={{ flex: 1 }}>Uložit</Btn><Btn ghost onClick={() => setEditEmp(null)}>Zrušit</Btn></div>
-    </div>}</Modal></div>;
-}
 
 function AbsF({ emps, wd, onSubmit }) { const [eid, setEid] = useState(emps[0]?.id || ""); const [dayIdx, setDayIdx] = useState(0); const [t, setT] = useState(ABS[0].id); return <div><Sel label="Zaměstnanec" value={eid} onChange={e => setEid(e.target.value)} options={emps.map(e => ({ value: e.id, label: e.name }))} /><Sel label="Den" value={dayIdx} onChange={e => setDayIdx(+e.target.value)} options={DAYS.map((d, i) => ({ value: i, label: `${DAYS_F[i]} ${fmtDate(wd[i])}` }))} /><Sel label="Typ" value={t} onChange={e => setT(e.target.value)} options={ABS.map(a => ({ value: a.id, label: `${a.icon} ${a.label}` }))} /><Btn warm onClick={() => onSubmit(eid, DAYS[dayIdx], t)} style={{ width: "100%", marginTop: 8 }}>Přidat</Btn></div>; }
 function EvF({ onSubmit }) { const [day, setDay] = useState(DAYS[0]); const [t, setT] = useState(EVTS[0].id); const [n, setN] = useState(""); return <div><Sel label="Den" value={day} onChange={e => setDay(e.target.value)} options={DAYS.map((d, i) => ({ value: d, label: DAYS_F[i] }))} /><Sel label="Typ" value={t} onChange={e => setT(e.target.value)} options={EVTS.map(e => ({ value: e.id, label: `${e.icon} ${e.label}` }))} /><Input label="Poznámka" value={n} onChange={e => setN(e.target.value)} /><Btn warm onClick={() => onSubmit(day, t, n)} style={{ width: "100%", marginTop: 8 }}>Přidat</Btn></div>; }
@@ -1093,6 +1070,12 @@ export default function App() {
     await createProposal(alt, grant ? "žádost o home office" : "žádost o zrušení home office", { [profile.id]: true });
   };
 
+  // ═══ STÁLÝ ROZVRH: uložení výchozího rozvrhu člena (volá DefaultsView) ═══
+  const saveDefaultSchedule = async (empId, schedule) => {
+    try { await updateDoc(doc(db, "users", empId), { defaultSchedule: schedule, setupDone: true }); notify("Stálý rozvrh uložen"); }
+    catch (err) { notify("Chyba: " + err.message); throw err; }
+  };
+
   // ═══ VÝMĚNY: zrušení vlastní žádosti / smazání adminem ═══
   const cancelSwap = async (sw, dateLabel) => { if (!confirm("Zrušit žádost?")) return; try { await deleteDoc(doc(db, "swapRequests", sw.id)); notify("Zrušeno"); log(`Zrušena žádost: ${dateLabel}`); } catch (err) { notify("Chyba: " + err.message); } };
   const deleteSwap = async sw => { if (!confirm("Smazat žádost?")) return; try { await deleteDoc(doc(db, "swapRequests", sw.id)); notify("Smazáno"); } catch { notify("Chyba"); } };
@@ -1562,13 +1545,7 @@ export default function App() {
             onEditDays={() => setModal({ type: "editDays", emp: profile })} />}
 
           {view === "log" && <LogView logs={logs} />}
-          {view === "defaults" && isA && <div><div style={{ fontSize: 20, fontWeight: 600, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 2, marginBottom: 16, borderBottom: "1px solid var(--brd)", paddingBottom: 12 }}>Stálý rozvrh</div>
-            <Card style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--w)", marginBottom: 6 }}>Předvyplnit dle preferencí členů</div>
-              <p style={{ fontSize: 13, color: "var(--tx2)", marginBottom: 12 }}>Nastaví každému výchozí rozvrh podle jeho preferencí (Jirka 8:00 celý týden, Andy nikdy neotevírá, Patrik HO od 8 + páteční 10, Denis ve středu bez 10:00…). Pak lze libovolně ručně upravit níže.</p>
-              <Btn warm onClick={applyPreset}>Předvyplnit rozvrh</Btn>
-            </Card>
-            <DefEditor employees={employees} /></div>}
+          {view === "defaults" && isA && <DefaultsView employees={employees} onSaveDefault={saveDefaultSchedule} onApplyPreset={applyPreset} />}
           {view === "settings" && <div style={{ maxWidth: 560 }}>
             <div style={{ fontSize: 20, fontWeight: 600, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 2, marginBottom: 20, borderBottom: "1px solid var(--brd)", paddingBottom: 12 }}>Nastavení</div>
             <Card style={{ marginBottom: 16 }}>

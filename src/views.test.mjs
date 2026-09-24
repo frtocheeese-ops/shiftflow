@@ -91,4 +91,17 @@ test("SwapsView: prázdný seznam", async () => {
   assert.match(await render(SwapsView, swapProps({ swaps: [] })), /Žádné žádosti/);
 });
 
+test("DefaultsView: tabulka stálého rozvrhu, HO a prázdný den", async () => {
+  const DefaultsView = await loadView("DefaultsView");
+  const emps = [
+    { id: "a", name: "Jiří Slavíček", role: "employee", setupDone: true, defaultSchedule: { Po: "08:00", "Út": "08:00" } },
+    { id: "b", name: "Andy", role: "employee", setupDone: true, defaultSchedule: { Po: "10:00", Po_ho: true } },
+    { id: "adm", name: "Admin", role: "admin" },
+  ];
+  const html = await render(DefaultsView, { employees: emps, onSaveDefault: async () => {}, onApplyPreset() {} });
+  assert.match(html, /Stálý rozvrh/); assert.match(html, /Předvyplnit rozvrh/);
+  assert.match(html, /Jiří Slavíček/); assert.match(html, />HO</); assert.match(html, />08:00</);
+  assert.doesNotMatch(html, />Admin</);            // admin v tabulce není
+});
+
 test.after(() => rmSync(OUT, { recursive: true, force: true }));
