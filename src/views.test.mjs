@@ -104,4 +104,51 @@ test("DefaultsView: tabulka stálého rozvrhu, HO a prázdný den", async () => 
   assert.doesNotMatch(html, />Admin</);            // admin v tabulce není
 });
 
+test("PeopleView: členové se zbývajícími dny a fixy, bez admina", async () => {
+  const PeopleView = await loadView("PeopleView");
+  const emps = [
+    { id: "a", name: "Jiří Slavíček", role: "employee", vacationTotal: 20, vacationUsed: 5, fixCount: 4 },
+    { id: "b", name: "Andy", role: "employee" },
+    { id: "adm", name: "Admin", role: "admin" },
+  ];
+  const html = await render(PeopleView, { employees: emps, onAdd() {}, onEditDays() {}, onDelete() {}, onAdjustFixes() {} });
+  assert.match(html, /Jiří Slavíček/); assert.match(html, /Andy/); assert.doesNotMatch(html, />Admin</);
+  assert.match(html, />15</);                        // dovolená 20 − 5
+  assert.match(html, /Vyřešené problémy/);
+});
+
+const setEmps = [{ id: "loch", name: "Denis Lochman", role: "employee" }, { id: "andy", name: "Andy", role: "employee" }];
+const setProps = over => ({
+  isA: true, profile: { id: "adm", gcalEnabled: false }, employees: setEmps, wk: "2026-09-14",
+  rules: { officeMin: 4, min8: 2, min10: 2, hoCapDay: 3, rotations: [{ day: "Út", aId: "loch", bId: "andy", shiftA: "08:00", shiftB: "10:00", ho: true, anchor: "2026-09-07" }] },
+  nahledInfo: { week: "21.9.", date: "19.9. 11:45" }, installState: "other", showGyro: false, gyroOn: false, gcalConfigured: true,
+  onOpenModal() {}, onInstall() {}, onGyroChange() {}, onGcalToggle() {}, onGcalSyncWeek() {}, onGcalSyncYear() {},
+  onGcalClear() {}, onGcalDisconnect() {}, onSaveRules: async () => {}, onResetWeek() {}, onExportCSV() {}, ...over,
+});
+
+test("SettingsView: admin vidí pravidla, rotace s rozpisem na 4 týdny a páteční snímek", async () => {
+  const SettingsView = await loadView("SettingsView");
+  const html = await render(SettingsView, setProps({}));
+  assert.match(html, /Pravidla směn/); assert.match(html, /Rotace dvojic/); assert.match(html, /Páteční snímek/);
+  assert.match(html, /Denis Lochman ⇄ Andy/);
+  assert.match(html, /tento týden/); assert.match(html, /21\.9\./);          // další týdny rozpisu
+  assert.match(html, />Uloženo</);                                           // bez úprav = nic k uložení
+  assert.doesNotMatch(html, /Neuložené změny/);
+});
+
+test("SettingsView: člen nevidí pravidla ani reset týdne", async () => {
+  const SettingsView = await loadView("SettingsView");
+  const html = await render(SettingsView, setProps({ isA: false, profile: { id: "loch" } }));
+  assert.match(html, /Účet/); assert.match(html, /Google Calendar/);
+  assert.doesNotMatch(html, /Pravidla směn/); assert.doesNotMatch(html, /Reset týden/); assert.doesNotMatch(html, /Páteční snímek/);
+});
+
+test("SettingsView: stav instalace a nenakonfigurovaný kalendář", async () => {
+  const SettingsView = await loadView("SettingsView");
+  assert.match(await render(SettingsView, setProps({ installState: "standalone" })), /Běžíš v nainstalované aplikaci/);
+  assert.match(await render(SettingsView, setProps({ installState: "installable" })), /Nainstalovat aplikaci/);
+  assert.match(await render(SettingsView, setProps({ installState: "ios" })), /Na iPhonu/);
+  assert.match(await render(SettingsView, setProps({ gcalConfigured: false })), /není nakonfigurována/);
+});
+
 test.after(() => rmSync(OUT, { recursive: true, force: true }));

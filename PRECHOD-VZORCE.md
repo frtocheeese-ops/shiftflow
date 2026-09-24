@@ -681,3 +681,26 @@ Tři další obrazovky podle vzoru ze StatsView, každá jako samostatný ověř
 Žádná z oddělených obrazovek neobsahuje zápis do databáze (ověřeno grepem).
 Testy vykreslení pro všechny role (admin / žadatel / jiný člen) a prázdná data:
 celkem 33 testů. `App.jsx`: 1909 → 1889 řádků.
+
+---
+
+## Aktualizace v32 — rozdělení UI: Tým a Nastavení
+
+- **`PeopleView`** — inline zápisy `fixCount ± 1` vytaženy do `App.jsx` jako `adjustFixCount`.
+- **`SettingsView`** (+ `RotationForm`) — po krocích: (A) `fmtDate` do `schedule.js`,
+  (B) 9 handlerů s vedlejšími efekty (instalace, gyroskop, Google Kalendář ×5, uložení
+  pravidel, reset) vytaženo do pojmenovaných funkcí v `App.jsx` beze změny obsahu,
+  (C) přesun obrazovky. Handler instalace přiřazuje do modulové proměnné
+  `deferredInstall` — z jiného souboru to nejde, proto zůstal v `App.jsx`.
+
+Dvě opravy nalezené během přesunu:
+1. **Pravidla se upravují jako koncept.** Dřív editace (min. počty, rotace) měnila přímo
+   živý stav `rules` → projevila se v adminově rozvrhu ještě před uložením, ostatní je
+   neviděli, a neuložené změny mohla přepsat aktualizace z databáze (listener na
+   `rules/global`). Nyní obrazovka upravuje lokální `draft`, zobrazí „● Neuložené změny"
+   a do aplikace se promítne až po „Uložit pravidla". Bez změn tlačítko ukazuje „Uloženo".
+2. **„Reset týden" bez potvrzení.** Jedním kliknutím smazal celý dokument týdne včetně
+   dovolených, nemocí, Nástupů a poznámek. Nyní vyžaduje potvrzení s výčtem, co se smaže.
+
+Testy vykreslení Nastavení: admin / člen / 4 stavy instalace / nenakonfigurovaný kalendář.
+Celkem 37 testů. `App.jsx`: 1787 ř. Interakce (psaní do polí, tlačítko Uložit) test vykreslení neověří — nutno ověřit ručně po nasazení.

@@ -338,3 +338,6 @@ export function computeFairness(allSchedules, employees, rotations, start = FAIR
   });
   return { rows, warn };
 }
+
+// „2026-09-22" → „22.9."
+export function fmtDate(iso) { const p = iso.split('-'); return `${parseInt(p[2])}.${parseInt(p[1])}.`; }
