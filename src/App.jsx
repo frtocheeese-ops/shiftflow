@@ -35,6 +35,9 @@ const wKey = d => localISO(getMon(d));
 const fmtW = d => { const m = getMon(d), f = new Date(m); f.setDate(f.getDate() + 4); return `${m.getDate()}.${m.getMonth() + 1}. — ${f.getDate()}.${f.getMonth() + 1}.${f.getFullYear()}`; };
 function buildDef(emps) { const s = {}; DAYS.forEach(day => { s[day] = {}; SHIFTS.forEach(sh => s[day][sh] = []); emps.forEach(emp => { if (!emp.defaultSchedule || !emp.setupDone) return; const shift = emp.defaultSchedule[day]; if (shift && SHIFTS.includes(shift)) s[day][shift].push({ empId: emp.id, ho: emp.defaultSchedule[`${day}_ho`] || false, isDefault: true }); }); }); return s; }
 
+// Půlden (half_*) člověka NEVYŘAZUJE ze směny — jen ho označí. Celodenní absence ano.
+const isFullAbs = t => !!t && !String(t).startsWith("half_");
+
 /* ═══ ROTACE DVOJIC ═══
    Dvěma lidem se v daný den každý týden prohodí směna (typicky HO 8:00 ↔ HO 10:00).
    Parita se počítá od kotvícího pondělí, takže je stabilní dopředu i zpětně.
@@ -55,7 +58,7 @@ function applyRotations(entries, weekKey, rotations, absences, intake, intakeAll
     const A = find(aId), B = find(bId);
     if (!A || !B) return;                                   // někdo chybí (absence/volno) → nerotujeme
     if (!A.en.isDefault || !B.en.isDefault) return;          // ruční úprava má přednost
-    if ((absences || {})[`${aId}__${day}`] || (absences || {})[`${bId}__${day}`]) return;
+    if (isFullAbs((absences || {})[`${aId}__${day}`]) || isFullAbs((absences || {})[`${bId}__${day}`])) return; // půlden rotaci nevypíná
     const swapped = rotIsSwapped(weekKey, rot.anchor);
     const targetA = swapped ? shiftB : shiftA, targetB = swapped ? shiftA : shiftB;
     // V den Nástupů se čas prohodí jako obvykle, ale BEZ home office (pokud nemá výjimku).
@@ -70,8 +73,9 @@ function applyRotations(entries, weekKey, rotations, absences, intake, intakeAll
     entries[day][B.sh] = entries[day][B.sh].filter(e => e.empId !== bId);
     if (!entries[day][targetA]) entries[day][targetA] = [];
     if (!entries[day][targetB]) entries[day][targetB] = [];
-    entries[day][targetA].push({ empId: aId, ho: hoA, isDefault: true, rot: true });
-    entries[day][targetB].push({ empId: bId, ho: hoB, isDefault: true, rot: true });
+    const half = en => en.halfAbs ? { halfAbs: en.halfAbs, halfPart: en.halfPart || "first" } : {};
+    entries[day][targetA].push({ empId: aId, ho: hoA, isDefault: true, rot: true, ...half(A.en) });
+    entries[day][targetB].push({ empId: bId, ho: hoB, isDefault: true, rot: true, ...half(B.en) });
   });
   return entries;
 }
@@ -90,8 +94,8 @@ function withDefaults(entries, absences, emps, weekKey, rotations, intake, intak
     const placed = {};
     let anywhere = false;
     DAYS.forEach(day => { for (const sh of SHIFTS) { const en = merged[day][sh].find(e => e.empId === emp.id); if (en) { placed[day] = { sh, en }; anywhere = true; break; } } });
-    const hasAbsence = Object.keys(absences || {}).some(k => k.startsWith(`${emp.id}__`));
-    if (!anywhere && hasAbsence) return;  // v týdnu není a má absenci → řeší absenční logika
+    const hasAbsence = Object.entries(absences || {}).some(([k, t]) => k.startsWith(`${emp.id}__`) && isFullAbs(t));
+    if (!anywhere && hasAbsence) return;  // v týdnu není a má celodenní absenci → řeší absenční logika
 
     DAYS.forEach(day => {
       const cur = placed[day];
@@ -99,10 +103,13 @@ function withDefaults(entries, absences, emps, weekKey, rotations, intake, intak
       if (cur && isPast) return;                               // historii nepřepisujeme
       if (!cur && anywhere) return;                            // ručně odebrán z toho dne → nevracet
       if (cur) merged[day][cur.sh] = merged[day][cur.sh].filter(e => e.empId !== emp.id);
-      if (absences?.[`${emp.id}__${day}`]) return;             // ten den je nepřítomen
+      const absT = absences?.[`${emp.id}__${day}`];
+      if (isFullAbs(absT)) return;                             // celodenní nepřítomnost → ze dne pryč
       const shift = emp.defaultSchedule[day];
       if (!shift || !SHIFTS.includes(shift)) return;           // stálý rozvrh říká volno
-      merged[day][shift].push({ empId: emp.id, ho: emp.defaultSchedule[`${day}_ho`] || false, isDefault: true });
+      const en = { empId: emp.id, ho: emp.defaultSchedule[`${day}_ho`] || false, isDefault: true };
+      if (absT) { en.halfAbs = absT; en.halfPart = cur?.en.halfPart || "first"; } // půlden: zůstává a nese označení
+      merged[day][shift].push(en);
     });
   });
   return applyRotations(merged, weekKey, rotations, absences, intake, intakeAllow);
@@ -842,13 +849,13 @@ function DirectSwapF({ targetEmp, dateLabel, dateISO, targetDay, targetShift, on
 // ═══ RANKY za vyřešené problémy (fixCount) ═══
 const RANK_TIERS = [1, 15, 30, 45, 60, 80, 100, 130, 160, 200];
 const rankOf = n => { let r = 0; for (let i = 0; i < RANK_TIERS.length; i++) if ((n || 0) >= RANK_TIERS[i]) r = i + 1; return r; };
-const HALF_LBL = { first: "1. půle", second: "2. půle" };
+const HALF_LBL = { first: "dopoledne", second: "odpoledne" };
 const HalfTag = ({ en, compact }) => {
   if (!en?.halfAbs) return null;
   const a = ABS.find(x => x.id === en.halfAbs);
   const second = en.halfPart === "second";
-  return <span title={`${a?.label || "Půlden"} — ${second ? "druhá" : "první"} polovina směny`}
-    style={{ flexShrink: 0, fontSize: compact ? 9 : 10, padding: compact ? "0 3px" : "1px 5px", border: `1px solid ${a?.color || "var(--brd2)"}`, color: a?.color || "var(--tx2)", fontFamily: "'IBM Plex Mono',monospace", whiteSpace: "nowrap", lineHeight: 1.6 }}>{a?.icon} {second ? "2.p" : "1.p"}</span>;
+  return <span title={`${a?.label || "Půlden"} — chybí ${second ? "odpoledne (2. polovina směny)" : "dopoledne (1. polovina směny)"}`}
+    style={{ flexShrink: 0, fontSize: compact ? 9 : 10, padding: compact ? "0 3px" : "1px 5px", border: `1px solid ${a?.color || "var(--brd2)"}`, color: a?.color || "var(--tx2)", fontFamily: "'IBM Plex Mono',monospace", whiteSpace: "nowrap", lineHeight: 1.6 }}>{a?.icon} {compact ? (second ? "odp." : "dop.") : `chybí ${HALF_LBL[second ? "second" : "first"]}`}</span>;
 };
 
 const RankBadge = ({ fixes, size = 20 }) => {
@@ -1452,9 +1459,15 @@ export default function App() {
   };
 
   // Aplikace stálého rozvrhu na týden — přepíše entries, ale zachová absence (vyřadí nepřítomné)
-  const applyDefaultToWeek = (weekKey = wk) => txSchedule(({ absences, intake: intk, intakeAllow: intkA }) => {
+  const applyDefaultToWeek = (weekKey = wk) => txSchedule(({ entries: prev, absences, intake: intk, intakeAllow: intkA }) => {
     const def = applyRotations(buildDef(employees), weekKey, rules.rotations, absences, intk, intkA);
-    Object.keys(absences || {}).forEach(k => { const parts = k.split("__"); const day = parts[parts.length - 1]; const eid = parts.slice(0, -1).join("__"); SHIFTS.forEach(sh => { if (def[day]?.[sh]) def[day][sh] = def[day][sh].filter(e => e.empId !== eid); }); });
+    Object.entries(absences || {}).forEach(([k, t]) => {
+      const parts = k.split("__"); const day = parts[parts.length - 1]; const eid = parts.slice(0, -1).join("__");
+      if (isFullAbs(t)) { SHIFTS.forEach(sh => { if (def[day]?.[sh]) def[day][sh] = def[day][sh].filter(e => e.empId !== eid); }); return; }
+      // půlden: zůstává ve směně, jen nese označení (a zachová zvolenou polovinu dne)
+      let part = "first"; SHIFTS.forEach(sh => (prev?.[day]?.[sh] || []).forEach(e => { if (e.empId === eid && e.halfPart) part = e.halfPart; }));
+      SHIFTS.forEach(sh => (def[day]?.[sh] || []).forEach(e => { if (e.empId === eid) { e.halfAbs = t; e.halfPart = part; } }));
+    });
     return { entries: def };
   }, weekKey);
   const applyDefaultCurrentWeek = async () => {
@@ -1675,7 +1688,7 @@ export default function App() {
                 {/* Day absences */}
                 {(() => { const da = getDayAbs(DAYS[selDay]); if (!da.length) return null; return <div style={{ marginTop: 16 }}>
                   <div style={{ fontSize: 12, color: "var(--tx3)", textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 8, fontFamily: "'Barlow Condensed',sans-serif" }}>Nepřítomnost</div>
-                  {da.map(a => { const e = ge(a.empId); const at = ABS.find(t => t.id === a.type); return e && <div key={a.empId} className="gl" style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", marginBottom: 6, minHeight: 48 }}><span>{at?.icon}</span><span style={{ fontWeight: 500, color: "var(--w)", flex: 1 }}>{e.name}</span><Badge small color={at?.color}>{at?.label}</Badge>{(isA || a.empId === profile.id) && <button onClick={() => removeAbs(a.empId, DAYS[selDay])} style={{ background: "none", border: "1px solid var(--red)", color: "var(--red)", width: 28, height: 28, cursor: "pointer", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>✕</button>}</div>; })}
+                  {da.map(a => { const e = ge(a.empId); const at = ABS.find(t => t.id === a.type); return e && <div key={a.empId} className="gl" style={{ display: "flex", alignItems: "center", gap: 8, padding: "10px 14px", marginBottom: 6, minHeight: 48 }}><span>{at?.icon}</span><span style={{ fontWeight: 500, color: "var(--w)", flex: 1 }}>{e.name}</span><Badge small color={at?.color}>{at?.label}{String(a.type).startsWith("half_") ? (() => { let p = "first"; SHIFTS.forEach(sh => (cs[DAYS[selDay]]?.[sh] || []).forEach(x => { if (x.empId === a.empId && x.halfPart) p = x.halfPart; })); return ` · ${HALF_LBL[p]}`; })() : ""}</Badge>{(isA || a.empId === profile.id) && <button onClick={() => removeAbs(a.empId, DAYS[selDay])} style={{ background: "none", border: "1px solid var(--red)", color: "var(--red)", width: 28, height: 28, cursor: "pointer", fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>✕</button>}</div>; })}
                 </div>; })()}
               </div>
             </>}
@@ -2077,15 +2090,15 @@ export default function App() {
     </Modal>
     <Modal open={!!halfSel} onClose={() => setHalfSel(null)} title={halfSel ? `${ABS.find(a => a.id === halfSel.type)?.label} — která polovina?` : ""}>
       {halfSel && <div style={{ display: "grid", gap: 8 }}>
-        <p style={{ fontSize: 13, color: "var(--tx2)", margin: "0 0 4px" }}>V rozvrhu zůstaneš, u směny se objeví poznámka o chybějící polovině.</p>
-        <Btn onClick={() => { const h = halfSel; setHalfSel(null); h.run("first"); }}>🌅 První polovina směny</Btn>
-        <Btn onClick={() => { const h = halfSel; setHalfSel(null); h.run("second"); }}>🌇 Druhá polovina směny</Btn>
+        <p style={{ fontSize: 13, color: "var(--tx2)", margin: "0 0 4px" }}>Člověk v rozvrhu zůstane a zároveň se objeví mezi nepřítomnými — s označením, kterou část dne chybí.</p>
+        <Btn onClick={() => { const h = halfSel; setHalfSel(null); h.run("first"); }}>🌅 Chybí dopoledne <span style={{ opacity: .6, fontSize: 12 }}>(1. polovina směny)</span></Btn>
+        <Btn onClick={() => { const h = halfSel; setHalfSel(null); h.run("second"); }}>🌇 Chybí odpoledne <span style={{ opacity: .6, fontSize: 12 }}>(2. polovina směny)</span></Btn>
       </div>}
     </Modal>
     <Modal open={!!vacSel} onClose={() => setVacSel(null)} title={vacSel ? `${vacSel.name} — ${vacSel.label}` : ""}>
       {vacSel && <>
         {vacSel.type ? <>
-          <p style={{ fontSize: 13, color: "var(--tx2)", marginTop: 0 }}>Zadáno: <b>{ABS.find(a => a.id === vacSel.type)?.label || vacSel.type}</b>{vacSel.part ? ` — ${vacSel.part === "second" ? "2." : "1."} polovina směny` : ""}</p>
+          <p style={{ fontSize: 13, color: "var(--tx2)", marginTop: 0 }}>Zadáno: <b>{ABS.find(a => a.id === vacSel.type)?.label || vacSel.type}</b>{vacSel.part ? ` — chybí ${HALF_LBL[vacSel.part] || "dopoledne"}` : ""}</p>
           <Btn ghost onClick={async () => { const d = new Date(vacSel.iso + "T00:00:00"); await removeAbs(vacSel.empId, DAYS[d.getDay() - 1], wKey(d), vacSel.type); setVacSel(null); }} style={{ width: "100%", color: "var(--red)", borderColor: "var(--red)" }}>Odebrat nepřítomnost</Btn>
         </> : <>
           <p style={{ fontSize: 13, color: "var(--tx2)", marginTop: 0 }}>Vyber typ nepřítomnosti:</p>

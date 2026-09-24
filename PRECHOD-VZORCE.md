@@ -571,3 +571,38 @@ jako povinný krok vedle `vite build`:
   npx eslint --no-eslintrc --parser-options=ecmaVersion:2022,sourceType:module,ecmaFeatures:{jsx:true}
     --rule 'no-use-before-define:[error,{functions:false,variables:true}]' src/App.jsx
 a nálezy mimo handlery (useMemo, tělo komponenty, top-level) = blokující chyba.
+
+---
+
+## Aktualizace v28 — půlden: člověk mizel z rozvrhu a „rozvrh se vrátil o verzi"
+
+**Příznaky.** (1) Po zadání půldne adminem se rozvrh „posunul o verzi zpět".
+(2) Člověk s půldnem se přesunul jen do „Nepřítomen" místo aby zůstal ve směně.
+
+**Společná příčina (moje regrese z v16/v18/v17).** Appka už měla půldenní logiku
+(`halfAbs`/`halfPart`, `HalfTag`, výjimka v `dayStats`) — člověk měl ve směně zůstat
+s označením. Ale `withDefaults` i `applyRotations`, které jsem později přidal, braly
+**jakoukoli** absenci jako celodenní:
+- `withDefaults` při obnově nedotčeného místa člověka se záznamem absence ze dne
+  odstranil → skončil jen v „Nepřítomen" (chyba 2), a při přestavbě záznamu navíc
+  zahodil `halfAbs`/`halfPart`.
+- `applyRotations` se při jakékoli absenci jednoho z dvojice vypnula → druhý člen
+  dvojice skočil ze svého rotovaného místa zpět na **starou** výchozí pozici. To je
+  to „vrácení o verzi" (chyba 1). Ověřeno: Andy skočil z 10:00 na původní 9:00.
+- Stejně se chovalo i hromadné „Aplikovat stálý" (`applyDefaultToWeek`).
+
+**Oprava.**
+- Nová funkce `isFullAbs(t)` — celodenní = cokoli kromě `half_*`.
+- `withDefaults`: ze dne vyřadí jen celodenní absence; u půldne člověka ponechá
+  a doplní/zachová `halfAbs` + zvolenou `halfPart`.
+- `applyRotations`: vypne se jen při celodenní absenci; při půldni rotuje a označení
+  přenese na nové místo.
+- `applyDefaultToWeek`: půlden nevyřazuje, jen označí (se zachovanou polovinou).
+
+**UI.** Popisky „1. půle / 2. půle" → „chybí dopoledne / chybí odpoledne" (štítek ve
+směně, výběr při zadání, detail absence). Seznam „Nepřítomnost" u půldne nově ukazuje
+i část dne. Člověk je tak vidět na obou místech, jak bylo požadováno.
+
+Ověřeno 7 scénáři (zůstává ve směně, nese zvolenou polovinu, rotace přežije,
+celodenní absence dál vyřazuje, obsazenost, zrušení půldne) + povinný TDZ lint
+(beze změny: 9 známých bezpečných nálezů v handlerech).
