@@ -641,3 +641,24 @@ kopiemi kódu, ne nad skutečným souborem. Řešení:
   které se musely ručně filtrovat).
 - `npm run check` = testy + lint. Povinné před každým nasazením.
 - `ARCHITECTURE.md` — struktura, jediný zdroj pravdy, invarianty, datový model.
+
+---
+
+## Aktualizace v30 — rozdělení UI: první obrazovka (Statistiky)
+
+Začátek postupného rozdělení `App.jsx` na obrazovky. Statistiky zvoleny jako první,
+protože jsou jen ke čtení — nejbezpečnější pro zavedení vzoru.
+
+1. **`src/ui.jsx`** — 12 sdílených UI prvků (Btn, Card, Modal, Input, Sel, Toggle, Badge,
+   RankBadge, HalfTag…) přesunuto z `App.jsx`. Nutný základ pro jakoukoli oddělenou obrazovku.
+2. **`computeFairness()` v `schedule.js`** — výpočet férovosti přesunut z `useMemo`
+   v komponentě beze změny chování + 5 nových testů (vynechání admina, startovní datum,
+   HO deficit, hlídač rozptylu, nový kolega bez směn z doby před nástupem).
+3. **`src/views/StatsView.jsx`** — obrazovka dostává data jako props, akci „upravit dny"
+   jako funkci; sama nic nezapisuje.
+4. **`src/views.test.mjs`** — nový typ testu: obrazovku skutečně vykreslí
+   (`react-dom/server`) pro admina, člena i prázdná data. **Ověřeno sabotáží:** chyba
+   „použití před deklarací" vložená do obrazovky prošla buildem, test ji chytil.
+
+`npm test` = 29 testů (26 logika + 3 vykreslení), `npm run lint` nově přes celý `src/`
+(automaticky pokryje i budoucí obrazovky). Vzor pro další obrazovky popsán v ARCHITECTURE.md.

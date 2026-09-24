@@ -292,3 +292,49 @@ export function altLabel(alt, ge) {
   return "";
 }
 export const fsKey = (...parts) => parts.join("__");
+
+/* ═══ FÉROVOST ═══
+   Počty odpracovaných směn od 8:00, od 10:00, dnů HO a „HO deficitu" (stálý rozvrh říká
+   HO, ale člověk byl v kanceláři) — od FAIRNESS_START. Hlídač hlásí rozdíl > FAIR_SPREAD. */
+export const FAIRNESS_START = "2026-07-22"; // počítá se jen od tohoto dne (včetně)
+export const FAIR_SPREAD = 3;
+export function computeFairness(allSchedules, employees, rotations, start = FAIRNESS_START, spread = FAIR_SPREAD) {
+  const tally = {};
+  const active = employees.filter(e => e.role !== "admin");
+  active.forEach(e => tally[e.id] = { eight: 0, ten: 0, ho: 0, deficit: 0, weeks: 0 });
+  Object.entries(allSchedules || {}).forEach(([wkKeyStr, data]) => {
+    const entries = withDefaults(data.entries, data.absences, employees, wkKeyStr, rotations, data.intake, data.intakeAllow);
+    const monday = new Date(wkKeyStr + "T00:00:00");
+    const seen = new Set();
+    DAYS.forEach((day, i) => {
+      const dd = new Date(monday); dd.setDate(monday.getDate() + i);
+      if (localISO(dd) < start) return; // den před startem se nepočítá
+      const present = {}; // empId → záznam toho dne (pro HO deficit)
+      SHIFTS.forEach(sh => (entries[day]?.[sh] || []).forEach(en => {
+        const t = tally[en.empId]; if (!t) return;
+        seen.add(en.empId);
+        present[en.empId] = en;
+        if (en.ho) t.ho++;
+        else if (sh === "08:00") t.eight++;
+        else if (sh === "10:00") t.ten++;
+      }));
+      // Deficit: stálý rozvrh říká HO, ale člověk ten den pracuje z kanceláře (absence se nepočítá)
+      active.forEach(e => { if (e.defaultSchedule?.[`${day}_ho`] && present[e.id] && !present[e.id].ho) tally[e.id].deficit++; });
+    });
+    seen.forEach(id => tally[id] && tally[id].weeks++);
+  });
+  const rows = active.map(e => ({ id: e.id, name: e.name, fixes: e.fixCount || 0, ...tally[e.id] })).sort((a, b) => b.eight - a.eight);
+  const warn = [];
+  ["eight", "ten", "ho"].forEach(m => {
+    const vals = rows.filter(r => r.weeks > 0).map(r => r[m]);
+    if (vals.length < 2) return;
+    const max = Math.max(...vals), min = Math.min(...vals);
+    if (max - min > spread) {
+      const hi = rows.filter(r => r[m] === max && r.weeks > 0).map(r => r.name);
+      const lo = rows.filter(r => r[m] === min && r.weeks > 0).map(r => r.name);
+      const label = m === "eight" ? "směn od 8:00" : m === "ten" ? "směn od 10:00" : "dnů HO";
+      warn.push({ metric: m, spread: max - min, msg: `Nerovnoměrný počet ${label}: nejvíc ${hi.join(", ")} (${max}), nejmíň ${lo.join(", ")} (${min})` });
+    }
+  });
+  return { rows, warn };
+}

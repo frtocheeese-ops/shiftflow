@@ -10,7 +10,10 @@ import {
   buildDef, isFullAbs, rotIsSwapped, applyRotations, withDefaults, PRESET,
   RENAME, PERSONAL, personalOf, RULE_DEFAULTS, dayStats, analyzeWeek,
   applyAlt, altLabel, fsKey,
+  computeFairness,
 } from "./schedule";
+import StatsView from "./views/StatsView";
+import { Badge, Btn, Input, Sel, Toggle, Modal, Card, RANK_TIERS, rankOf, HALF_LBL, HalfTag, RankBadge } from "./ui";
 
 const AE = "admin@shiftflow.app"; // admin se přihlašuje svým skutečným heslem (žádné heslo v kódu)
 
@@ -276,13 +279,6 @@ body{background:var(--bg)}
 `;
 
 /* ═══ UI ═══ */
-const Badge = ({ children, color = "var(--acc)", small, style: sx }) => <span style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: small ? "2px 8px" : "4px 12px", fontSize: small ? 11 : 13, fontWeight: 500, fontFamily: "'Barlow Condensed',sans-serif", color, letterSpacing: .8, textTransform: "uppercase", border: `1px solid ${color}`, whiteSpace: "nowrap", ...sx }}>{children}</span>;
-const Btn = ({ children, onClick, primary, danger, small, ghost, warm, disabled, style: sx }) => <button disabled={disabled} onClick={onClick} style={{ padding: small ? "8px 14px" : "12px 24px", border: `1px solid ${danger ? "var(--red)" : warm ? "var(--acc2)" : primary ? "var(--acc)" : "var(--brd2)"}`, fontWeight: 500, cursor: disabled ? "not-allowed" : "pointer", fontSize: small ? 13 : 15, fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 1, background: warm ? "var(--adim)" : primary ? "var(--sel)" : "transparent", color: danger ? "var(--red)" : warm ? "var(--acc2)" : primary ? "var(--stx)" : "var(--tx2)", opacity: disabled ? .3 : 1, transition: "all .2s", minHeight: 44, ...sx }}>{children}</button>;
-const Input = ({ label, ...p }) => <div style={{ marginBottom: 18 }}>{label && <label style={{ fontSize: 12, color: "var(--tx3)", display: "block", marginBottom: 6, fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 1.5 }}>{label}</label>}<input {...p} style={{ width: "100%", padding: "12px 14px", border: "1px solid var(--brd2)", background: "var(--bg)", color: "var(--w)", fontSize: 16, fontFamily: "'Barlow',sans-serif", outline: "none", boxSizing: "border-box", minHeight: 48, ...(p.style || {}) }} onFocus={e => e.target.style.borderColor = "var(--acc2)"} onBlur={e => e.target.style.borderColor = ""} /></div>;
-const Sel = ({ label, options, ...p }) => <div style={{ marginBottom: 18 }}>{label && <label style={{ fontSize: 12, color: "var(--tx3)", display: "block", marginBottom: 6, fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 1.5 }}>{label}</label>}<select {...p} style={{ width: "100%", padding: "12px 14px", border: "1px solid var(--brd2)", background: "var(--bg)", color: "var(--w)", fontSize: 16, fontFamily: "'Barlow',sans-serif", outline: "none", minHeight: 48 }}>{options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}</select></div>;
-const Toggle = ({ checked, onChange, label }) => <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", fontSize: 15, color: "var(--tx)", marginBottom: 14, minHeight: 44 }}><div onClick={() => onChange(!checked)} style={{ width: 40, height: 20, border: `1px solid ${checked ? "var(--acc2)" : "var(--brd2)"}`, position: "relative", cursor: "pointer", flexShrink: 0, background: checked ? "var(--adim)" : "transparent", transition: "all .25s" }}><div style={{ width: 16, height: 16, background: checked ? "var(--acc2)" : "var(--tx3)", position: "absolute", top: 1, left: checked ? 21 : 1, transition: "all .25s" }} /></div>{label}</label>;
-const Modal = ({ open, onClose, title, children, wide }) => { if (!open) return null; return <div style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(0,0,0,.35)", backdropFilter: "blur(4px)", display: "flex", alignItems: "flex-end", justifyContent: "center", animation: "fi .2s" }} onClick={onClose}><div onClick={e => e.stopPropagation()} className="gl" style={{ borderBottom: "none", padding: "28px 24px 36px", width: "100%", maxWidth: wide ? 760 : 520, maxHeight: "85vh", overflowY: "auto", animation: "mu .3s cubic-bezier(.22,.68,.36,1)" }}><div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24, borderBottom: "1px solid var(--brd)", paddingBottom: 16 }}><h3 style={{ margin: 0, fontSize: 18, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", fontWeight: 600, textTransform: "uppercase", letterSpacing: 2 }}>{title}</h3><button onClick={onClose} style={{ background: "none", border: "1px solid var(--brd2)", color: "var(--tx3)", width: 40, height: 40, cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center" }}>✕</button></div>{children}</div></div>; };
-const Card = ({ children, style: sx }) => <div className="gl" style={{ padding: 20, ...sx }}>{children}</div>;
 
 /* ═══ PWA INSTALACE ═══ */
 let deferredInstall = null;
@@ -583,24 +579,6 @@ function DirectSwapF({ targetEmp, dateLabel, dateISO, targetDay, targetShift, on
 
 /* ═══ MAIN APP ═══ */
 // ═══ RANKY za vyřešené problémy (fixCount) ═══
-const RANK_TIERS = [1, 15, 30, 45, 60, 80, 100, 130, 160, 200];
-const rankOf = n => { let r = 0; for (let i = 0; i < RANK_TIERS.length; i++) if ((n || 0) >= RANK_TIERS[i]) r = i + 1; return r; };
-const HALF_LBL = { first: "dopoledne", second: "odpoledne" };
-const HalfTag = ({ en, compact }) => {
-  if (!en?.halfAbs) return null;
-  const a = ABS.find(x => x.id === en.halfAbs);
-  const second = en.halfPart === "second";
-  return <span title={`${a?.label || "Půlden"} — chybí ${second ? "odpoledne (2. polovina směny)" : "dopoledne (1. polovina směny)"}`}
-    style={{ flexShrink: 0, fontSize: compact ? 9 : 10, padding: compact ? "0 3px" : "1px 5px", border: `1px solid ${a?.color || "var(--brd2)"}`, color: a?.color || "var(--tx2)", fontFamily: "'IBM Plex Mono',monospace", whiteSpace: "nowrap", lineHeight: 1.6 }}>{a?.icon} {compact ? (second ? "odp." : "dop.") : `chybí ${HALF_LBL[second ? "second" : "first"]}`}</span>;
-};
-
-const RankBadge = ({ fixes, size = 20 }) => {
-  const r = rankOf(fixes);
-  if (!r) return null;
-  const next = RANK_TIERS[r] ? ` · další rank od ${RANK_TIERS[r]}` : " · maximální rank";
-  return <img src={`/badges/rank${r}.png`} alt={`Rank ${r}`} title={`Rank ${r} · ${fixes} vyřešených problémů${next}`} loading="lazy"
-    style={{ width: size, height: size, flexShrink: 0, verticalAlign: "middle", objectFit: "contain" }} />;
-};
 
 export default function App() {
   const [authUser, setAuthUser] = useState(undefined); const [profile, setProfile] = useState(null);
@@ -719,50 +697,8 @@ export default function App() {
     } catch (err) { console.error("applyProblemFix:", err); notify("Nepodařilo se uložit"); }
   };
 
-  // ═══ FÉROVOST: počítadla 8:00 / 10:00 / HO od pevného data (nový model) + hlídač ═══
-  const FAIRNESS_START = "2026-07-22"; // počítá se jen od tohoto dne (včetně)
-  const FAIR_SPREAD = 3;
-  const fairness = useMemo(() => {
-    const tally = {};
-    const active = employees.filter(e => e.role !== "admin");
-    active.forEach(e => tally[e.id] = { eight: 0, ten: 0, ho: 0, deficit: 0, weeks: 0 });
-    Object.entries(allSchedules).forEach(([wkKeyStr, data]) => {
-      const entries = withDefaults(data.entries, data.absences, employees, wkKeyStr, rules.rotations, data.intake, data.intakeAllow);
-      const monday = new Date(wkKeyStr + "T00:00:00");
-      const seen = new Set();
-      DAYS.forEach((day, i) => {
-        const dd = new Date(monday); dd.setDate(monday.getDate() + i);
-        if (localISO(dd) < FAIRNESS_START) return; // den před startem se nepočítá
-        const present = {}; // empId → entry toho dne (pro výpočet HO deficitu)
-        SHIFTS.forEach(sh => (entries[day]?.[sh] || []).forEach(en => {
-          const t = tally[en.empId]; if (!t) return;
-          seen.add(en.empId);
-          present[en.empId] = en;
-          if (en.ho) t.ho++;
-          else if (sh === "08:00") t.eight++;
-          else if (sh === "10:00") t.ten++;
-        }));
-        // Deficit: stálý rozvrh říká HO, ale člověk ten den pracuje z kanceláře (absence se nepočítá)
-        active.forEach(e => { if (e.defaultSchedule?.[`${day}_ho`] && present[e.id] && !present[e.id].ho) tally[e.id].deficit++; });
-      });
-      seen.forEach(id => tally[id] && tally[id].weeks++);
-    });
-    const rows = active.map(e => ({ id: e.id, name: e.name, fixes: e.fixCount || 0, ...tally[e.id] })).sort((a, b) => b.eight - a.eight);
-    const metrics = ["eight", "ten", "ho"];
-    const warn = [];
-    metrics.forEach(m => {
-      const vals = rows.filter(r => r.weeks > 0).map(r => r[m]);
-      if (vals.length < 2) return;
-      const max = Math.max(...vals), min = Math.min(...vals);
-      if (max - min > FAIR_SPREAD) {
-        const hi = rows.filter(r => r[m] === max && r.weeks > 0).map(r => r.name);
-        const lo = rows.filter(r => r[m] === min && r.weeks > 0).map(r => r.name);
-        const label = m === "eight" ? "směn od 8:00" : m === "ten" ? "směn od 10:00" : "dnů HO";
-        warn.push({ metric: m, spread: max - min, msg: `Nerovnoměrný počet ${label}: nejvíc ${hi.join(", ")} (${max}), nejmíň ${lo.join(", ")} (${min})` });
-      }
-    });
-    return { rows, warn };
-  }, [allSchedules, employees, rules]);
+  // Férovost: výpočet v schedule.js (computeFairness), tady jen napojení na živá data
+  const fairness = useMemo(() => computeFairness(allSchedules, employees, rules.rotations), [allSchedules, employees, rules.rotations]);
 
   useEffect(() => { const u = onAuthStateChanged(auth, async u => { if (u) { setAuthUser(u); const s = await getDoc(doc(db, "users", u.uid)); if (s.exists()) setProfile({ id: u.uid, ...s.data() }); else setProfile({ id: u.uid, name: u.displayName || u.email, role: "employee", setupDone: false }); initPush(u.uid); } else { setAuthUser(null); setProfile(null); } }); return u; }, []);
   useEffect(() => { const u = onSnapshot(collection(db, "users"), s => { const e = s.docs.map(d => ({ id: d.id, ...d.data() })); setEmployees(e); if (profile) { const m = e.find(x => x.id === profile.id); if (m) setProfile(p => ({ ...p, ...m })); } }); return u; }, [profile?.id]);
@@ -1619,41 +1555,8 @@ export default function App() {
               })}</div>;
             })()}
           </div>}
-          {view === "stats" && <div>
-            <div style={{ fontSize: 20, fontWeight: 600, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 2, marginBottom: 20, borderBottom: "1px solid var(--brd)", paddingBottom: 12 }}>Status</div>
-            {!isA && <Card style={{ marginBottom: 20 }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}><div style={{ fontSize: 16, fontWeight: 600, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase" }}>Moje dny</div><button onClick={() => setModal({ type: "editDays", emp: profile })} style={{ background: "none", border: "1px solid var(--brd2)", color: "var(--tx3)", cursor: "pointer", width: 34, height: 34 }}>✏</button></div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>{[{ l: "Dovolená", v: (profile.vacationTotal || 20) - (profile.vacationUsed || 0), t: profile.vacationTotal || 20, c: "var(--sd)" }, { l: "Sick", v: (profile.sickTotal || 5) - (profile.sickUsed || 0), t: profile.sickTotal || 5, c: "var(--red)" }, { l: "Whatever", v: (profile.whateverTotal || 3) - (profile.whateverUsed || 0), t: profile.whateverTotal || 3, c: "var(--amb)" }].map(b => <div key={b.l} style={{ textAlign: "center", padding: 12, border: "1px solid var(--brd)", background: "var(--bg3)" }}><div style={{ fontSize: 28, fontWeight: 600, color: b.c, fontFamily: "'IBM Plex Mono',monospace" }}>{b.v}</div><div style={{ fontSize: 11, color: "var(--tx3)", textTransform: "uppercase" }}>{b.l} (z {b.t})</div></div>)}</div>
-            </Card>}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))", gap: 12 }}>{[{ l: "Crew", v: employees.filter(e => e.role !== "admin").length, c: "var(--acc2)" }, { l: "Active", v: employees.filter(e => e.setupDone).length, c: "var(--grn)" }, { l: "Swaps", v: openSw.length, c: "var(--amb)" }].map(s => <Card key={s.l}><div style={{ fontSize: 32, fontWeight: 600, color: s.c, fontFamily: "'IBM Plex Mono',monospace" }}>{s.v}</div><div style={{ fontSize: 12, color: "var(--tx3)", textTransform: "uppercase", marginTop: 4 }}>{s.l}</div></Card>)}</div>
-
-            {/* ═══ FÉROVOST ═══ */}
-            <div style={{ fontSize: 16, fontWeight: 600, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 1, margin: "28px 0 6px" }}>Férovost · od 22. 7. 2026</div>
-            <p style={{ fontSize: 12, color: "var(--tx3)", marginBottom: 12 }}>Počty odpracovaných směn od 8:00, od 10:00 a dnů home office, počítané od 22. 7. 2026 (start nového modelu). Hlídač upozorní, když se rozdíl mezi lidmi zvětší nad {FAIR_SPREAD}.</p>
-            {fairness.warn.length > 0 && <div className="gl" style={{ padding: "10px 14px", marginBottom: 12, borderLeft: "3px solid var(--amb)" }}>
-              {fairness.warn.map((w, i) => <div key={i} style={{ fontSize: 13, color: "var(--amb)", padding: "2px 0" }}>⚠️ {w.msg}</div>)}
-            </div>}
-            {fairness.warn.length === 0 && fairness.rows.some(r => r.weeks > 0) && <div className="gl" style={{ padding: "10px 14px", marginBottom: 12, borderLeft: "3px solid var(--grn)", fontSize: 13, color: "var(--grn)" }}>✓ Rozložení směn i HO je vyrovnané.</div>}
-            <div className="gl" style={{ overflow: "auto", padding: 0 }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14, minWidth: 420 }}>
-                <thead><tr>
-                  {["Člen", "8:00", "10:00", "HO", "HO −", "🛠 Fixy", "Týdnů"].map((h, i) => <th key={h} style={{ padding: "10px 12px", textAlign: i === 0 ? "left" : "center", color: "var(--tx3)", borderBottom: "1px solid var(--brd)", fontFamily: "'Barlow Condensed',sans-serif", letterSpacing: 1 }} title={h === "HO −" ? "HO deficit: dny, kdy stálý rozvrh říká HO, ale člověk byl v kanceláři" : h === "🛠 Fixy" ? "Kolikrát jeho směna vyřešila problém (Provést úpravu)" : undefined}>{h}</th>)}
-                </tr></thead>
-                <tbody>{fairness.rows.map(r => {
-                  const maxV = Math.max(1, ...fairness.rows.map(x => Math.max(x.eight, x.ten, x.ho)));
-                  const bar = (v, c) => <div style={{ display: "flex", alignItems: "center", gap: 6, justifyContent: "center" }}><div style={{ width: 40, height: 6, background: "var(--brd)", position: "relative" }}><div style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: `${100 * v / maxV}%`, background: c }} /></div><span style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 13, minWidth: 18, textAlign: "right" }}>{v}</span></div>;
-                  return <tr key={r.id} style={{ borderBottom: "1px solid var(--brd)" }}>
-                    <td style={{ padding: "8px 12px", fontWeight: 600, color: "var(--w)" }}><span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>{r.name}<RankBadge fixes={r.fixes} /></span></td>
-                    <td style={{ padding: "8px 12px" }}>{bar(r.eight, "var(--acc2)")}</td>
-                    <td style={{ padding: "8px 12px" }}>{bar(r.ten, "var(--amb)")}</td>
-                    <td style={{ padding: "8px 12px" }}>{bar(r.ho, "var(--grn)")}</td>
-                    <td style={{ padding: "8px 12px", textAlign: "center", fontFamily: "'IBM Plex Mono',monospace", fontSize: 13, color: r.deficit > 0 ? "var(--red)" : "var(--tx3)" }}>{r.deficit > 0 ? `−${r.deficit}` : "0"}</td>
-                    <td style={{ padding: "8px 12px", textAlign: "center" }}>{r.fixes > 0 ? <span style={{ display: "inline-block", padding: "1px 8px", border: "1px solid var(--amb)", color: "var(--amb)", fontFamily: "'IBM Plex Mono',monospace", fontSize: 13 }}>🛠 {r.fixes}</span> : <span style={{ color: "var(--tx3)", fontFamily: "'IBM Plex Mono',monospace", fontSize: 13 }}>0</span>}</td>
-                    <td style={{ padding: "8px 12px", textAlign: "center", fontFamily: "'IBM Plex Mono',monospace", fontSize: 13, color: "var(--tx3)" }}>{r.weeks}</td>
-                  </tr>; })}</tbody>
-              </table>
-            </div>
-          </div>}
+          {view === "stats" && <StatsView isA={isA} profile={profile} employees={employees} openSwapsCount={openSw.length} fairness={fairness}
+            onEditDays={() => setModal({ type: "editDays", emp: profile })} />}
 
           {view === "log" && <div><div style={{ fontSize: 20, fontWeight: 600, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 2, marginBottom: 20, borderBottom: "1px solid var(--brd)", paddingBottom: 12 }}>Log</div>{logs.map(h => <div key={h.id} style={{ display: "flex", gap: 10, padding: "10px 12px", borderBottom: "1px solid var(--brd)", fontSize: 14 }}><span style={{ fontSize: 12, color: "var(--tx3)", fontFamily: "'IBM Plex Mono',monospace", minWidth: 130 }}>{h.time ? new Date(h.time).toLocaleString("cs") : ""}</span><span style={{ flex: 1 }}>{h.msg}</span></div>)}</div>}
           {view === "defaults" && isA && <div><div style={{ fontSize: 20, fontWeight: 600, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 2, marginBottom: 16, borderBottom: "1px solid var(--brd)", paddingBottom: 12 }}>Stálý rozvrh</div>
