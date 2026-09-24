@@ -606,3 +606,38 @@ i část dne. Člověk je tak vidět na obou místech, jak bylo požadováno.
 Ověřeno 7 scénáři (zůstává ve směně, nese zvolenou polovinu, rotace přežije,
 celodenní absence dál vyřazuje, obsazenost, zrušení půldne) + povinný TDZ lint
 (beze změny: 9 známých bezpečných nálezů v handlerech).
+
+---
+
+## Aktualizace v29 — revize: regrese z dřívějších oprav + přestavba logiky
+
+**Ověření ruční opravy uživatele.** Nová verze otestována proti 4 pravděpodobným stavům
+databáze po ruční opravě půldne (oba ručně / člověk vypadlý z DB / zrušeno a znovu
+zadáno / jen jeden ručně) — ve všech zůstanou oba lidé na místě, bez duplicit.
+
+**Nalezené regrese (opraveno):**
+1. **Týden poškozený dřívější chybou půldne** — člověk mohl v DB ze dne vypadnout a nová
+   verze by ho nevrátila (pravidlo „ručně odebraný se nevrací"). Nově: půlden = člověk
+   ten den pracuje → do směny se vrátí vždy.
+2. **Rotace přepisovala historii** — uplatnila se i na týdny před svým založením
+   (zkreslovalo statistiky férovosti). Nově se týdny před `anchor` nerotují.
+3. **Nový kolega se dopisoval do minulosti** — do týdnů před nástupem, statistiky mu
+   připsaly neodpracované směny. Nově se nedoplní do týdnů před `createdAt`.
+4. **Zrušení půldne přemazalo ruční umístění** (smazalo a vrátilo na výchozí). Nově jen
+   sundá označení.
+5. **„Zapomenuté heslo"** hlásilo chybu, přestože e-mail odešel — volání neexistující
+   `notify` v přihlašovací obrazovce (odhaleno nově zapnutým lintem `no-undef`).
+
+**Přestavba (proč se regrese opakovaly).** Dvě příčiny: logika rozvrhu byla rozházená
+uvnitř 2000řádkové komponenty (vznikaly její kopie) a testy běžely nad vyříznutými
+kopiemi kódu, ne nad skutečným souborem. Řešení:
+- Veškerá čistá logika přesunuta **beze změny chování** do `src/schedule.js`
+  (27 exportů, bez Reactu i Firebase). `App.jsx` ji importuje.
+- Trvalá testovací sada `src/schedule.test.mjs` — 21 testů, každý odpovídá reálné
+  chybě z historie. Běží nad skutečným modulem. Nejdřív spuštěna BEZ oprav: selhaly
+  přesně 3 nálezy auditu, 18 ostatních prošlo → testy chytají to, co mají.
+- Lint (`.eslintrc.json`) v repu: `no-use-before-define` + `no-undef`. Pořadí definic
+  v `App.jsx` srovnáno tak, aby prošel **čistě na nulu** (dřív 9 „bezpečných" nálezů,
+  které se musely ručně filtrovat).
+- `npm run check` = testy + lint. Povinné před každým nasazením.
+- `ARCHITECTURE.md` — struktura, jediný zdroj pravdy, invarianty, datový model.
