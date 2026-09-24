@@ -72,4 +72,23 @@ test("LogView: vykreslí záznamy i prázdný log", async () => {
   assert.match(await render(LogView, { logs: [] }), /Log/);
 });
 
+const swapEmps = { a: { id: "a", name: "Jiří Slavíček" }, b: { id: "b", name: "Andy" } };
+const swaps = [{ id: "s1", rid: "a", dateISO: "2026-09-22", sh: "08:00", comment: "Mám doktora" }];
+const swapProps = over => ({ isA: false, profile: { id: "b" }, swaps, ge: id => swapEmps[id], onAccept() {}, onCancel() {}, onDelete() {}, onNewRequest() {}, ...over });
+
+test("SwapsView: jiný člen vidí Přijmout, žadatel Tvoje + Zrušit, admin smazání", async () => {
+  const SwapsView = await loadView("SwapsView");
+  const jiny = await render(SwapsView, swapProps({}));
+  assert.match(jiny, /Přijmout/); assert.match(jiny, /Mám doktora/); assert.match(jiny, /Nová žádost/);
+  const zadatel = await render(SwapsView, swapProps({ profile: { id: "a" } }));
+  assert.match(zadatel, /Tvoje/); assert.match(zadatel, /Zrušit/); assert.doesNotMatch(zadatel, /Přijmout/);
+  const admin = await render(SwapsView, swapProps({ isA: true, profile: { id: "adm" } }));
+  assert.doesNotMatch(admin, /Přijmout/); assert.doesNotMatch(admin, /Nová žádost/); assert.match(admin, /✕/);
+});
+
+test("SwapsView: prázdný seznam", async () => {
+  const SwapsView = await loadView("SwapsView");
+  assert.match(await render(SwapsView, swapProps({ swaps: [] })), /Žádné žádosti/);
+});
+
 test.after(() => rmSync(OUT, { recursive: true, force: true }));
