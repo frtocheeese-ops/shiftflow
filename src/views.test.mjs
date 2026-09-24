@@ -64,4 +64,12 @@ test("StatsView: vykreslí se i bez dat (nový tým, prázdná férovost)", asyn
   assert.match(html, /Férovost/);
 });
 
+
+test("LogView: vykreslí záznamy i prázdný log", async () => {
+  const LogView = await loadView("LogView");
+  const html = await render(LogView, { logs: [{ id: "1", time: "2026-09-18T10:00:00Z", msg: "Vyřešeno: Andy 09:00 → 08:00" }] });
+  assert.match(html, /Vyřešeno: Andy/);
+  assert.match(await render(LogView, { logs: [] }), /Log/);
+});
+
 test.after(() => rmSync(OUT, { recursive: true, force: true }));
