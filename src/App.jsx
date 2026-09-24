@@ -10,6 +10,7 @@ import {
   buildDef, isFullAbs, rotIsSwapped, applyRotations, withDefaults, PRESET,
   RENAME, PERSONAL, personalOf, RULE_DEFAULTS, dayStats, analyzeWeek,
   applyAlt, altLabel, fsKey,
+  computeFairness, FAIR_SPREAD,
 } from "./schedule";
 import { Badge, Btn, Input, Sel, Toggle, Modal, Card, RANK_TIERS, rankOf, HALF_LBL, HalfTag, RankBadge } from "./ui";
 
@@ -695,50 +696,8 @@ export default function App() {
     } catch (err) { console.error("applyProblemFix:", err); notify("Nepodařilo se uložit"); }
   };
 
-  // ═══ FÉROVOST: počítadla 8:00 / 10:00 / HO od pevného data (nový model) + hlídač ═══
-  const FAIRNESS_START = "2026-07-22"; // počítá se jen od tohoto dne (včetně)
-  const FAIR_SPREAD = 3;
-  const fairness = useMemo(() => {
-    const tally = {};
-    const active = employees.filter(e => e.role !== "admin");
-    active.forEach(e => tally[e.id] = { eight: 0, ten: 0, ho: 0, deficit: 0, weeks: 0 });
-    Object.entries(allSchedules).forEach(([wkKeyStr, data]) => {
-      const entries = withDefaults(data.entries, data.absences, employees, wkKeyStr, rules.rotations, data.intake, data.intakeAllow);
-      const monday = new Date(wkKeyStr + "T00:00:00");
-      const seen = new Set();
-      DAYS.forEach((day, i) => {
-        const dd = new Date(monday); dd.setDate(monday.getDate() + i);
-        if (localISO(dd) < FAIRNESS_START) return; // den před startem se nepočítá
-        const present = {}; // empId → entry toho dne (pro výpočet HO deficitu)
-        SHIFTS.forEach(sh => (entries[day]?.[sh] || []).forEach(en => {
-          const t = tally[en.empId]; if (!t) return;
-          seen.add(en.empId);
-          present[en.empId] = en;
-          if (en.ho) t.ho++;
-          else if (sh === "08:00") t.eight++;
-          else if (sh === "10:00") t.ten++;
-        }));
-        // Deficit: stálý rozvrh říká HO, ale člověk ten den pracuje z kanceláře (absence se nepočítá)
-        active.forEach(e => { if (e.defaultSchedule?.[`${day}_ho`] && present[e.id] && !present[e.id].ho) tally[e.id].deficit++; });
-      });
-      seen.forEach(id => tally[id] && tally[id].weeks++);
-    });
-    const rows = active.map(e => ({ id: e.id, name: e.name, fixes: e.fixCount || 0, ...tally[e.id] })).sort((a, b) => b.eight - a.eight);
-    const metrics = ["eight", "ten", "ho"];
-    const warn = [];
-    metrics.forEach(m => {
-      const vals = rows.filter(r => r.weeks > 0).map(r => r[m]);
-      if (vals.length < 2) return;
-      const max = Math.max(...vals), min = Math.min(...vals);
-      if (max - min > FAIR_SPREAD) {
-        const hi = rows.filter(r => r[m] === max && r.weeks > 0).map(r => r.name);
-        const lo = rows.filter(r => r[m] === min && r.weeks > 0).map(r => r.name);
-        const label = m === "eight" ? "směn od 8:00" : m === "ten" ? "směn od 10:00" : "dnů HO";
-        warn.push({ metric: m, spread: max - min, msg: `Nerovnoměrný počet ${label}: nejvíc ${hi.join(", ")} (${max}), nejmíň ${lo.join(", ")} (${min})` });
-      }
-    });
-    return { rows, warn };
-  }, [allSchedules, employees, rules]);
+  // Férovost: výpočet v schedule.js (computeFairness), tady jen napojení na živá data
+  const fairness = useMemo(() => computeFairness(allSchedules, employees, rules.rotations), [allSchedules, employees, rules.rotations]);
 
   useEffect(() => { const u = onAuthStateChanged(auth, async u => { if (u) { setAuthUser(u); const s = await getDoc(doc(db, "users", u.uid)); if (s.exists()) setProfile({ id: u.uid, ...s.data() }); else setProfile({ id: u.uid, name: u.displayName || u.email, role: "employee", setupDone: false }); initPush(u.uid); } else { setAuthUser(null); setProfile(null); } }); return u; }, []);
   useEffect(() => { const u = onSnapshot(collection(db, "users"), s => { const e = s.docs.map(d => ({ id: d.id, ...d.data() })); setEmployees(e); if (profile) { const m = e.find(x => x.id === profile.id); if (m) setProfile(p => ({ ...p, ...m })); } }); return u; }, [profile?.id]);

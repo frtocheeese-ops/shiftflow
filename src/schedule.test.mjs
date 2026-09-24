@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   SHIFTS, DAYS, PRESET, buildDef, withDefaults, applyRotations, rotIsSwapped,
-  dayStats, analyzeWeek, applyAlt, getMon, localISO,
+  dayStats, analyzeWeek, applyAlt, getMon, localISO, computeFairness,
 } from "./schedule.js";
 
 // ── pomocníci ──
@@ -148,4 +148,35 @@ test("problém, kde chybí víc lidí, jde vyřešit po krocích (deficit klesá
   assert.equal(p1.deficit, 2); applyAlt(w, p1.alts[0]);
   const p2 = analyzeWeek(w, {}, emps, {}).problems.find(p => p.key === "08:00:Po");
   assert.equal(p2.deficit, 1);
+});
+
+// ════════════════ Férovost ════════════════
+const wkDoc = (entries, absences = {}) => ({ entries, absences });
+const pw = () => { const w = empty(); w.Po["08:00"] = [{ empId: "a", isDefault: false }]; w.Po["10:00"] = [{ empId: "b", isDefault: false }]; w["Út"]["09:00"] = [{ empId: "a", ho: true, isDefault: false }]; return w; };
+const fe = () => [{ id: "a", name: "A", role: "employee", setupDone: true, defaultSchedule: {} }, { id: "b", name: "B", role: "employee", setupDone: true, defaultSchedule: {} }, { id: "adm", name: "Admin", role: "admin" }];
+
+test("férovost: počítá 8:00, 10:00 a HO a vynechá admina", () => {
+  const r = computeFairness({ "2026-09-14": wkDoc(pw()) }, fe(), []);
+  const a = r.rows.find(x => x.id === "a"), b = r.rows.find(x => x.id === "b");
+  assert.equal(a.eight, 1); assert.equal(a.ho, 1); assert.equal(b.ten, 1);
+  assert.equal(r.rows.some(x => x.id === "adm"), false);
+});
+
+test("férovost: dny před startovním datem se nepočítají", () => {
+  assert.equal(computeFairness({ "2026-07-13": wkDoc(pw()) }, fe(), []).rows.find(x => x.id === "a").eight, 0);
+});
+
+test("férovost: HO deficit — stálý rozvrh říká HO, ale byl v kanceláři", () => {
+  const emps = fe(); emps[0].defaultSchedule = { Po: "08:00", Po_ho: true };
+  assert.equal(computeFairness({ "2026-09-14": wkDoc(pw()) }, emps, []).rows.find(x => x.id === "a").deficit, 1);
+});
+
+test("férovost: hlídač nahlásí rozdíl větší než 3", () => {
+  const docs = {}; ["2026-09-14", "2026-09-21", "2026-09-28", "2026-10-05"].forEach(k => { docs[k] = wkDoc(pw()); });
+  assert.ok(computeFairness(docs, fe(), []).warn.some(w => w.metric === "eight"));
+});
+
+test("férovost: nový kolega nedostane směny z týdnů před nástupem", () => {
+  const emps = [...fe(), { id: "n", name: "N", role: "employee", setupDone: true, createdAt: "2026-10-01T00:00:00Z", defaultSchedule: { Po: "08:00" } }];
+  assert.equal(computeFairness({ "2026-09-14": wkDoc(pw()) }, emps, []).rows.find(x => x.id === "n").eight, 0);
 });
