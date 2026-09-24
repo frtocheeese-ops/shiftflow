@@ -7,7 +7,7 @@
 | `src/schedule.js` | **Čistá logika rozvrhu**: konstanty (dny, směny, typy absencí, svátky), datumové pomocníky, stálý rozvrh (`PRESET`), osobní pravidla, rotace, skládání týdne (`withDefaults`), kontrola pravidel (`analyzeWeek`), návrhy řešení (`applyAlt`) | žádné (ani React, ani Firebase) |
 | `src/schedule.test.mjs` | Testy logiky — každý odpovídá reálné chybě z historie projektu | jen `node:test` |
 | `src/ui.jsx` | Sdílené UI prvky: `Btn`, `Card`, `Modal`, `Input`, `Sel`, `Toggle`, `Badge`, `RankBadge`, `HalfTag` | `schedule.js` |
-| `src/views/*.jsx` | Jednotlivé obrazovky: `StatsView`, `LogView`, `SwapsView`, `DefaultsView` | `ui.jsx`, `schedule.js` |
+| `src/views/*.jsx` | Jednotlivé obrazovky: `StatsView`, `LogView`, `SwapsView`, `DefaultsView`, `PeopleView`, `SettingsView` | `ui.jsx`, `schedule.js` |
 | `src/views.test.mjs` | Test vykreslení obrazovek — chytá pády za běhu | `esbuild`, `react-dom/server` |
 | `src/App.jsx` | Stav, přihlášení, zápisy do Firestore, Google Kalendář, zbývající obrazovky | vše výše |
 | `scripts/nahled.mjs` + `.github/workflows/nahled.yml` | Páteční snímek rozvrhu na `/nahled/` | Puppeteer |
@@ -24,8 +24,14 @@
 3. **Test vykreslení do `views.test.mjs`** — pro každou roli (admin / člen) a pro prázdná data.
 4. **Po každém kroku commit** a `npm run check`.
 
-Hotovo: Statistiky, Log, Výměny, Stálý rozvrh. Zbývá podle rizika: Tým → Nastavení →
-Návrhy → Rozvrh (největší, nejvíc zápisů — naposled).
+Hotovo: Statistiky, Log, Výměny, Stálý rozvrh, Tým, Nastavení. Zbývá: Návrhy →
+Rozvrh (největší, nejvíc zápisů — naposled).
+
+**Pozor na proměnné modulu:** handler, který přiřazuje do proměnné `let` z `App.jsx`
+(např. `deferredInstall = null`), nejde přesunout do jiného souboru — import je jen
+ke čtení. Takový handler zůstává v `App.jsx` a obrazovka ho dostane jako funkci.
+
+**Formuláře nastavení upravují koncept**, ne živý stav — viz pravidla v `SettingsView`.
 
 ## Jediný zdroj pravdy
 
