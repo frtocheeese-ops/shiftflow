@@ -6,10 +6,26 @@
 |---|---|---|
 | `src/schedule.js` | **Čistá logika rozvrhu**: konstanty (dny, směny, typy absencí, svátky), datumové pomocníky, stálý rozvrh (`PRESET`), osobní pravidla, rotace, skládání týdne (`withDefaults`), kontrola pravidel (`analyzeWeek`), návrhy řešení (`applyAlt`) | žádné (ani React, ani Firebase) |
 | `src/schedule.test.mjs` | Testy logiky — každý odpovídá reálné chybě z historie projektu | jen `node:test` |
-| `src/App.jsx` | UI, stav, zápisy do Firestore, Google Kalendář | importuje `schedule.js` |
+| `src/ui.jsx` | Sdílené UI prvky: `Btn`, `Card`, `Modal`, `Input`, `Sel`, `Toggle`, `Badge`, `RankBadge`, `HalfTag` | `schedule.js` |
+| `src/views/*.jsx` | Jednotlivé obrazovky (zatím: `StatsView`) | `ui.jsx`, `schedule.js` |
+| `src/views.test.mjs` | Test vykreslení obrazovek — chytá pády za běhu | `esbuild`, `react-dom/server` |
+| `src/App.jsx` | Stav, přihlášení, zápisy do Firestore, Google Kalendář, zbývající obrazovky | vše výše |
 | `scripts/nahled.mjs` + `.github/workflows/nahled.yml` | Páteční snímek rozvrhu na `/nahled/` | Puppeteer |
 
 **Kam patří nová logika:** cokoli, co počítá nebo odvozuje rozvrh a nepotřebuje React ani databázi, patří do `schedule.js` — a k tomu test do `schedule.test.mjs`. `App.jsx` má logiku jen *volat*, ne ji mít vlastní kopii.
+
+## Jak oddělit další obrazovku (vzor podle StatsView)
+
+1. **Logika pryč z JSX.** Pokud obrazovka něco počítá (jako férovost), výpočet jde do
+   `schedule.js` jako čistá funkce + test do `schedule.test.mjs`.
+2. **JSX do `src/views/XxxView.jsx`.** Obrazovka dostává data jako vstupy (props) a akce
+   jako funkce (`onEditDays`, …). **Sama nezapisuje do Firestore** — zápis zůstává
+   v `App.jsx`, obrazovka jen zavolá předanou funkci.
+3. **Test vykreslení do `views.test.mjs`** — pro každou roli (admin / člen) a pro prázdná data.
+4. **Po každém kroku commit** a `npm run check`.
+
+Pořadí dalších obrazovek podle rizika: Log → Stálý rozvrh → Výměny → Nastavení →
+Návrhy → Rozvrh (největší, nejvíc zápisů — naposled).
 
 ## Jediný zdroj pravdy
 
@@ -54,7 +70,8 @@ npm run check      # testy logiky + lint
 npm run build      # (s VITE_FIREBASE_* proměnnými)
 ```
 
-`npm run check` musí skončit bez chyby. Lint hlídá zejména:
+`npm run check` musí skončit bez chyby. Test vykreslení ověřen sabotáží: chyba „použití
+před deklarací" vložená do obrazovky prošla buildem, ale test ji chytil. Lint hlídá zejména:
 - **použití proměnné před její deklarací** — shodilo celou appku na modrou obrazovku (v27),
   přitom build prošel;
 - **nedefinované proměnné** — rozbíjelo potvrzení „Zapomenuté heslo" (v29).
