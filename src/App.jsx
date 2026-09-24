@@ -17,6 +17,7 @@ import LogView from "./views/LogView";
 import SwapsView from "./views/SwapsView";
 import DefaultsView from "./views/DefaultsView";
 import PeopleView from "./views/PeopleView";
+import SettingsView from "./views/SettingsView";
 import { Badge, Btn, Input, Sel, Toggle, Modal, Card, RANK_TIERS, rankOf, HALF_LBL, HalfTag, RankBadge } from "./ui";
 
 const AE = "admin@shiftflow.app"; // admin se přihlašuje svým skutečným heslem (žádné heslo v kódu)
@@ -461,33 +462,6 @@ function MoveForm({ curDay, curShift, onMove }) {
 
 function NoteInput({ onSubmit }) { const [n, setN] = useState(""); return <div><Input value={n} onChange={e => setN(e.target.value)} placeholder="Přijdu o 20 min později" /><Btn warm onClick={() => onSubmit(n)} style={{ width: "100%", marginTop: 4 }}>Uložit poznámku</Btn></div>; }
 
-function RotationForm({ employees, onAdd }) {
-  const staff = employees.filter(e => e.role !== "admin");
-  const [day, setDay] = useState("Út");
-  const [aId, setA] = useState(""); const [bId, setB] = useState("");
-  const [shiftA, setSA] = useState("08:00"); const [shiftB, setSB] = useState("10:00");
-  const [ho, setHo] = useState(true);
-  const opts = staff.map(e => ({ value: e.id, label: e.name }));
-  const shOpts = SHIFTS.map(x => ({ value: x, label: x }));
-  const add = () => {
-    if (!aId || !bId || aId === bId) return alert("Vyber dva různé členy.");
-    if (shiftA === shiftB) return alert("Vyber dvě různé směny.");
-    onAdd({ day, aId, bId, shiftA, shiftB, ho, anchor: wKey(new Date()) });
-    setA(""); setB("");
-  };
-  return <div style={{ border: "1px dashed var(--brd2)", padding: "10px 11px" }}>
-    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-      <Sel label="Den" value={day} onChange={e => setDay(e.target.value)} options={DAYS.map(d => ({ value: d, label: d }))} />
-      <Sel label="Režim" value={ho ? "ho" : "office"} onChange={e => setHo(e.target.value === "ho")} options={[{ value: "ho", label: "Home office" }, { value: "office", label: "Kancelář" }]} />
-      <Sel label="Člen A" value={aId} onChange={e => setA(e.target.value)} options={[{ value: "", label: "— vyber —" }, ...opts]} />
-      <Sel label="Směna A" value={shiftA} onChange={e => setSA(e.target.value)} options={shOpts} />
-      <Sel label="Člen B" value={bId} onChange={e => setB(e.target.value)} options={[{ value: "", label: "— vyber —" }, ...opts]} />
-      <Sel label="Směna B" value={shiftB} onChange={e => setSB(e.target.value)} options={shOpts} />
-    </div>
-    <p style={{ fontSize: 11.5, color: "var(--tx3)", margin: "4px 0 8px" }}>Tento týden dostane A směnu {shiftA} a B směnu {shiftB}; příští týden se prohodí.</p>
-    <Btn small warm onClick={add} style={{ width: "100%" }}>+ Přidat rotaci</Btn>
-  </div>;
-}
 
 function VacRangeF({ onSubmit }) {
   const [from, setFrom] = useState(""); const [to, setTo] = useState(""); const [type, setType] = useState("vacation");
@@ -1112,7 +1086,10 @@ export default function App() {
   };
   const gcalDisconnect = () => { localStorage.removeItem("sf_gcal_token"); notify("Token odstraněn — při dalším sync budete znovu autorizovat"); };
   const saveRules = async newRules => { await setDoc(doc(db, "rules", "global"), newRules); notify("Uloženo"); };
-  const resetWeek = async () => { await deleteDoc(doc(db, "schedules", wk)); notify("Reset"); };
+  const resetWeek = async () => {
+    if (!confirm(`Resetovat týden ${fmtW(cw)}?\n\nSmaže VŠECHNO v tomto týdnu — ruční úpravy, zadané dovolené a nemoci, Nástupy i poznámky. Rozvrh se vrátí ke stálému. Nelze vrátit zpět.`)) return;
+    await deleteDoc(doc(db, "schedules", wk)); notify("Týden resetován");
+  };
 
   // ═══ TÝM: ruční úprava počtu vyřešených problémů (nikdy pod nulu) ═══
   const adjustFixCount = (emp, delta) => {
@@ -1580,92 +1557,12 @@ export default function App() {
 
           {view === "log" && <LogView logs={logs} />}
           {view === "defaults" && isA && <DefaultsView employees={employees} onSaveDefault={saveDefaultSchedule} onApplyPreset={applyPreset} />}
-          {view === "settings" && <div style={{ maxWidth: 560 }}>
-            <div style={{ fontSize: 20, fontWeight: 600, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 2, marginBottom: 20, borderBottom: "1px solid var(--brd)", paddingBottom: 12 }}>Nastavení</div>
-            <Card style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, fontFamily: "'Barlow Condensed',sans-serif" }}>Účet</div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <Btn ghost onClick={() => setModal("changeName")}>Změnit jméno</Btn>
-                <Btn ghost onClick={() => setModal("changePass")}>Změnit heslo</Btn>
-                <Btn ghost onClick={() => setModal("changeNotif")}>Email notifikace</Btn>
-              </div>
-            </Card>
-            {isA && <Card style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, fontFamily: "'Barlow Condensed',sans-serif" }}>Páteční snímek rozvrhu</div>
-              <div style={{ fontSize: 13, color: "var(--tx2)", marginBottom: 12, lineHeight: 1.7 }}>
-                {nahledInfo === null ? <span style={{ color: "var(--tx3)" }}>Načítám stav…</span> : <>
-                  Publikovaný týden: <b style={{ color: "var(--w)" }}>{nahledInfo.week || "neznámý"}</b><br />
-                  Naposledy aktualizováno: <b style={{ color: "var(--w)" }}>{nahledInfo.date || "—"}</b>
-                </>}
-              </div>
-              <Btn warm onClick={() => window.open("https://github.com/frtocheeese-ops/shiftflow/actions/workflows/nahled.yml", "_blank")} style={{ width: "100%", marginBottom: 8 }}>🔄 Aktualizovat snímek teď</Btn>
-              <Btn ghost onClick={() => window.open("https://smenyjt.netlify.app/nahled/?c=" + Date.now(), "_blank")} style={{ width: "100%", marginBottom: 10 }}>👁 Zobrazit aktuální snímek</Btn>
-              <p style={{ fontSize: 12, color: "var(--tx3)", margin: 0, lineHeight: 1.6 }}>
-                Snímek se tvoří automaticky v pátek ráno. Po změnách na poslední chvíli klepni na Aktualizovat — otevře se GitHub, kde dáš <b>Run workflow → Run workflow</b>. Nový snímek je na webu do dvou minut a odkaz ve WhatsAppu zůstává stejný.
-              </p>
-            </Card>}
-            <Card style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, fontFamily: "'Barlow Condensed',sans-serif" }}>Aplikace</div>
-              {isStandalone() ? <p style={{ fontSize: 13, color: "var(--grn)", margin: 0 }}>✓ Běžíš v nainstalované aplikaci.</p>
-                : installable ? <>
-                  <Btn warm onClick={installApp}>📲 Nainstalovat aplikaci</Btn>
-                  <p style={{ fontSize: 12, color: "var(--tx3)", margin: "10px 0 0" }}>Přidá ShiftFlow na plochu — spouští se pak na celou obrazovku jako běžná aplikace, bez lišty prohlížeče.</p>
-                </>
-                : isIOS() ? <p style={{ fontSize: 13, color: "var(--tx2)", margin: 0 }}>Na iPhonu: <b>Sdílet</b> (čtvereček se šipkou) → <b>Přidat na plochu</b>. Safari přímé tlačítko nenabízí.</p>
-                : <p style={{ fontSize: 13, color: "var(--tx2)", margin: 0 }}>Instalaci nabídne menu prohlížeče (⋮ → „Přidat na plochu" / „Nainstalovat aplikaci"). Pokud už je nainstalovaná, tlačítko se tady nezobrazuje.</p>}
-            </Card>
-            {isMobile && MOBILE_GYRO_PARALLAX && <Card style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, fontFamily: "'Barlow Condensed',sans-serif" }}>Vzhled</div>
-              <Toggle checked={gyroOn} label="Parallax pozadí (gyroskop)" onChange={changeGyro} />
-              <p style={{ fontSize: 12, color: "var(--tx3)", margin: 0 }}>Experiment: pozadí se lehce hýbe podle náklonu telefonu. Pokud by aplikace ztratila plynulost, vypni to tady — projeví se okamžitě, bez restartu.</p>
-            </Card>}
-            <Card style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, fontFamily: "'Barlow Condensed',sans-serif" }}>Google Calendar</div>
-              {!GCAL_CLIENT_ID ? <p style={{ fontSize: 13, color: "var(--tx3)" }}>Google Calendar integrace není nakonfigurována (chybí VITE_GOOGLE_CLIENT_ID).</p> : <>
-                <Toggle checked={profile.gcalEnabled || false} onChange={toggleGcal} label="Synchronizovat rozvrh do Google Calendar" />
-                {profile.gcalEnabled && <>
-                  <p style={{ fontSize: 12, color: "var(--tx3)", marginBottom: 10 }}>Směny se zapíšou do vašeho primárního Google kalendáře jako události s tagem [ShiftFlow].</p>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <Btn warm onClick={gcalSyncWeek}>Sync týden</Btn>
-                    <Btn warm onClick={gcalSyncYear}>Sync celý rok</Btn>
-                    <Btn ghost onClick={gcalClearAll} style={{ color: "var(--red)", borderColor: "var(--red)" }}>Smazat vše z kalendáře</Btn>
-                    <Btn ghost onClick={gcalDisconnect}>Odpojit</Btn>
-                  </div>
-                </>}
-              </>}
-            </Card>
-            {isA && <Card style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, fontFamily: "'Barlow Condensed',sans-serif" }}>Pravidla směn</div>
-              <Input label="Minimum lidí v kanceláři" type="number" value={rules.officeMin ?? 4} onChange={e => setRules(r => ({ ...r, officeMin: +e.target.value }))} /><Input label="Minimum v kanceláři od 8:00" type="number" value={rules.min8 ?? 2} onChange={e => setRules(r => ({ ...r, min8: +e.target.value }))} /><Input label="Minimum na 10:00 (vč. HO)" type="number" value={rules.min10 ?? 2} onChange={e => setRules(r => ({ ...r, min10: +e.target.value }))} /><Input label="Max HO / den" type="number" value={rules.hoCapDay ?? 3} onChange={e => setRules(r => ({ ...r, hoCapDay: +e.target.value }))} /><Input label="Max HO / osoba / týden" type="number" value={rules.hoPerWeek ?? 2} onChange={e => setRules(r => ({ ...r, hoPerWeek: +e.target.value }))} /><Toggle checked={rules.cover8 !== false} onChange={v => setRules(r => ({ ...r, cover8: v }))} label="Vyžadovat minimum na 8:00" /><Toggle checked={rules.cover10 !== false} onChange={v => setRules(r => ({ ...r, cover10: v }))} label="Vyžadovat minimum na 10:00" /><div style={{ borderTop: "1px solid var(--brd)", marginTop: 12, paddingTop: 12 }}><Toggle checked={rules.allowAllDnD || false} onChange={v => setRules(r => ({ ...r, allowAllDnD: v }))} label="Povolit Drag & Drop pro všechny" /><p style={{ fontSize: 12, color: "var(--tx3)", marginTop: -8, marginBottom: 12 }}>Zaměstnanci budou moci přesouvat kohokoliv v rozvrhu.</p></div><div style={{ borderTop: "1px solid var(--brd)", marginTop: 16, paddingTop: 12 }}>
-                <div style={{ fontFamily: "'Barlow Condensed',sans-serif", fontSize: 15, letterSpacing: 1, textTransform: "uppercase", color: "var(--w)", marginBottom: 4 }}>Rotace dvojic</div>
-                <p style={{ fontSize: 12, color: "var(--tx3)", marginBottom: 10 }}>Dvojici se v daný den každý týden prohodí směna. Ruční úprava rozvrhu má vždy přednost — rotace se uplatní jen tam, kde nikdo nezasáhl.</p>
-                {(rules.rotations || []).map((rot, i) => {
-                  const nameOf = id => employees.find(e => e.id === id)?.name || "?";
-                  const swapped = rotIsSwapped(wk, rot.anchor);
-                  return <div key={i} style={{ border: "1px solid var(--brd)", padding: "9px 11px", marginBottom: 8 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
-                      <Badge small color="var(--acc2)">{rot.day}</Badge>
-                      <span style={{ fontSize: 13, color: "var(--w)", flex: 1 }}>{nameOf(rot.aId)} ⇄ {nameOf(rot.bId)} · {rot.shiftA} / {rot.shiftB}{rot.ho !== false ? " · HO" : ""}</span>
-                      <Btn small danger onClick={() => setRules(r => ({ ...r, rotations: (r.rotations || []).filter((_, j) => j !== i) }))}>Odebrat</Btn>
-                    </div>
-                    <div style={{ fontSize: 11.5, color: "var(--tx3)", fontFamily: "'IBM Plex Mono',monospace", lineHeight: 1.6 }}>
-                      {[0, 1, 2, 3].map(k => {
-                        const d = new Date(wk + "T00:00:00"); d.setDate(d.getDate() + k * 7);
-                        const key = localISO(getMon(d)); const sw = rotIsSwapped(key, rot.anchor);
-                        return <div key={k} style={{ color: k === 0 ? "var(--tx2)" : "var(--tx3)" }}>
-                          {k === 0 ? "tento týden" : fmtDate(localISO(d))}: {nameOf(rot.aId)} {sw ? rot.shiftB : rot.shiftA} · {nameOf(rot.bId)} {sw ? rot.shiftA : rot.shiftB}
-                        </div>;
-                      })}
-                      <div style={{ color: "var(--tx3)", marginTop: 3 }}>V den Nástupů se časy prohodí, ale bez HO.</div>
-                    </div>
-                  </div>;
-                })}
-                <RotationForm employees={employees} onAdd={rot => setRules(r => ({ ...r, rotations: [...(r.rotations || []), rot] }))} />
-              </div>
-              <Btn warm onClick={() => saveRules(rules)}>Uložit pravidla</Btn>
-            </Card>}
-            {isA && <Card><div style={{ display: "flex", gap: 8 }}><Btn danger onClick={resetWeek}>Reset týden</Btn><Btn ghost onClick={exportCSV}>CSV</Btn></div></Card>}
-          </div>}
+          {view === "settings" && <SettingsView isA={isA} profile={profile} employees={employees} wk={wk} rules={rules} nahledInfo={nahledInfo}
+            installState={isStandalone() ? "standalone" : installable ? "installable" : isIOS() ? "ios" : "other"}
+            showGyro={isMobile && MOBILE_GYRO_PARALLAX} gyroOn={gyroOn} gcalConfigured={!!GCAL_CLIENT_ID}
+            onOpenModal={name => setModal(name)} onInstall={installApp} onGyroChange={changeGyro}
+            onGcalToggle={toggleGcal} onGcalSyncWeek={gcalSyncWeek} onGcalSyncYear={gcalSyncYear} onGcalClear={gcalClearAll}
+            onGcalDisconnect={gcalDisconnect} onSaveRules={saveRules} onResetWeek={resetWeek} onExportCSV={exportCSV} />}
         </div>
       </main>
     </div>
