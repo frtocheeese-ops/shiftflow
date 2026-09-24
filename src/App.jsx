@@ -1070,6 +1070,50 @@ export default function App() {
     await createProposal(alt, grant ? "žádost o home office" : "žádost o zrušení home office", { [profile.id]: true });
   };
 
+  // ═══ NASTAVENÍ: akce volané z obrazovky Nastavení (obsah beze změny, jen pojmenováno) ═══
+  const installApp = async () => { const p = deferredInstall; if (!p) return; p.prompt(); const { outcome } = await p.userChoice; deferredInstall = null; setInstallable(false); notify(outcome === "accepted" ? "Aplikace se instaluje ✓" : "Instalace zrušena"); };
+  const changeGyro = async v => {
+    if (v && typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") {
+      try { if (await DeviceOrientationEvent.requestPermission() !== "granted") { notify("Přístup ke gyroskopu zamítnut"); return; } }
+      catch { notify("Gyroskop není dostupný"); return; }
+    }
+    localStorage.setItem("sf_gyro", v ? "1" : "0"); setGyroOn(v); window.dispatchEvent(new Event("sf-gyro"));
+  };
+  const toggleGcal = async v => {
+    if (v && !getGcalToken()) {
+      const t = await gcalAuth();
+      if (!t) { notify("Autorizace selhala"); return; }
+    }
+    await updateDoc(doc(db, "users", profile.id), { gcalEnabled: v });
+    setProfile(p => ({ ...p, gcalEnabled: v }));
+    notify(v ? "Google Calendar zapnut" : "Google Calendar vypnut");
+  };
+  const gcalSyncWeek = async () => {
+    notify("Synchronizuji aktuální týden...");
+    const res = await syncWeekToGCal(profile.id, wd, cs, employees, absences, wk, rules.rotations, intake, intakeAllow);
+    notify(res.msg);
+  };
+  const gcalSyncYear = async () => {
+    if (!confirm("Synchronizovat příštích 52 týdnů? Může trvat 1-3 minuty.")) return;
+    notify("Spouštím sync celého roku...");
+    const res = await syncRangeToGCal(profile.id, employees, db, 52, msg => notify(msg), rules.rotations);
+    notify(res.msg);
+  };
+  const gcalClearAll = async () => {
+    if (!confirm("Smazat VŠECHNY události [ShiftFlow] z tvého Google kalendáře?\n\nProjde 2 roky zpět a 3 roky dopředu. Rozvrh v aplikaci zůstane nedotčený — smažou se jen události v kalendáři.")) return;
+    notify("Mažu události z kalendáře…");
+    const now = new Date();
+    const from = new Date(now.getFullYear() - 2, 0, 1).toISOString();
+    const to = new Date(now.getFullYear() + 3, 0, 1).toISOString();
+    try {
+      const n = await gcalSerial(() => clearShiftFlowEvents(from, to));
+      notify(n > 0 ? `Smazáno ${n} událostí z kalendáře` : "Žádné události ShiftFlow nenalezeny");
+    } catch { notify("Mazání selhalo — zkus to znovu"); }
+  };
+  const gcalDisconnect = () => { localStorage.removeItem("sf_gcal_token"); notify("Token odstraněn — při dalším sync budete znovu autorizovat"); };
+  const saveRules = async newRules => { await setDoc(doc(db, "rules", "global"), newRules); notify("Uloženo"); };
+  const resetWeek = async () => { await deleteDoc(doc(db, "schedules", wk)); notify("Reset"); };
+
   // ═══ TÝM: ruční úprava počtu vyřešených problémů (nikdy pod nulu) ═══
   const adjustFixCount = (emp, delta) => {
     if (delta < 0 && (emp.fixCount || 0) <= 0) return;
@@ -1564,7 +1608,7 @@ export default function App() {
               <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, fontFamily: "'Barlow Condensed',sans-serif" }}>Aplikace</div>
               {isStandalone() ? <p style={{ fontSize: 13, color: "var(--grn)", margin: 0 }}>✓ Běžíš v nainstalované aplikaci.</p>
                 : installable ? <>
-                  <Btn warm onClick={async () => { const p = deferredInstall; if (!p) return; p.prompt(); const { outcome } = await p.userChoice; deferredInstall = null; setInstallable(false); notify(outcome === "accepted" ? "Aplikace se instaluje ✓" : "Instalace zrušena"); }}>📲 Nainstalovat aplikaci</Btn>
+                  <Btn warm onClick={installApp}>📲 Nainstalovat aplikaci</Btn>
                   <p style={{ fontSize: 12, color: "var(--tx3)", margin: "10px 0 0" }}>Přidá ShiftFlow na plochu — spouští se pak na celou obrazovku jako běžná aplikace, bez lišty prohlížeče.</p>
                 </>
                 : isIOS() ? <p style={{ fontSize: 13, color: "var(--tx2)", margin: 0 }}>Na iPhonu: <b>Sdílet</b> (čtvereček se šipkou) → <b>Přidat na plochu</b>. Safari přímé tlačítko nenabízí.</p>
@@ -1572,53 +1616,20 @@ export default function App() {
             </Card>
             {isMobile && MOBILE_GYRO_PARALLAX && <Card style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, fontFamily: "'Barlow Condensed',sans-serif" }}>Vzhled</div>
-              <Toggle checked={gyroOn} label="Parallax pozadí (gyroskop)" onChange={async v => {
-                if (v && typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") {
-                  try { if (await DeviceOrientationEvent.requestPermission() !== "granted") { notify("Přístup ke gyroskopu zamítnut"); return; } }
-                  catch { notify("Gyroskop není dostupný"); return; }
-                }
-                localStorage.setItem("sf_gyro", v ? "1" : "0"); setGyroOn(v); window.dispatchEvent(new Event("sf-gyro"));
-              }} />
+              <Toggle checked={gyroOn} label="Parallax pozadí (gyroskop)" onChange={changeGyro} />
               <p style={{ fontSize: 12, color: "var(--tx3)", margin: 0 }}>Experiment: pozadí se lehce hýbe podle náklonu telefonu. Pokud by aplikace ztratila plynulost, vypni to tady — projeví se okamžitě, bez restartu.</p>
             </Card>}
             <Card style={{ marginBottom: 16 }}>
               <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, fontFamily: "'Barlow Condensed',sans-serif" }}>Google Calendar</div>
               {!GCAL_CLIENT_ID ? <p style={{ fontSize: 13, color: "var(--tx3)" }}>Google Calendar integrace není nakonfigurována (chybí VITE_GOOGLE_CLIENT_ID).</p> : <>
-                <Toggle checked={profile.gcalEnabled || false} onChange={async v => {
-                  if (v && !getGcalToken()) {
-                    const t = await gcalAuth();
-                    if (!t) { notify("Autorizace selhala"); return; }
-                  }
-                  await updateDoc(doc(db, "users", profile.id), { gcalEnabled: v });
-                  setProfile(p => ({ ...p, gcalEnabled: v }));
-                  notify(v ? "Google Calendar zapnut" : "Google Calendar vypnut");
-                }} label="Synchronizovat rozvrh do Google Calendar" />
+                <Toggle checked={profile.gcalEnabled || false} onChange={toggleGcal} label="Synchronizovat rozvrh do Google Calendar" />
                 {profile.gcalEnabled && <>
                   <p style={{ fontSize: 12, color: "var(--tx3)", marginBottom: 10 }}>Směny se zapíšou do vašeho primárního Google kalendáře jako události s tagem [ShiftFlow].</p>
                   <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                    <Btn warm onClick={async () => {
-                      notify("Synchronizuji aktuální týden...");
-                      const res = await syncWeekToGCal(profile.id, wd, cs, employees, absences, wk, rules.rotations, intake, intakeAllow);
-                      notify(res.msg);
-                    }}>Sync týden</Btn>
-                    <Btn warm onClick={async () => {
-                      if (!confirm("Synchronizovat příštích 52 týdnů? Může trvat 1-3 minuty.")) return;
-                      notify("Spouštím sync celého roku...");
-                      const res = await syncRangeToGCal(profile.id, employees, db, 52, msg => notify(msg), rules.rotations);
-                      notify(res.msg);
-                    }}>Sync celý rok</Btn>
-                    <Btn ghost onClick={async () => {
-                      if (!confirm("Smazat VŠECHNY události [ShiftFlow] z tvého Google kalendáře?\n\nProjde 2 roky zpět a 3 roky dopředu. Rozvrh v aplikaci zůstane nedotčený — smažou se jen události v kalendáři.")) return;
-                      notify("Mažu události z kalendáře…");
-                      const now = new Date();
-                      const from = new Date(now.getFullYear() - 2, 0, 1).toISOString();
-                      const to = new Date(now.getFullYear() + 3, 0, 1).toISOString();
-                      try {
-                        const n = await gcalSerial(() => clearShiftFlowEvents(from, to));
-                        notify(n > 0 ? `Smazáno ${n} událostí z kalendáře` : "Žádné události ShiftFlow nenalezeny");
-                      } catch { notify("Mazání selhalo — zkus to znovu"); }
-                    }} style={{ color: "var(--red)", borderColor: "var(--red)" }}>Smazat vše z kalendáře</Btn>
-                    <Btn ghost onClick={() => { localStorage.removeItem("sf_gcal_token"); notify("Token odstraněn — při dalším sync budete znovu autorizovat"); }}>Odpojit</Btn>
+                    <Btn warm onClick={gcalSyncWeek}>Sync týden</Btn>
+                    <Btn warm onClick={gcalSyncYear}>Sync celý rok</Btn>
+                    <Btn ghost onClick={gcalClearAll} style={{ color: "var(--red)", borderColor: "var(--red)" }}>Smazat vše z kalendáře</Btn>
+                    <Btn ghost onClick={gcalDisconnect}>Odpojit</Btn>
                   </div>
                 </>}
               </>}
@@ -1651,9 +1662,9 @@ export default function App() {
                 })}
                 <RotationForm employees={employees} onAdd={rot => setRules(r => ({ ...r, rotations: [...(r.rotations || []), rot] }))} />
               </div>
-              <Btn warm onClick={async () => { await setDoc(doc(db, "rules", "global"), rules); notify("Uloženo"); }}>Uložit pravidla</Btn>
+              <Btn warm onClick={() => saveRules(rules)}>Uložit pravidla</Btn>
             </Card>}
-            {isA && <Card><div style={{ display: "flex", gap: 8 }}><Btn danger onClick={async () => { await deleteDoc(doc(db, "schedules", wk)); notify("Reset"); }}>Reset týden</Btn><Btn ghost onClick={exportCSV}>CSV</Btn></div></Card>}
+            {isA && <Card><div style={{ display: "flex", gap: 8 }}><Btn danger onClick={resetWeek}>Reset týden</Btn><Btn ghost onClick={exportCSV}>CSV</Btn></div></Card>}
           </div>}
         </div>
       </main>
