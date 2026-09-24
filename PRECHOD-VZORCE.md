@@ -662,3 +662,22 @@ protože jsou jen ke čtení — nejbezpečnější pro zavedení vzoru.
 
 `npm test` = 29 testů (26 logika + 3 vykreslení), `npm run lint` nově přes celý `src/`
 (automaticky pokryje i budoucí obrazovky). Vzor pro další obrazovky popsán v ARCHITECTURE.md.
+
+---
+
+## Aktualizace v31 — rozdělení UI: Log, Výměny, Stálý rozvrh
+
+Tři další obrazovky podle vzoru ze StatsView, každá jako samostatný ověřený commit:
+- **`LogView`** — čistý přesun.
+- **`SwapsView`** — inline zápisy do Firestore (zrušení vlastní žádosti, smazání adminem)
+  vytaženy do `App.jsx` jako `cancelSwap` / `deleteSwap` s identickým obsahem;
+  přijetí a nová žádost předány jako `onAccept` / `onNewRequest`.
+- **`DefaultsView`** + `DefEditor` přesunut do obrazovky; přímý `updateDoc` na
+  `users.defaultSchedule` vytažen do `App.jsx` jako `saveDefaultSchedule`.
+  Vedlejší oprava: při chybě uložení dřív tlačítko zůstalo navždy v režimu „ukládám"
+  (výjimka nebyla ošetřena). Nyní se chyba ohlásí a editační okno zůstane otevřené.
+  Úspěšné uložení nově potvrdí hláška „Stálý rozvrh uložen".
+
+Žádná z oddělených obrazovek neobsahuje zápis do databáze (ověřeno grepem).
+Testy vykreslení pro všechny role (admin / žadatel / jiný člen) a prázdná data:
+celkem 33 testů. `App.jsx`: 1909 → 1889 řádků.

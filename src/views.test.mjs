@@ -64,4 +64,44 @@ test("StatsView: vykreslí se i bez dat (nový tým, prázdná férovost)", asyn
   assert.match(html, /Férovost/);
 });
 
+
+test("LogView: vykreslí záznamy i prázdný log", async () => {
+  const LogView = await loadView("LogView");
+  const html = await render(LogView, { logs: [{ id: "1", time: "2026-09-18T10:00:00Z", msg: "Vyřešeno: Andy 09:00 → 08:00" }] });
+  assert.match(html, /Vyřešeno: Andy/);
+  assert.match(await render(LogView, { logs: [] }), /Log/);
+});
+
+const swapEmps = { a: { id: "a", name: "Jiří Slavíček" }, b: { id: "b", name: "Andy" } };
+const swaps = [{ id: "s1", rid: "a", dateISO: "2026-09-22", sh: "08:00", comment: "Mám doktora" }];
+const swapProps = over => ({ isA: false, profile: { id: "b" }, swaps, ge: id => swapEmps[id], onAccept() {}, onCancel() {}, onDelete() {}, onNewRequest() {}, ...over });
+
+test("SwapsView: jiný člen vidí Přijmout, žadatel Tvoje + Zrušit, admin smazání", async () => {
+  const SwapsView = await loadView("SwapsView");
+  const jiny = await render(SwapsView, swapProps({}));
+  assert.match(jiny, /Přijmout/); assert.match(jiny, /Mám doktora/); assert.match(jiny, /Nová žádost/);
+  const zadatel = await render(SwapsView, swapProps({ profile: { id: "a" } }));
+  assert.match(zadatel, /Tvoje/); assert.match(zadatel, /Zrušit/); assert.doesNotMatch(zadatel, /Přijmout/);
+  const admin = await render(SwapsView, swapProps({ isA: true, profile: { id: "adm" } }));
+  assert.doesNotMatch(admin, /Přijmout/); assert.doesNotMatch(admin, /Nová žádost/); assert.match(admin, /✕/);
+});
+
+test("SwapsView: prázdný seznam", async () => {
+  const SwapsView = await loadView("SwapsView");
+  assert.match(await render(SwapsView, swapProps({ swaps: [] })), /Žádné žádosti/);
+});
+
+test("DefaultsView: tabulka stálého rozvrhu, HO a prázdný den", async () => {
+  const DefaultsView = await loadView("DefaultsView");
+  const emps = [
+    { id: "a", name: "Jiří Slavíček", role: "employee", setupDone: true, defaultSchedule: { Po: "08:00", "Út": "08:00" } },
+    { id: "b", name: "Andy", role: "employee", setupDone: true, defaultSchedule: { Po: "10:00", Po_ho: true } },
+    { id: "adm", name: "Admin", role: "admin" },
+  ];
+  const html = await render(DefaultsView, { employees: emps, onSaveDefault: async () => {}, onApplyPreset() {} });
+  assert.match(html, /Stálý rozvrh/); assert.match(html, /Předvyplnit rozvrh/);
+  assert.match(html, /Jiří Slavíček/); assert.match(html, />HO</); assert.match(html, />08:00</);
+  assert.doesNotMatch(html, />Admin</);            // admin v tabulce není
+});
+
 test.after(() => rmSync(OUT, { recursive: true, force: true }));
