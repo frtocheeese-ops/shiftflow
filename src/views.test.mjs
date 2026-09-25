@@ -151,4 +151,49 @@ test("SettingsView: stav instalace a nenakonfigurovaný kalendář", async () =>
   assert.match(await render(SettingsView, setProps({ gcalConfigured: false })), /není nakonfigurována/);
 });
 
+const pEmps = { loch: { id: "loch", name: "Denis Lochman" }, andy: { id: "andy", name: "Andy" }, vita: { id: "vita", name: "Víťa" } };
+const prob = { weekKey: "2026-09-21", key: "08:00:Út", dLabel: "út 22. 9.", title: "Út: potřeba 2 v kanceláři od 8:00",
+  alts: [{ kind: "shift", empId: "andy", day: "Út", fromShift: "09:00", toShift: "08:00" }, { kind: "shift", empId: "loch", day: "Út", fromShift: "10:00", toShift: "08:00" }] };
+const pProps = over => ({ isA: false, profile: { id: "vita" }, yearProblems: [prob], visibleProps: [], myPendingProps: [], ge: id => pEmps[id], onApplyFix() {}, onConsent() {}, onReject() {}, ...over });
+const n = (html, re) => (html.match(re) || []).length;
+
+test("ProposalsView: admin vidí všechny možnosti s Provést úpravu a plakát", async () => {
+  const V = await loadView("ProposalsView");
+  const html = await render(V, pProps({ isA: true, profile: { id: "adm" } }));
+  assert.equal(n(html, /Provést úpravu/g), 2); assert.match(html, /TIP/); assert.match(html, /Můžeš pomoct/);
+});
+
+test("ProposalsView: dotčený člen vidí jen svoji možnost", async () => {
+  const V = await loadView("ProposalsView");
+  const html = await render(V, pProps({ profile: { id: "andy" } }));
+  assert.equal(n(html, /Provést úpravu/g), 1); assert.match(html, /Andy/); assert.doesNotMatch(html, /Denis Lochman/);
+  assert.match(html, /Můžeš pomoct/);
+});
+
+test("ProposalsView: nezúčastněný člen nic neprovádí a plakát nevidí", async () => {
+  const V = await loadView("ProposalsView");
+  const html = await render(V, pProps({}));
+  assert.equal(n(html, /Provést úpravu/g), 0); assert.match(html, /vyřeší někdo jiný/); assert.doesNotMatch(html, /Můžeš pomoct/);
+});
+
+test("ProposalsView: bez problémů a návrhů", async () => {
+  const V = await loadView("ProposalsView");
+  const html = await render(V, pProps({ yearProblems: [] }));
+  assert.match(html, /Žádné otevřené problémy/); assert.match(html, /Žádné čekající návrhy/); assert.doesNotMatch(html, /Můžeš pomoct/);
+});
+
+test("ProposalsView: čekající návrh — dotčený souhlasí, stav souhlasů", async () => {
+  const V = await loadView("ProposalsView");
+  const p = { id: "p1", label: "Út: Andy 09:00 → 08:00", why: "krytí", week: "2026-09-21", affected: ["andy"], consents: { admin: true } };
+  const html = await render(V, pProps({ yearProblems: [], profile: { id: "andy" }, visibleProps: [p], myPendingProps: [p] }));
+  assert.match(html, /Souhlasím/); assert.match(html, /Zamítnout/); assert.match(html, /✓ Admin/); assert.match(html, /Důvod: krytí/);
+});
+
+test("ProposalsView: víc než 30 problémů — zobrazí 30 a počet zbývajících", async () => {
+  const V = await loadView("ProposalsView");
+  const many = Array.from({ length: 33 }, (_, i) => ({ ...prob, key: "k" + i }));
+  const html = await render(V, pProps({ isA: true, profile: { id: "adm" }, yearProblems: many }));
+  assert.match(html, /a dalších 3 později/);
+});
+
 test.after(() => rmSync(OUT, { recursive: true, force: true }));
