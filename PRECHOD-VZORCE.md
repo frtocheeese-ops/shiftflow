@@ -704,3 +704,16 @@ Dvě opravy nalezené během přesunu:
 
 Testy vykreslení Nastavení: admin / člen / 4 stavy instalace / nenakonfigurovaný kalendář.
 Celkem 37 testů. `App.jsx`: 1787 ř. Interakce (psaní do polí, tlačítko Uložit) test vykreslení neověří — nutno ověřit ručně po nasazení.
+
+---
+
+## Aktualizace v33 — rozdělení UI: Návrhy
+
+- **`ProposalsView`** — obrazovka nemá žádné přímé zápisy; volá `applyProblemFix`
+  (transakce s ochranou proti dvojímu řešení), `consentProposal`, `rejectProposal`.
+- Lint (`no-undef`) při přesunu zachytil proměnnou `visibleProps` definovanou mimo blok
+  obrazovky — bez jejího předání by Návrhy za běhu spadly. Předává se jako prop.
+- Kosmetika: `pr.alts.some(a => true)` → `pr.alts.length > 0` (totožné chování).
+- 6 testů vykreslení podle rolí: admin vidí všechny možnosti, dotčený člen jen svoji,
+  nezúčastněný žádnou (a nevidí plakát „Můžeš pomoct"), prázdný stav, čekající návrh se
+  stavem souhlasů, strop 30 problémů. Celkem 43 testů.
