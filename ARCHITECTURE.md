@@ -7,9 +7,9 @@
 | `src/schedule.js` | **Čistá logika rozvrhu**: konstanty (dny, směny, typy absencí, svátky), datumové pomocníky, stálý rozvrh (`PRESET`), osobní pravidla, rotace, skládání týdne (`withDefaults`), kontrola pravidel (`analyzeWeek`), návrhy řešení (`applyAlt`) | žádné (ani React, ani Firebase) |
 | `src/schedule.test.mjs` | Testy logiky — každý odpovídá reálné chybě z historie projektu | jen `node:test` |
 | `src/ui.jsx` | Sdílené UI prvky: `Btn`, `Card`, `Modal`, `Input`, `Sel`, `Toggle`, `Badge`, `RankBadge`, `HalfTag` | `schedule.js` |
-| `src/views/*.jsx` | Jednotlivé obrazovky: `StatsView`, `LogView`, `SwapsView`, `DefaultsView`, `PeopleView`, `SettingsView` | `ui.jsx`, `schedule.js` |
+| `src/views/*.jsx` | Všechny obrazovky: `ScheduleView` (+ `ShiftCard`), `ProposalsView`, `SwapsView`, `PeopleView`, `StatsView`, `LogView`, `DefaultsView`, `SettingsView` | `ui.jsx`, `schedule.js` |
 | `src/views.test.mjs` | Test vykreslení obrazovek — chytá pády za běhu | `esbuild`, `react-dom/server` |
-| `src/App.jsx` | Stav, přihlášení, zápisy do Firestore, Google Kalendář, zbývající obrazovky | vše výše |
+| `src/App.jsx` | Stav, přihlášení, listenery, **všechny zápisy do Firestore**, Google Kalendář, modální okna, navigace | vše výše |
 | `scripts/nahled.mjs` + `.github/workflows/nahled.yml` | Páteční snímek rozvrhu na `/nahled/` | Puppeteer |
 
 **Kam patří nová logika:** cokoli, co počítá nebo odvozuje rozvrh a nepotřebuje React ani databázi, patří do `schedule.js` — a k tomu test do `schedule.test.mjs`. `App.jsx` má logiku jen *volat*, ne ji mít vlastní kopii.
@@ -24,8 +24,12 @@
 3. **Test vykreslení do `views.test.mjs`** — pro každou roli (admin / člen) a pro prázdná data.
 4. **Po každém kroku commit** a `npm run check`.
 
-Hotovo: Statistiky, Log, Výměny, Stálý rozvrh, Tým, Nastavení. Zbývá: Návrhy →
-Rozvrh (největší, nejvíc zápisů — naposled).
+**Všechny obrazovky jsou oddělené.** Pravidlo platí dál: nová obrazovka = nový soubor ve
+`src/views/`, data a akce jako props, žádné zápisy do databáze uvnitř.
+
+**Komponenty nedefinovat uvnitř jiných komponent.** `ShiftCard` byla dřív definovaná
+uvnitř `App` — React ji pak při každém překreslení bral jako novou a všechny karty
+zahazoval a vytvářel znovu. Každá komponenta patří na nejvyšší úroveň souboru.
 
 **Pozor na proměnné modulu:** handler, který přiřazuje do proměnné `let` z `App.jsx`
 (např. `deferredInstall = null`), nejde přesunout do jiného souboru — import je jen
@@ -80,6 +84,8 @@ npm run build      # (s VITE_FIREBASE_* proměnnými)
 před deklarací" vložená do obrazovky prošla buildem, ale test ji chytil. Lint hlídá zejména:
 - **použití proměnné před její deklarací** — shodilo celou appku na modrou obrazovku (v27),
   přitom build prošel;
-- **nedefinované proměnné** — rozbíjelo potvrzení „Zapomenuté heslo" (v29).
+- **nedefinované proměnné** — rozbíjelo potvrzení „Zapomenuté heslo" (v29);
+- **nedefinované komponenty v JSX** (`react/jsx-no-undef`) — `no-undef` je nevidí; bez
+  tohoto pravidla by týdenní pohled rozvrhu spadl na chybějící `RankBadge` a `HalfTag` (v34).
 
 Build tyhle chyby nechytá — kód je syntakticky v pořádku, padá až za běhu.

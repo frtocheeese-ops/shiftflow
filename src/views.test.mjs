@@ -151,4 +151,138 @@ test("SettingsView: stav instalace a nenakonfigurovaný kalendář", async () =>
   assert.match(await render(SettingsView, setProps({ gcalConfigured: false })), /není nakonfigurována/);
 });
 
+const pEmps = { loch: { id: "loch", name: "Denis Lochman" }, andy: { id: "andy", name: "Andy" }, vita: { id: "vita", name: "Víťa" } };
+const prob = { weekKey: "2026-09-21", key: "08:00:Út", dLabel: "út 22. 9.", title: "Út: potřeba 2 v kanceláři od 8:00",
+  alts: [{ kind: "shift", empId: "andy", day: "Út", fromShift: "09:00", toShift: "08:00" }, { kind: "shift", empId: "loch", day: "Út", fromShift: "10:00", toShift: "08:00" }] };
+const pProps = over => ({ isA: false, profile: { id: "vita" }, yearProblems: [prob], visibleProps: [], myPendingProps: [], ge: id => pEmps[id], onApplyFix() {}, onConsent() {}, onReject() {}, ...over });
+const n = (html, re) => (html.match(re) || []).length;
+
+test("ProposalsView: admin vidí všechny možnosti s Provést úpravu a plakát", async () => {
+  const V = await loadView("ProposalsView");
+  const html = await render(V, pProps({ isA: true, profile: { id: "adm" } }));
+  assert.equal(n(html, /Provést úpravu/g), 2); assert.match(html, /TIP/); assert.match(html, /Můžeš pomoct/);
+});
+
+test("ProposalsView: dotčený člen vidí jen svoji možnost", async () => {
+  const V = await loadView("ProposalsView");
+  const html = await render(V, pProps({ profile: { id: "andy" } }));
+  assert.equal(n(html, /Provést úpravu/g), 1); assert.match(html, /Andy/); assert.doesNotMatch(html, /Denis Lochman/);
+  assert.match(html, /Můžeš pomoct/);
+});
+
+test("ProposalsView: nezúčastněný člen nic neprovádí a plakát nevidí", async () => {
+  const V = await loadView("ProposalsView");
+  const html = await render(V, pProps({}));
+  assert.equal(n(html, /Provést úpravu/g), 0); assert.match(html, /vyřeší někdo jiný/); assert.doesNotMatch(html, /Můžeš pomoct/);
+});
+
+test("ProposalsView: bez problémů a návrhů", async () => {
+  const V = await loadView("ProposalsView");
+  const html = await render(V, pProps({ yearProblems: [] }));
+  assert.match(html, /Žádné otevřené problémy/); assert.match(html, /Žádné čekající návrhy/); assert.doesNotMatch(html, /Můžeš pomoct/);
+});
+
+test("ProposalsView: čekající návrh — dotčený souhlasí, stav souhlasů", async () => {
+  const V = await loadView("ProposalsView");
+  const p = { id: "p1", label: "Út: Andy 09:00 → 08:00", why: "krytí", week: "2026-09-21", affected: ["andy"], consents: { admin: true } };
+  const html = await render(V, pProps({ yearProblems: [], profile: { id: "andy" }, visibleProps: [p], myPendingProps: [p] }));
+  assert.match(html, /Souhlasím/); assert.match(html, /Zamítnout/); assert.match(html, /✓ Admin/); assert.match(html, /Důvod: krytí/);
+});
+
+test("ProposalsView: víc než 30 problémů — zobrazí 30 a počet zbývajících", async () => {
+  const V = await loadView("ProposalsView");
+  const many = Array.from({ length: 33 }, (_, i) => ({ ...prob, key: "k" + i }));
+  const html = await render(V, pProps({ isA: true, profile: { id: "adm" }, yearProblems: many }));
+  assert.match(html, /a dalších 3 později/);
+});
+
+const scEmps = { loch: { id: "loch", name: "Denis Lochman", fixCount: 2 }, andy: { id: "andy", name: "Andy" } };
+const scProps = over => ({ day: "Út", shift: "08:00", ge: id => scEmps[id], notes: {}, meId: "andy", isA: false, canDrag: () => false,
+  onDrop() {}, onAdminClick() {}, onMyShift() {}, onDirectSwap() {}, onNote() {},
+  entries: [{ empId: "loch", ho: true }, { empId: "andy", halfAbs: "half_vacation", halfPart: "second" }], ...over });
+
+test("ShiftCard: lidé ve směně, HO, půlden a poznámka", async () => {
+  const V = await loadView("ShiftCard");
+  const html = await render(V, scProps({ notes: { "loch__Út__0800": "přijdu o 10 min později" } }));
+  assert.match(html, /Denis Lochman/); assert.match(html, /Andy/);
+  assert.match(html, />HO</);                                 // Lochman je na HO
+  assert.match(html, /odpoledne|odp\./);                      // Andy má půlden odpoledne
+  assert.match(html, /Zobrazit poznámku/);
+  assert.match(html, /Požádat Denis Lochman o výměnu/);         // člen vidí výměnu u kolegy, ne u sebe
+  assert.doesNotMatch(html, /Požádat Andy o výměnu/);
+});
+
+test("ShiftCard: prázdná směna", async () => {
+  const V = await loadView("ShiftCard");
+  assert.match(await render(V, scProps({ entries: [] })), />—</);
+});
+
+// Rozvrh s realistickými daty: celý tým ze stálého rozvrhu přes skutečné withDefaults + analyzeWeek
+async function scheduleFixture(over = {}) {
+  const S = await import("./schedule.js");
+  const team = Object.keys(S.PRESET).map((n, i) => ({ id: "u" + i, name: n, role: "employee", setupDone: true, defaultSchedule: S.PRESET[n] }));
+  const byId = Object.fromEntries(team.map(e => [e.id, e]));
+  const absences = over.absences || {};
+  const wk = "2026-09-21";
+  const cs = S.withDefaults(null, absences, team, wk, [], {}, {});
+  const res = S.analyzeWeek(cs, absences, team, {}, {}, {});
+  const wd = [0, 1, 2, 3, 4].map(i => { const d = new Date(wk + "T00:00:00"); d.setDate(d.getDate() + i); return S.localISO(d); });
+  const getDayAbs = day => Object.entries(absences).filter(([k]) => k.endsWith("__" + day)).map(([k, type]) => ({ empId: k.split("__")[0], type }));
+  const noop = () => {};
+  return {
+    analysis: { violations: res.violations, problems: res.problems, weeklyHO: res.weeklyHO }, cs, cw: new Date(wk + "T00:00:00"),
+    dayHol: null, intake: {}, intakeAllow: {}, isA: false, isMobile: false, notes: {}, profile: { id: "u1" }, rules: {},
+    schedMeta: { at: "2026-09-19T09:12:00Z", by: "u0" }, schedView: "day", selDay: 1, slideDir: "right", wd, wh: [null, null, null, null, null], wo: 0,
+    allowIntakeException: noop, canDrag: () => false, exportCSV: noop, ge: id => byId[id], getDayAbs,
+    getEntries: (day, sh) => cs[day]?.[sh] || [], goDay: noop, handleDrop: noop, removeAbs: noop, setModal: noop, setNoteView: noop,
+    setSchedView: noop, setSelCell: noop, setShowCompare: noop, setShowPerma: noop, setWo: noop, switchV: noop, toggleIntake: noop,
+    ...over, team,
+  };
+}
+
+test("ScheduleView: denní pohled — tři směny, lidé ze stálého rozvrhu, aktualizace", async () => {
+  const V = await loadView("ScheduleView");
+  const p = await scheduleFixture();
+  const html = await render(V, p);
+  for (const sh of ["08:00", "09:00", "10:00"]) assert.match(html, new RegExp(sh));
+  const inUt = Object.values(p.cs["Út"]).flat().map(e => p.ge(e.empId).name);
+  assert.ok(inUt.length >= 4);
+  for (const n of inUt) assert.match(html, new RegExp(n));   // všichni z úterý jsou vidět
+});
+
+test("ScheduleView: týdenní pohled — všech pět dní", async () => {
+  const V = await loadView("ScheduleView");
+  const html = await render(V, await scheduleFixture({ schedView: "week" }));
+  for (const d of ["Pondělí", "Úterý", "Středa", "Čtvrtek", "Pátek"]) assert.match(html, new RegExp(d));
+});
+
+test("ScheduleView: půlden se vykreslí v denním i týdenním pohledu", async () => {
+  const V = await loadView("ScheduleView");
+  const S = await import("./schedule.js");
+  const andy = "u" + Object.keys(S.PRESET).indexOf("Andy");
+  const p = await scheduleFixture({ absences: { [`${andy}__Út`]: "half_vacation" } });
+  const e = Object.values(p.cs["Út"]).flat().find(x => x.empId === andy);
+  assert.ok(e?.halfAbs, "Andy má mít v úterý půlden a zůstat ve směně");
+  for (const schedView of ["day", "week"]) {
+    const html = await render(V, { ...p, schedView });
+    assert.match(html, /Andy/); assert.match(html, /dopoledne|dop\./, `půlden chybí v pohledu ${schedView}`);
+  }
+});
+
+test("ScheduleView: dovolená vyrobí porušení a člověk je mezi nepřítomnými", async () => {
+  const V = await loadView("ScheduleView");
+  const S = await import("./schedule.js");
+  const slav = Object.keys(S.PRESET).indexOf("Slavíček");
+  const p = await scheduleFixture({ absences: { [`u${slav}__Út`]: "vacation" } });
+  assert.ok(p.analysis.violations.length > 0, "fixture má mít porušení");
+  const html = await render(V, p);
+  assert.match(html, /Slavíček/); assert.match(html, /Dovolená/);
+});
+
+test("ScheduleView: admin vidí přepínač Nástupů, člen ne", async () => {
+  const V = await loadView("ScheduleView");
+  assert.match(await render(V, await scheduleFixture({ isA: true })), /Označit jako Nástupy/);
+  assert.doesNotMatch(await render(V, await scheduleFixture({ isA: false })), /Označit jako Nástupy/);
+});
+
 test.after(() => rmSync(OUT, { recursive: true, force: true }));

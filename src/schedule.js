@@ -341,3 +341,7 @@ export function computeFairness(allSchedules, employees, rotations, start = FAIR
 
 // „2026-09-22" → „22.9."
 export function fmtDate(iso) { const p = iso.split('-'); return `${parseInt(p[2])}.${parseInt(p[1])}.`; }
+
+// Index dnešního pracovního dne (Po=0 … Pá=4), o víkendu -1; isTd = je to dnešek v aktuálním týdnu?
+export const todayIdx = (() => { const d = new Date().getDay(); return d >= 1 && d <= 5 ? d - 1 : -1; })();
+export const isTd = (i, wo) => wo === 0 && todayIdx >= 0 && i === todayIdx;
