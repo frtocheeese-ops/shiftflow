@@ -717,3 +717,33 @@ Celkem 37 testů. `App.jsx`: 1787 ř. Interakce (psaní do polí, tlačítko Ulo
 - 6 testů vykreslení podle rolí: admin vidí všechny možnosti, dotčený člen jen svoji,
   nezúčastněný žádnou (a nevidí plakát „Můžeš pomoct"), prázdný stav, čekající návrh se
   stavem souhlasů, strop 30 problémů. Celkem 43 testů.
+
+---
+
+## Aktualizace v34 — rozdělení UI dokončeno: Rozvrh
+
+Poslední a největší obrazovka, ve dvou krocích:
+
+**R1 — `ShiftCard` jako samostatná komponenta.** Byla definovaná *uvnitř* komponenty
+`App`, takže při každém překreslení vznikala jako „nová" komponenta a React všechny
+karty ve směnách zahodil a vytvořil znovu (zbytečná práce, ztráta stavu prvků). Nyní
+je samostatná v `src/views/ShiftCard.jsx`.
+
+**R2 — `ScheduleView`.** Závislosti (39 proměnných) nevypisovány ručně — vlastní
+analýza minula proměnné deklarované víc na jednom řádku. Místo toho přesun a výčet
+chybějících proměnných z lintu. Data i akce předány **pod stejnými jmény**, takže JSX
+zůstalo beze změny. `todayIdx` a `isTd` (čisté datumové funkce) do `schedule.js`.
+
+**Díra v kontrolách, nalezena a opravena.** Test vykreslení týdenního pohledu spadl na
+`ReferenceError: RankBadge is not defined` — přestože lint prošel. Pravidlo `no-undef`
+nekontroluje komponenty v JSX; na to slouží `react/jsx-no-undef`. Po jeho zapnutí lint
+našel **dvě** chybějící komponenty (`RankBadge`, `HalfTag`). `HalfTag` by test sám
+nenašel (vykresluje se jen u půldne, který testovací data neměla) — proto přidán test
+s půldnem v obou pohledech. Obě pojistky se doplňují. Ostatní obrazovky nové pravidlo
+prošly bez nálezu.
+
+Testy Rozvrhu běží nad **realistickými daty**: celý tým ze stálého rozvrhu přes skutečné
+`withDefaults` + `analyzeWeek`, včetně dovolené vyrábějící porušení a půldne.
+
+**Stav rozdělení:** všech 8 obrazovek v `src/views/`, `App.jsx` 1909 → 1571 řádků
+(zbytek = stav, listenery, zápisy, modální okna). 50 testů, lint čistý.
