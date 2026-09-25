@@ -7,6 +7,7 @@ import assert from "node:assert/strict";
 import { build } from "esbuild";
 import { mkdirSync, rmSync } from "node:fs";
 import { pathToFileURL } from "node:url";
+import { TEAM_WEEK } from "./test-fixtures.mjs";
 
 const OUT = "node_modules/.cache/view-tests";
 
@@ -98,8 +99,8 @@ test("DefaultsView: tabulka stálého rozvrhu, HO a prázdný den", async () => 
     { id: "b", name: "Andy", role: "employee", setupDone: true, defaultSchedule: { Po: "10:00", Po_ho: true } },
     { id: "adm", name: "Admin", role: "admin" },
   ];
-  const html = await render(DefaultsView, { employees: emps, onSaveDefault: async () => {}, onApplyPreset() {} });
-  assert.match(html, /Stálý rozvrh/); assert.match(html, /Předvyplnit rozvrh/);
+  const html = await render(DefaultsView, { employees: emps, onSaveDefault: async () => {} });
+  assert.match(html, /Stálý rozvrh/); assert.doesNotMatch(html, /Předvyplnit/);
   assert.match(html, /Jiří Slavíček/); assert.match(html, />HO</); assert.match(html, />08:00</);
   assert.doesNotMatch(html, />Admin</);            // admin v tabulce není
 });
@@ -220,7 +221,7 @@ test("ShiftCard: prázdná směna", async () => {
 // Rozvrh s realistickými daty: celý tým ze stálého rozvrhu přes skutečné withDefaults + analyzeWeek
 async function scheduleFixture(over = {}) {
   const S = await import("./schedule.js");
-  const team = Object.keys(S.PRESET).map((n, i) => ({ id: "u" + i, name: n, role: "employee", setupDone: true, defaultSchedule: S.PRESET[n] }));
+  const team = Object.keys(TEAM_WEEK).map((n, i) => ({ id: "u" + i, name: n, role: "employee", setupDone: true, defaultSchedule: TEAM_WEEK[n] }));
   const byId = Object.fromEntries(team.map(e => [e.id, e]));
   const absences = over.absences || {};
   const wk = "2026-09-21";
@@ -259,7 +260,7 @@ test("ScheduleView: týdenní pohled — všech pět dní", async () => {
 test("ScheduleView: půlden se vykreslí v denním i týdenním pohledu", async () => {
   const V = await loadView("ScheduleView");
   const S = await import("./schedule.js");
-  const andy = "u" + Object.keys(S.PRESET).indexOf("Andy");
+  const andy = "u" + Object.keys(TEAM_WEEK).indexOf("Andy");
   const p = await scheduleFixture({ absences: { [`${andy}__Út`]: "half_vacation" } });
   const e = Object.values(p.cs["Út"]).flat().find(x => x.empId === andy);
   assert.ok(e?.halfAbs, "Andy má mít v úterý půlden a zůstat ve směně");
@@ -272,7 +273,7 @@ test("ScheduleView: půlden se vykreslí v denním i týdenním pohledu", async 
 test("ScheduleView: dovolená vyrobí porušení a člověk je mezi nepřítomnými", async () => {
   const V = await loadView("ScheduleView");
   const S = await import("./schedule.js");
-  const slav = Object.keys(S.PRESET).indexOf("Slavíček");
+  const slav = Object.keys(TEAM_WEEK).indexOf("Slavíček");
   const p = await scheduleFixture({ absences: { [`u${slav}__Út`]: "vacation" } });
   assert.ok(p.analysis.violations.length > 0, "fixture má mít porušení");
   const html = await render(V, p);

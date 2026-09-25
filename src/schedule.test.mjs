@@ -4,9 +4,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  SHIFTS, DAYS, PRESET, buildDef, withDefaults, applyRotations, rotIsSwapped,
+  SHIFTS, DAYS, buildDef, personalOf, withDefaults, applyRotations, rotIsSwapped,
   dayStats, analyzeWeek, applyAlt, getMon, localISO, computeFairness,
 } from "./schedule.js";
+import { TEAM_WEEK } from "./test-fixtures.mjs";
 
 // ── pomocníci ──
 const dc = o => JSON.parse(JSON.stringify(o));
@@ -21,10 +22,10 @@ const pair = () => [
   { id: "andy", name: "Andy", role: "employee", setupDone: true, defaultSchedule: { Po: "10:00", "Út": "09:00", "Út_ho": true, St: "09:00" } },
 ];
 const ROT = [{ day: "Út", aId: "loch", bId: "andy", shiftA: "08:00", shiftB: "10:00", ho: true, anchor: "2026-09-07" }];
-const team = () => Object.keys(PRESET).map((n, i) => ({ id: "u" + i, name: n, role: "employee", setupDone: true, defaultSchedule: PRESET[n] }));
+const team = () => Object.keys(TEAM_WEEK).map((n, i) => ({ id: "u" + i, name: n, role: "employee", setupDone: true, defaultSchedule: TEAM_WEEK[n] }));
 
 // ════════════════ Stálý rozvrh ════════════════
-test("PRESET: kancelář a osmička vždy splněny (desítka v pondělí je známá mezera)", () => {
+test("realistický týden týmu: kancelář a osmička splněny", () => {
   const r = analyzeWeek(buildDef(team()), {}, team(), {});
   const crit = r.violations.filter(v => v.sev === "crit");
   assert.deepEqual(crit, [], crit.map(v => v.msg).join(" | "));
@@ -179,4 +180,20 @@ test("férovost: hlídač nahlásí rozdíl větší než 3", () => {
 test("férovost: nový kolega nedostane směny z týdnů před nástupem", () => {
   const emps = [...fe(), { id: "n", name: "N", role: "employee", setupDone: true, createdAt: "2026-10-01T00:00:00Z", defaultSchedule: { Po: "08:00" } }];
   assert.equal(computeFairness({ "2026-09-14": wkDoc(pw()) }, emps, []).rows.find(x => x.id === "n").eight, 0);
+});
+
+// ════════════════ Osobní pravidla ════════════════
+test("osobní pravidla platí pro celé jméno i samotné příjmení", () => {
+  const emps = [{ id: "a", name: "Denis Lochman" }, { id: "b", name: "Lochman" }, { id: "c", name: "Jiří Slavíček" }, { id: "d", name: "Andy" }, { id: "e", name: "Olda Stibor" }];
+  assert.deepEqual(personalOf(emps, "a"), { noTenOn: "St" });
+  assert.deepEqual(personalOf(emps, "b"), { noTenOn: "St" });
+  assert.deepEqual(personalOf(emps, "c"), { mustOpen: true });
+  assert.deepEqual(personalOf(emps, "d"), { noOpen: true });
+  assert.deepEqual(personalOf(emps, "e"), {});
+});
+
+test("osobní pravidlo se projeví v kontrole: Lochman ve středu na 10:00", () => {
+  const emps = [{ id: "loch", name: "Denis Lochman", role: "employee" }];
+  const w = empty(); w.St["10:00"] = [{ empId: "loch" }];
+  assert.ok(analyzeWeek(w, {}, emps, {}).violations.some(v => /Lochman nemá mít 10:00/.test(v.msg)));
 });

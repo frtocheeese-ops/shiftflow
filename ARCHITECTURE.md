@@ -4,8 +4,9 @@
 
 | Soubor | Co obsahuje | Závislosti |
 |---|---|---|
-| `src/schedule.js` | **Čistá logika rozvrhu**: konstanty (dny, směny, typy absencí, svátky), datumové pomocníky, stálý rozvrh (`PRESET`), osobní pravidla, rotace, skládání týdne (`withDefaults`), kontrola pravidel (`analyzeWeek`), návrhy řešení (`applyAlt`) | žádné (ani React, ani Firebase) |
+| `src/schedule.js` | **Čistá logika rozvrhu**: konstanty (dny, směny, typy absencí, svátky), datumové pomocníky, osobní pravidla (`PERSONAL`), rotace, skládání týdne (`withDefaults`), kontrola pravidel (`analyzeWeek`), návrhy řešení (`applyAlt`) | žádné (ani React, ani Firebase) |
 | `src/schedule.test.mjs` | Testy logiky — každý odpovídá reálné chybě z historie projektu | jen `node:test` |
+| `src/test-fixtures.mjs` | Testovací data: realistický týden týmu (`TEAM_WEEK`) | — |
 | `src/ui.jsx` | Sdílené UI prvky: `Btn`, `Card`, `Modal`, `Input`, `Sel`, `Toggle`, `Badge`, `RankBadge`, `HalfTag` | `schedule.js` |
 | `src/views/*.jsx` | Všechny obrazovky: `ScheduleView` (+ `ShiftCard`), `ProposalsView`, `SwapsView`, `PeopleView`, `StatsView`, `LogView`, `DefaultsView`, `SettingsView` | `ui.jsx`, `schedule.js` |
 | `src/views.test.mjs` | Test vykreslení obrazovek — chytá pády za běhu | `esbuild`, `react-dom/server` |
@@ -62,6 +63,14 @@ samostatných chyb (viz PRECHOD-VZORCE.md v16, v18, v20, v21, v28).
 5. **Zápisy přes transakce.** Změny týdne jdou přes `txSchedule` / `runTransaction`
    s `mergeFields` — nikdy `setDoc(..., { merge: true })` na mapy (`absences`),
    jinak nejdou mazat klíče a hrozí přepsání souběžné změny.
+
+## Stálý rozvrh žije jen v databázi
+
+Stálý rozvrh každého člena je `users/{id}.defaultSchedule` a upravuje se v appce
+(Stálý rozvrh → editor). **Neudržovat jeho kopii v kódu** — dřívější konstanta `PRESET`
+pro tlačítko „Předvyplnit rozvrh" se za dva měsíce rozešla s realitou (celá jména místo
+příjmení, jiné složení týmu) a stala se z ní past (v35). Konfigurace v kódu, která
+odkazuje na lidi (`PERSONAL`), páruje podle celého jména i příjmení.
 
 ## Datový model týdne (`schedules/{pondělí}`)
 

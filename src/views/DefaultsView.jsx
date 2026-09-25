@@ -1,5 +1,5 @@
 /* Obrazovka Stálý rozvrh (jen admin) — přehled a úprava výchozích rozvrhů členů.
-   Nic nezapisuje: uložení i předvyplnění volá funkce předané z App.jsx. */
+   Nic nezapisuje: uložení volá funkci předanou z App.jsx. */
 import { useState } from "react";
 import { DAYS, SHIFTS } from "../schedule";
 import { Btn, Card, Modal } from "../ui";
@@ -29,14 +29,9 @@ function DefEditor({ employees, onSave }) {
     </div>}</Modal></div>;
 }
 
-export default function DefaultsView({ employees, onSaveDefault, onApplyPreset }) {
+export default function DefaultsView({ employees, onSaveDefault }) {
   return (
     <div><div style={{ fontSize: 20, fontWeight: 600, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 2, marginBottom: 16, borderBottom: "1px solid var(--brd)", paddingBottom: 12 }}>Stálý rozvrh</div>
-          <Card style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--w)", marginBottom: 6 }}>Předvyplnit dle preferencí členů</div>
-            <p style={{ fontSize: 13, color: "var(--tx2)", marginBottom: 12 }}>Nastaví každému výchozí rozvrh podle jeho preferencí (Jirka 8:00 celý týden, Andy nikdy neotevírá, Patrik HO od 8 + páteční 10, Denis ve středu bez 10:00…). Pak lze libovolně ručně upravit níže.</p>
-            <Btn warm onClick={onApplyPreset}>Předvyplnit rozvrh</Btn>
-          </Card>
-          <DefEditor employees={employees} onSave={onSaveDefault} /></div>
+      <DefEditor employees={employees} onSave={onSaveDefault} /></div>
   );
 }
