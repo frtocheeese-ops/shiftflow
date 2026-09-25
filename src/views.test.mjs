@@ -196,4 +196,25 @@ test("ProposalsView: víc než 30 problémů — zobrazí 30 a počet zbývajíc
   assert.match(html, /a dalších 3 později/);
 });
 
+const scEmps = { loch: { id: "loch", name: "Denis Lochman", fixCount: 2 }, andy: { id: "andy", name: "Andy" } };
+const scProps = over => ({ day: "Út", shift: "08:00", ge: id => scEmps[id], notes: {}, meId: "andy", isA: false, canDrag: () => false,
+  onDrop() {}, onAdminClick() {}, onMyShift() {}, onDirectSwap() {}, onNote() {},
+  entries: [{ empId: "loch", ho: true }, { empId: "andy", halfAbs: "half_vacation", halfPart: "second" }], ...over });
+
+test("ShiftCard: lidé ve směně, HO, půlden a poznámka", async () => {
+  const V = await loadView("ShiftCard");
+  const html = await render(V, scProps({ notes: { "loch__Út__0800": "přijdu o 10 min později" } }));
+  assert.match(html, /Denis Lochman/); assert.match(html, /Andy/);
+  assert.match(html, />HO</);                                 // Lochman je na HO
+  assert.match(html, /odpoledne|odp\./);                      // Andy má půlden odpoledne
+  assert.match(html, /Zobrazit poznámku/);
+  assert.match(html, /Požádat Denis Lochman o výměnu/);         // člen vidí výměnu u kolegy, ne u sebe
+  assert.doesNotMatch(html, /Požádat Andy o výměnu/);
+});
+
+test("ShiftCard: prázdná směna", async () => {
+  const V = await loadView("ShiftCard");
+  assert.match(await render(V, scProps({ entries: [] })), />—</);
+});
+
 test.after(() => rmSync(OUT, { recursive: true, force: true }));

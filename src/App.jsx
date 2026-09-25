@@ -19,6 +19,7 @@ import DefaultsView from "./views/DefaultsView";
 import PeopleView from "./views/PeopleView";
 import SettingsView from "./views/SettingsView";
 import ProposalsView from "./views/ProposalsView";
+import ShiftCard from "./views/ShiftCard";
 import { Badge, Btn, Input, Sel, Toggle, Modal, Card, RANK_TIERS, rankOf, HALF_LBL, HalfTag, RankBadge } from "./ui";
 
 const AE = "admin@shiftflow.app"; // admin se přihlašuje svým skutečným heslem (žádné heslo v kódu)
@@ -1238,26 +1239,6 @@ export default function App() {
   const getDayAbs = day => Object.entries(absences).filter(([k]) => k.endsWith(`__${day}`)).map(([k, t]) => ({ empId: k.split("__")[0], type: t })).filter(a => ge(a.empId));
 
   // Shift card renderer (reused in day + week views)
-  const ShiftCard = ({ day, shift }) => {
-    const entries = getEntries(day, shift);
-    return <div className="gl dz" style={{ padding: 0 }}
-      onDragOver={e => { e.preventDefault(); e.currentTarget.classList.add("over"); }}
-      onDragLeave={e => e.currentTarget.classList.remove("over")}
-      onDrop={e => handleDrop(day, shift, e)}>
-      {entries.map((en, idx) => { const emp = ge(en.empId); if (!emp) return null; const nk = fsKey(en.empId, day, shift.replace(":", "")); const note = notes[nk]; const isMe = en.empId === profile.id;
-        return <div key={en.empId} className="ent" draggable={canDrag(en.empId)}
-          onDragStart={e => e.dataTransfer.setData("text/plain", JSON.stringify({ empId: en.empId, day, shift }))}
-          onClick={() => isA ? setSelCell({ day, shift, empId: en.empId }) : isMe && setModal({ type: "myshift", day, shift })}
-          style={{ gap: 10, padding: "12px 14px", borderBottom: idx < entries.length - 1 ? "1px solid var(--brd)" : "none" }}>
-          <div style={{ width: 3, height: 24, background: en.ho ? "var(--grn)" : "var(--acc2)" }} />
-          <span style={{ fontWeight: 500, color: "var(--w)", flex: 1, display: "inline-flex", alignItems: "center", gap: 6, minWidth: 0 }}><span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{emp.name}</span><RankBadge fixes={emp.fixCount} /><HalfTag en={en} /></span>
-          {!isA && !isMe && <button title={`Požádat ${emp.name} o výměnu`} onClick={e => { e.stopPropagation(); setModal({ type: "directSwap", targetEmp: emp, targetDay: day, targetShift: shift }); }} style={{ background: "none", border: "1px solid var(--acc2)", color: "var(--acc2)", width: 26, height: 26, cursor: "pointer", fontSize: 13, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontFamily: "'IBM Plex Mono',monospace" }}>⇄</button>}
-          {note && <button aria-label="Zobrazit poznámku" onClick={e => { e.stopPropagation(); setNoteView({ name: emp.name, day, shift, text: note }); }} style={{ background: "none", color: "var(--acc2)", cursor: "pointer", fontSize: 15, fontWeight: 700, border: "1px solid var(--acc2)", width: 28, height: 28, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontFamily: "'IBM Plex Mono',monospace" }}>i</button>}
-          {en.ho && <Badge small color="var(--grn)">HO</Badge>}
-        </div>; })}
-      {entries.length === 0 && <div style={{ padding: "14px", color: "var(--tx3)", fontSize: 14 }}>—</div>}
-    </div>;
-  };
 
   return <div style={{ minHeight: "100vh", fontFamily: "'Barlow',sans-serif", color: "var(--tx)", display: "flex" }} data-theme={theme}>
     <style>{CSS}</style>
@@ -1379,7 +1360,8 @@ export default function App() {
                     <div style={{ flex: 1, height: 1, background: "var(--brd)" }} />
                     <span style={{ fontSize: 12, color: "var(--tx3)" }}>{getEntries(DAYS[selDay], shift).length} os.</span>
                   </div>
-                  <ShiftCard day={DAYS[selDay]} shift={shift} />
+                  <ShiftCard day={DAYS[selDay]} shift={shift} entries={getEntries(DAYS[selDay], shift)} ge={ge} notes={notes} meId={profile.id} isA={isA}
+                    canDrag={canDrag} onDrop={handleDrop} onAdminClick={setSelCell} onMyShift={setModal} onDirectSwap={setModal} onNote={setNoteView} />
                 </div>)}
                 {/* Day absences */}
                 {(() => { const da = getDayAbs(DAYS[selDay]); if (!da.length) return null; return <div style={{ marginTop: 16 }}>
