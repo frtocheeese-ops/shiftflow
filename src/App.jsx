@@ -7,8 +7,8 @@ import { getToken, onMessage } from "firebase/messaging";
 import {
   SHIFTS, DAYS, DAYS_F, ABS, EVTS, HMAP,
   dc, uid, getMon, localISO, wKey, fmtW,
-  buildDef, isFullAbs, rotIsSwapped, applyRotations, withDefaults, PRESET,
-  RENAME, PERSONAL, personalOf, RULE_DEFAULTS, dayStats, analyzeWeek,
+  buildDef, isFullAbs, rotIsSwapped, applyRotations, withDefaults,
+  RULE_DEFAULTS, dayStats, analyzeWeek,
   applyAlt, altLabel, fsKey,
   computeFairness, fmtDate, todayIdx, isTd,
 } from "./schedule";
@@ -1134,7 +1134,6 @@ export default function App() {
     } catch (e) { notify("Nepodařilo se uložit"); }
   };
 
-  // Předvyplnění rozvrhu dle preferencí — napasuje PRESET na uživatele podle jména
 
   // Aplikace stálého rozvrhu na týden — přepíše entries, ale zachová absence (vyřadí nepřítomné)
   const applyDefaultToWeek = (weekKey = wk) => txSchedule(({ entries: prev, absences, intake: intk, intakeAllow: intkA }) => {
@@ -1157,24 +1156,6 @@ export default function App() {
     const start = new Date(wk + "T00:00:00"); let done = 0;
     for (let i = 0; i < 52; i++) { const d = new Date(start); d.setDate(d.getDate() + i * 7); await applyDefaultToWeek(wKey(d)); done++; if (i % 10 === 0) notify(`Aplikuji… ${done}/52`); }
     notify(`Stálý rozvrh aplikován na ${done} týdnů`); log(`Stálý rozvrh → 52 týdnů od ${wk}`);
-  };
-  const applyPreset = async () => {
-    if (!confirm("Předvyplnit výchozí rozvrh dle preferencí členů? Přepíše stávající výchozí rozvrhy (týdenní rozpisy zůstanou).")) return;
-    let n = 0, miss = [], renamed = [];
-    for (const emp of employees.filter(e => e.role !== "admin")) {
-      let name = emp.name;
-      if (RENAME[name]) { const nn = RENAME[name]; await updateDoc(doc(db, "users", emp.id), { name: nn }); renamed.push(`${name}→${nn}`); name = nn; }
-      const ds = PRESET[name];
-      if (!ds) { miss.push(name); continue; }
-      await updateDoc(doc(db, "users", emp.id), { defaultSchedule: ds, setupDone: true });
-      n++;
-    }
-    notify(`Předvyplněno pro ${n} lidí${renamed.length ? ` · přejmenováno: ${renamed.join(", ")}` : ""}${miss.length ? ` (bez předvolby: ${miss.join(", ")})` : ""}`);
-    log(`Rozvrh předvyplněn dle preferencí (${n})${renamed.length ? `, přejmenováno ${renamed.join(", ")}` : ""}`);
-    // Už rozepsané týdny by jinak zůstaly na staré verzi (a nesedělo by nic, co z nich čte — např. Google Kalendář)
-    if (n > 0 && confirm("Přepsat novým stálým rozvrhem i už rozepsané týdny (52 týdnů dopředu)? Absence zůstanou zachované. Doporučeno — jinak budoucí týdny zůstanou podle staré verze.")) {
-      await applyDefaultYear(true);
-    }
   };
   const exportCSV = () => { let csv = "\ufeffDen,Směna,Jméno,HO\n"; DAYS.forEach(d => SHIFTS.forEach(sh => (cs[d]?.[sh] || []).forEach(en => { const e = ge(en.empId); if (e) csv += `${d},${sh},${e.name},${en.ho ? "Ano" : "Ne"}\n`; }))); const b = new Blob([csv], { type: "text/csv;charset=utf-8;" }); const u = URL.createObjectURL(b); Object.assign(document.createElement("a"), { href: u, download: `rozvrh_${wk}.csv` }).click(); };
 
@@ -1340,7 +1321,7 @@ export default function App() {
             onEditDays={() => setModal({ type: "editDays", emp: profile })} />}
 
           {view === "log" && <LogView logs={logs} />}
-          {view === "defaults" && isA && <DefaultsView employees={employees} onSaveDefault={saveDefaultSchedule} onApplyPreset={applyPreset} />}
+          {view === "defaults" && isA && <DefaultsView employees={employees} onSaveDefault={saveDefaultSchedule} />}
           {view === "settings" && <SettingsView isA={isA} profile={profile} employees={employees} wk={wk} rules={rules} nahledInfo={nahledInfo}
             installState={isStandalone() ? "standalone" : installable ? "installable" : isIOS() ? "ios" : "other"}
             showGyro={isMobile && MOBILE_GYRO_PARALLAX} gyroOn={gyroOn} gcalConfigured={!!GCAL_CLIENT_ID}

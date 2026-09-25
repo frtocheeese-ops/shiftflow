@@ -747,3 +747,52 @@ Testy Rozvrhu běží nad **realistickými daty**: celý tým ze stálého rozvr
 
 **Stav rozdělení:** všech 8 obrazovek v `src/views/`, `App.jsx` 1909 → 1571 řádků
 (zbytek = stav, listenery, zápisy, modální okna). 50 testů, lint čistý.
+
+---
+
+## Aktualizace v35 — odstraněno „Předvyplnit rozvrh", opravena osobní pravidla
+
+**Nález.** Uživatel poslal aktuální pondělí k doplnění do konstanty `PRESET`. Pondělí
+je v pořádku (kancelář 5, 8:00 ×3, 10:00 ×2 s jedním v kanceláři). Ale kontrola
+ukázala, že **`PRESET` se rozešel s realitou**: jména ve Firestore jsou nyní celá
+(„Denis Lochman"), `PRESET` zná jen příjmení → 6 ze 7 lidí se nespárovalo, obsahoval
+bývalého člena (Víťa) a neznal nového (Viktor Koutný). Jediný spárovaný byl Andy —
+klik na „Předvyplnit rozvrh" by tedy **přepsal jen Andyho aktuální stálý rozvrh
+červencovou verzí**. Tichá past.
+
+**Rozhodnutí uživatele: odstranit.** Stálý rozvrh žije v databázi a upravuje se
+v appce — kopie v kódu se nutně rozchází. Odstraněno: `PRESET`, `RENAME`,
+`applyPreset`, karta s tlačítkem v obrazovce Stálý rozvrh. Týden z `PRESET` přesunut
+do `src/test-fixtures.mjs` jako testovací data (`TEAM_WEEK`) — testy Rozvrhu na něm stojí.
+
+Pozn. k postupu: první pokus o odstranění `applyPreset` smazal místo něj
+`applyDefaultToWeek` + `applyDefaultCurrentWeek` — komentář nad předvyplněním se při
+dřívějším přeuspořádání (v29) oddělil od své funkce a zůstal nad jinou. Zachyceno
+kontrolou diffu před commitem, `App.jsx` vrácen a funkce odstraněna podle přesných hranic.
+
+**Druhý nález — osobní pravidla se přestala uplatňovat.** `PERSONAL` je klíčovaný
+příjmením, `personalOf` hledal přesnou shodu → po přechodu na celá jména platilo jen
+pravidlo Andyho. **Appka nehlídala, že Lochman nemá mít ve středu 10:00**, ani
+Slavíčkova pravidla. Oprava: `personalOf` páruje podle celého jména **nebo** příjmení.
+Odebrán stale záznam Víťa (noHO). Dva nové testy — ověřeno, že na staré logice selžou.
+
+52 testů, lint čistý.
+
+---
+
+## Aktualizace v36 — osobní pravidla prozatím vypnuta
+
+Rozhodnutí uživatele: kvůli dynamice týmu se osobní pravidla v praxi často porušují
+a upozornění by jen dělala šum. `PERSONAL = {}`.
+
+Důsledky vypnutí (vědomě přijaté):
+- žádná upozornění „X nemá otevírat / nemá mít 10:00 / nemá mít HO",
+- Návrhy mohou nabídnout **Andyho** na pokrytí 8:00 (dřív ho `canOpen` vyřazoval).
+
+Mechanismus zůstává kvůli případnému návratu: `personalOf(employees, eid, rulesMap)`
+s volitelnou mapou a `analyzeWeek` bere mapu z `rules.personal`, jinak z `PERSONAL`.
+Zapnutí = doplnit záznam do `PERSONAL` (příklady v komentáři u konstanty).
+Testy mechanismu používají vlastní mapu (nezávislé na tom, co je zapnuté) + nový test
+aktuálního stavu: žádná osobní upozornění, Andy mezi návrhy na 8:00. 53 testů.
+
+Tato větev obsahuje i v35 (odstranění „Předvyplnit rozvrh").
