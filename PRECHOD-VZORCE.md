@@ -819,3 +819,18 @@ a členové `rules/global` číst nesmí (známý otevřený bod „rules drift"
 - Bot přeposílá chyby a výjimky stránky do logu Actions, **čeká na načtení pravidel**
   a vypíše „Pravidla v appce: …". Pokud se pravidla nenačetla, **skončí chybou bez
   uložení snímku** — raději ponechá předchozí snímek, než aby zveřejnil špatný.
+
+**Doplnění v37 po dalším rozboru.** Tvůj členský účet rotaci vidí (i po znovunačtení),
+takže oprávnění i uložení jsou v pořádku — chyba je jen u bota. Vyloučeno:
+- časové pásmo (bot běží v UTC): celá testovací sada i parita rotace dávají v UTC,
+  Praze i New Yorku shodný výsledek;
+- náhoda: ruční běh 25. 9. 15:31 UTC vyfotil **bajtově stejný** obrázek (commit přeskočen).
+Snímek ukazuje úterý úplně **bez** rotace (výchozí pozice), ne s obrácenou paritou →
+bot fotí dřív, než appka načte `rules/global`. Bot dosud jen napevno čekal (2 s + 3,5 s),
+na pravidla nijak. Oprava v této větvi: čekání na `data-rules`. Pro ověření bez přístupu
+k logům (hostitel logů Actions je mimo povolenou síť) bot nově ukládá
+`public/nahled/diag.txt` (stav pravidel, začátek mřížky, chyby stránky; bez časových
+razítek) a workflow commituje i při změně diagnostiky.
+
+Vedlejší zjištění: 25. 9. proběhl z ~20 naplánovaných pokusů jen jeden (11:15 UTC =
+13:15 Praha, záchranný běh). GitHub plánovač se tedy nejen zpožďuje, ale i vynechává.

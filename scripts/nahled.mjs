@@ -85,8 +85,9 @@ const browser = await puppeteer.launch({ args: ["--no-sandbox", "--font-render-h
 const page = await browser.newPage();
 await page.setViewport({ width: 1500, height: 1100, deviceScaleFactor: 2 });
 // Chyby stránky do logu Actions — dřív se ztrácely a špatný snímek nešlo diagnostikovat
-page.on("console", m => { if (["error", "warning"].includes(m.type())) console.log(`[stránka ${m.type()}] ${m.text()}`); });
-page.on("pageerror", e => console.log(`[stránka výjimka] ${e.message}`));
+const pageProblems = [];
+page.on("console", m => { if (["error", "warning"].includes(m.type())) { const s = `[${m.type()}] ${m.text()}`; pageProblems.push(s); console.log("[stránka] " + s); } });
+page.on("pageerror", e => { const s = `[výjimka] ${e.message}`; pageProblems.push(s); console.log("[stránka] " + s); });
 await page.goto(SITE + "/?v=" + Date.now(), { waitUntil: "networkidle2", timeout: 60000 });
 
 await page.waitForSelector("input[type=password]", { timeout: 30000 });
@@ -117,6 +118,14 @@ const box = await grid.boundingBox();
 await grid.screenshot({ path: "public/nahled/rozvrh.png" });
 await browser.close();
 console.log("Screenshot mřížky uložen: public/nahled/rozvrh.png");
+// Diagnostika do repa (čitelná i bez přístupu k logům Actions). Bez časových razítek →
+// mění se jen při skutečné změně stavu, takže nevyrábí zbytečné commity.
+const shownWeek = await page.evaluate(() => document.querySelector("#week-grid")?.innerText.split("\n").slice(0, 12).join(" | ") || "?");
+writeFileSync("public/nahled/diag.txt", [
+  `pravidla: ${rulesState}`,
+  `mrizka (zacatek): ${shownWeek}`,
+  `chyby stranky: ${pageProblems.length ? "\n  " + [...new Set(pageProblems)].slice(0, 15).join("\n  ") : "zadne"}`,
+].join("\n") + "\n");
 
 // ── OG stránka: ve WhatsAppu se u odkazu ukáže rovnou náhled rozvrhu ──
 const nm = new Date(praha); nm.setDate(nm.getDate() + ((8 - nm.getDay()) % 7 || 7));

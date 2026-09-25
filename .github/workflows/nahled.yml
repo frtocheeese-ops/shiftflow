@@ -37,7 +37,7 @@ jobs:
         run: |
           if [ ! -f send_mail.txt ]; then echo "Skript nepracoval (mimo okno) — konec."; echo "made=0" >> $GITHUB_OUTPUT; exit 0; fi
           # Commit jen kdyz se snimek opravdu zmenil (index.html se meni vzdy kvuli razitku)
-          if git diff --quiet -- public/nahled/rozvrh.png; then
+          if git diff --quiet -- public/nahled/rozvrh.png && git diff --quiet -- public/nahled/diag.txt && [ -n "$(git ls-files public/nahled/diag.txt)" ]; then
             echo "Rozvrh beze zmeny — necommituji."
             echo "made=0" >> $GITHUB_OUTPUT; exit 0
           fi
