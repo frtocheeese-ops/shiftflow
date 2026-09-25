@@ -217,4 +217,72 @@ test("ShiftCard: prázdná směna", async () => {
   assert.match(await render(V, scProps({ entries: [] })), />—</);
 });
 
+// Rozvrh s realistickými daty: celý tým ze stálého rozvrhu přes skutečné withDefaults + analyzeWeek
+async function scheduleFixture(over = {}) {
+  const S = await import("./schedule.js");
+  const team = Object.keys(S.PRESET).map((n, i) => ({ id: "u" + i, name: n, role: "employee", setupDone: true, defaultSchedule: S.PRESET[n] }));
+  const byId = Object.fromEntries(team.map(e => [e.id, e]));
+  const absences = over.absences || {};
+  const wk = "2026-09-21";
+  const cs = S.withDefaults(null, absences, team, wk, [], {}, {});
+  const res = S.analyzeWeek(cs, absences, team, {}, {}, {});
+  const wd = [0, 1, 2, 3, 4].map(i => { const d = new Date(wk + "T00:00:00"); d.setDate(d.getDate() + i); return S.localISO(d); });
+  const getDayAbs = day => Object.entries(absences).filter(([k]) => k.endsWith("__" + day)).map(([k, type]) => ({ empId: k.split("__")[0], type }));
+  const noop = () => {};
+  return {
+    analysis: { violations: res.violations, problems: res.problems, weeklyHO: res.weeklyHO }, cs, cw: new Date(wk + "T00:00:00"),
+    dayHol: null, intake: {}, intakeAllow: {}, isA: false, isMobile: false, notes: {}, profile: { id: "u1" }, rules: {},
+    schedMeta: { at: "2026-09-19T09:12:00Z", by: "u0" }, schedView: "day", selDay: 1, slideDir: "right", wd, wh: [null, null, null, null, null], wo: 0,
+    allowIntakeException: noop, canDrag: () => false, exportCSV: noop, ge: id => byId[id], getDayAbs,
+    getEntries: (day, sh) => cs[day]?.[sh] || [], goDay: noop, handleDrop: noop, removeAbs: noop, setModal: noop, setNoteView: noop,
+    setSchedView: noop, setSelCell: noop, setShowCompare: noop, setShowPerma: noop, setWo: noop, switchV: noop, toggleIntake: noop,
+    ...over, team,
+  };
+}
+
+test("ScheduleView: denní pohled — tři směny, lidé ze stálého rozvrhu, aktualizace", async () => {
+  const V = await loadView("ScheduleView");
+  const p = await scheduleFixture();
+  const html = await render(V, p);
+  for (const sh of ["08:00", "09:00", "10:00"]) assert.match(html, new RegExp(sh));
+  const inUt = Object.values(p.cs["Út"]).flat().map(e => p.ge(e.empId).name);
+  assert.ok(inUt.length >= 4);
+  for (const n of inUt) assert.match(html, new RegExp(n));   // všichni z úterý jsou vidět
+});
+
+test("ScheduleView: týdenní pohled — všech pět dní", async () => {
+  const V = await loadView("ScheduleView");
+  const html = await render(V, await scheduleFixture({ schedView: "week" }));
+  for (const d of ["Pondělí", "Úterý", "Středa", "Čtvrtek", "Pátek"]) assert.match(html, new RegExp(d));
+});
+
+test("ScheduleView: půlden se vykreslí v denním i týdenním pohledu", async () => {
+  const V = await loadView("ScheduleView");
+  const S = await import("./schedule.js");
+  const andy = "u" + Object.keys(S.PRESET).indexOf("Andy");
+  const p = await scheduleFixture({ absences: { [`${andy}__Út`]: "half_vacation" } });
+  const e = Object.values(p.cs["Út"]).flat().find(x => x.empId === andy);
+  assert.ok(e?.halfAbs, "Andy má mít v úterý půlden a zůstat ve směně");
+  for (const schedView of ["day", "week"]) {
+    const html = await render(V, { ...p, schedView });
+    assert.match(html, /Andy/); assert.match(html, /dopoledne|dop\./, `půlden chybí v pohledu ${schedView}`);
+  }
+});
+
+test("ScheduleView: dovolená vyrobí porušení a člověk je mezi nepřítomnými", async () => {
+  const V = await loadView("ScheduleView");
+  const S = await import("./schedule.js");
+  const slav = Object.keys(S.PRESET).indexOf("Slavíček");
+  const p = await scheduleFixture({ absences: { [`u${slav}__Út`]: "vacation" } });
+  assert.ok(p.analysis.violations.length > 0, "fixture má mít porušení");
+  const html = await render(V, p);
+  assert.match(html, /Slavíček/); assert.match(html, /Dovolená/);
+});
+
+test("ScheduleView: admin vidí přepínač Nástupů, člen ne", async () => {
+  const V = await loadView("ScheduleView");
+  assert.match(await render(V, await scheduleFixture({ isA: true })), /Označit jako Nástupy/);
+  assert.doesNotMatch(await render(V, await scheduleFixture({ isA: false })), /Označit jako Nástupy/);
+});
+
 test.after(() => rmSync(OUT, { recursive: true, force: true }));
