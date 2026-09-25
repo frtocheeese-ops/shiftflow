@@ -796,3 +796,26 @@ Testy mechanismu používají vlastní mapu (nezávislé na tom, co je zapnuté)
 aktuálního stavu: žádná osobní upozornění, Andy mezi návrhy na 8:00. 53 testů.
 
 Tato větev obsahuje i v35 (odstranění „Předvyplnit rozvrh").
+
+---
+
+## Aktualizace v37 — diagnostika: náhled bez rotace
+
+**Příznak.** Admin vidí v úterý 29. 9. rotaci (Lochman 8:00 HO, Andy 10:00 HO), páteční
+snímek ukazuje úterý bez rotace (Andy 9:00 HO, Lochman 10:00 HO = výchozí pozice).
+Opakovaný snímek dává totéž.
+
+**Rozbor.** Kód je pro admina i bota shodný a pravidla se načítají bezpodmínečně;
+`firestore.rules` v repu čtení `rules/global` všem přihlášeným dovoluje. Bot je běžný
+člen → pravděpodobně **stejně špatně vidí rozvrh všichni členové**. Kandidáti:
+(1) rotace není uložená v DB, žije jen v otevřené admin relaci (před v32 se změny
+pravidel projevovaly bez uložení); (2) pravidla v konzoli Firebase se liší od repa
+a členové `rules/global` číst nesmí (známý otevřený bod „rules drift").
+
+**Co se změnilo (aby to šlo příště poznat hned):**
+- Listener `rules/global` má obsluhu chyby — dřív chybějící oprávnění znamenalo tichý
+  návrat k výchozím pravidlům bez rotací. Stav načtení se zapisuje do
+  `<html data-rules="ok:N | missing | error:kód">`.
+- Bot přeposílá chyby a výjimky stránky do logu Actions, **čeká na načtení pravidel**
+  a vypíše „Pravidla v appce: …". Pokud se pravidla nenačetla, **skončí chybou bez
+  uložení snímku** — raději ponechá předchozí snímek, než aby zveřejnil špatný.

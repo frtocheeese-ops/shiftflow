@@ -695,7 +695,15 @@ export default function App() {
   useEffect(() => { const u = onSnapshot(collection(db, "changeProposals"), s => setProposals(s.docs.map(d => ({ id: d.id, ...d.data() })))); return u; }, []);
   // Všechny rozvrhy pro férovostní počítadla (malý tým → pár desítek dokumentů)
   useEffect(() => { const u = onSnapshot(collection(db, "schedules"), s => { const m = {}; s.docs.forEach(d => m[d.id] = d.data()); setAllSchedules(m); }); return u; }, []);
-  useEffect(() => { const u = onSnapshot(doc(db, "rules", "global"), s => { if (s.exists()) setRules(s.data()); }); return u; }, []);
+  // Pravidla (vč. rotací). Stav načtení se zapisuje do <html data-rules>, aby ho viděl páteční bot;
+  // chyba se už neztratí potichu (dřív chybějící oprávnění = tichý návrat k výchozím pravidlům bez rotací).
+  useEffect(() => {
+    const mark = v => { try { document.documentElement.dataset.rules = v; } catch { } };
+    const u = onSnapshot(doc(db, "rules", "global"),
+      s => { if (s.exists()) setRules(s.data()); mark(s.exists() ? `ok:${(s.data().rotations || []).length}` : "missing"); },
+      err => { console.error("Pravidla se nenačetla:", err); mark(`error:${err.code || err.message}`); });
+    return u;
+  }, []);
   useEffect(() => { const u = onSnapshot(collection(db, "auditLog"), s => { const a = s.docs.map(d => ({ id: d.id, ...d.data() })); a.sort((a, b) => (b.time || "").localeCompare(a.time || "")); setLogs(a.slice(0, 100)); }); return u; }, []);
 
   const hardSync = async () => {

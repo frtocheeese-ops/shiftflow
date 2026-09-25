@@ -84,6 +84,9 @@ console.log(`Příjemci s notify=true: ${recipients.length}`);
 const browser = await puppeteer.launch({ args: ["--no-sandbox", "--font-render-hinting=none"] });
 const page = await browser.newPage();
 await page.setViewport({ width: 1500, height: 1100, deviceScaleFactor: 2 });
+// Chyby stránky do logu Actions — dřív se ztrácely a špatný snímek nešlo diagnostikovat
+page.on("console", m => { if (["error", "warning"].includes(m.type())) console.log(`[stránka ${m.type()}] ${m.text()}`); });
+page.on("pageerror", e => console.log(`[stránka výjimka] ${e.message}`));
 await page.goto(SITE + "/?v=" + Date.now(), { waitUntil: "networkidle2", timeout: 60000 });
 
 await page.waitForSelector("input[type=password]", { timeout: 30000 });
@@ -96,6 +99,14 @@ await page.waitForSelector('[aria-label="Další týden"]', { timeout: 45000 });
 await page.evaluate(() => { [...document.querySelectorAll("button")].find(b => b.textContent.trim() === "Týden")?.click(); });
 await page.waitForSelector("#week-grid", { timeout: 15000 });
 await new Promise(s => setTimeout(s, 2000));
+// Počkat, až appka načte pravidla (rotace!) — jinak by snímek mohl vzniknout bez nich
+const rulesState = await page.waitForFunction(() => document.documentElement.dataset.rules, { timeout: 20000 })
+  .then(h => h.jsonValue()).catch(() => "nezjištěno (starší verze appky?)");
+console.log(`Pravidla v appce: ${rulesState}`);
+if (String(rulesState).startsWith("error")) {
+  console.error("⚠ Appka pro bota nenačetla pravidla (rotace chybí) — snímek by byl špatně, končím bez uložení.");
+  await browser.close(); process.exit(1);
+}
 await page.click('[aria-label="Další týden"]');
 await new Promise(s => setTimeout(s, 3500)); // onSnapshot příštího týdne
 
