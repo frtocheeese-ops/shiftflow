@@ -8,7 +8,7 @@ import {
   SHIFTS, DAYS, DAYS_F, ABS, EVTS, HMAP,
   dc, uid, getMon, localISO, wKey, fmtW,
   buildDef, isFullAbs, rotIsSwapped, applyRotations, withDefaults,
-  PERSONAL, personalOf, RULE_DEFAULTS, dayStats, analyzeWeek,
+  RULE_DEFAULTS, dayStats, analyzeWeek,
   applyAlt, altLabel, fsKey,
   computeFairness, fmtDate, todayIdx, isTd,
 } from "./schedule";

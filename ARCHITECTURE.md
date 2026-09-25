@@ -70,7 +70,8 @@ Stálý rozvrh každého člena je `users/{id}.defaultSchedule` a upravuje se v 
 (Stálý rozvrh → editor). **Neudržovat jeho kopii v kódu** — dřívější konstanta `PRESET`
 pro tlačítko „Předvyplnit rozvrh" se za dva měsíce rozešla s realitou (celá jména místo
 příjmení, jiné složení týmu) a stala se z ní past (v35). Konfigurace v kódu, která
-odkazuje na lidi (`PERSONAL`), páruje podle celého jména i příjmení.
+odkazuje na lidi (`PERSONAL`), páruje podle celého jména i příjmení. **Osobní pravidla jsou
+zatím vypnutá** (prázdné `PERSONAL`, v36) — mechanismus zůstává, zapnutí = doplnit záznam.
 
 ## Datový model týdne (`schedules/{pondělí}`)
 

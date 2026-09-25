@@ -777,3 +777,22 @@ Slavíčkova pravidla. Oprava: `personalOf` páruje podle celého jména **nebo*
 Odebrán stale záznam Víťa (noHO). Dva nové testy — ověřeno, že na staré logice selžou.
 
 52 testů, lint čistý.
+
+---
+
+## Aktualizace v36 — osobní pravidla prozatím vypnuta
+
+Rozhodnutí uživatele: kvůli dynamice týmu se osobní pravidla v praxi často porušují
+a upozornění by jen dělala šum. `PERSONAL = {}`.
+
+Důsledky vypnutí (vědomě přijaté):
+- žádná upozornění „X nemá otevírat / nemá mít 10:00 / nemá mít HO",
+- Návrhy mohou nabídnout **Andyho** na pokrytí 8:00 (dřív ho `canOpen` vyřazoval).
+
+Mechanismus zůstává kvůli případnému návratu: `personalOf(employees, eid, rulesMap)`
+s volitelnou mapou a `analyzeWeek` bere mapu z `rules.personal`, jinak z `PERSONAL`.
+Zapnutí = doplnit záznam do `PERSONAL` (příklady v komentáři u konstanty).
+Testy mechanismu používají vlastní mapu (nezávislé na tom, co je zapnuté) + nový test
+aktuálního stavu: žádná osobní upozornění, Andy mezi návrhy na 8:00. 53 testů.
+
+Tato větev obsahuje i v35 (odstranění „Předvyplnit rozvrh").

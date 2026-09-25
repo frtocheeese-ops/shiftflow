@@ -129,17 +129,17 @@ export function withDefaults(entries, absences, emps, weekKey, rotations, intake
   return applyRotations(merged, weekKey, rotations, absences, intake, intakeAllow);
 }
 
-// Osobní preference/pravidla (silná, ale admin je může přebít úpravou). Klíč = jméno v appce.
-export const PERSONAL = {
-  "Slavíček": { mustOpen: true },          // Jirka — 8:00 celý týden v kanceláři
-  "Andy":     { noOpen: true },            // nikdy 8:00 v kanceláři
-  "Lochman":  { noTenOn: "St" },           // Denis — ve středu ne od 10:00
-};
-// Páruje podle celého jména NEBO příjmení (poslední slovo) — „Denis Lochman" i „Lochman".
-// Dřív jen přesná shoda: po přepsání jmen na celá jména se pravidla tiše přestala uplatňovat.
-export const personalOf = (employees, eid) => {
+// Osobní pravidla — PROZATÍM VYPNUTO (v36): v praxi se často porušovala a upozornění
+// by jen dělala šum. Mechanismus zůstává; znovuzapnutí = doplnit záznam, např.:
+//   "Lochman": { noTenOn: "St" },   // ve středu ne od 10:00
+//   "Andy":     { noOpen: true },    // nikdy 8:00 v kanceláři (a nenabízet ho v Návrzích)
+//   "Slavíček": { mustOpen: true },
+//   "Jméno":    { noHO: true },      // bez home office
+// Klíč = celé jméno nebo příjmení.
+export const PERSONAL = {};
+export const personalOf = (employees, eid, rulesMap = PERSONAL) => {
   const name = (employees.find(e => e.id === eid) || {}).name || "";
-  return PERSONAL[name] || PERSONAL[name.trim().split(/\s+/).pop()] || {};
+  return rulesMap[name] || rulesMap[name.trim().split(/\s+/).pop()] || {};
 };
 
 export const RULE_DEFAULTS = { officeMin: 4, hoCapDay: 3, hoPerWeek: 2, cover8: true, cover10: true, min8: 2, min10: 2 };
@@ -165,7 +165,8 @@ export function analyzeWeek(cs, absences, employees, rulesIn, intake = {}, intak
   const weeklyHO = {};
   stats.forEach(st => st.ho.forEach(h => weeklyHO[h.empId] = (weeklyHO[h.empId] || 0) + 1));
   const allowed = (day, eid) => (intakeAllow[day] || []).includes(eid);
-  const canOpen = eid => !personalOf(employees, eid).noOpen; // kdo smí 8:00 v kanceláři
+  const pOf = eid => personalOf(employees, eid, R.personal || PERSONAL);
+  const canOpen = eid => !pOf(eid).noOpen; // kdo smí 8:00 v kanceláři
 
   DAYS.forEach((day, di) => {
     const st = stats[di];
@@ -231,11 +232,11 @@ export function analyzeWeek(cs, absences, employees, rulesIn, intake = {}, intak
     if (st.ho.length > R.hoCapDay) violations.push({ sev: "warn", day, msg: `${day}: ${st.ho.length} lidí na HO (strop ${R.hoCapDay})` });
 
     // Osobní preference (upravitelné) — jen upozornění
-    st.office.filter(x => x.shift === "08:00" && personalOf(employees, x.empId).noOpen).forEach(x =>
+    st.office.filter(x => x.shift === "08:00" && pOf(x.empId).noOpen).forEach(x =>
       violations.push({ sev: "warn", day, empId: x.empId, msg: `${day}: ${(employees.find(e => e.id === x.empId) || {}).name} nemá otevírat (8:00)` }));
-    [...st.office, ...st.ho].filter(x => { const p = personalOf(employees, x.empId); return p.noTenOn === day && x.shift === "10:00"; }).forEach(x =>
+    [...st.office, ...st.ho].filter(x => { const p = pOf(x.empId); return p.noTenOn === day && x.shift === "10:00"; }).forEach(x =>
       violations.push({ sev: "warn", day, empId: x.empId, msg: `${day}: ${(employees.find(e => e.id === x.empId) || {}).name} nemá mít 10:00` }));
-    st.ho.filter(x => personalOf(employees, x.empId).noHO).forEach(x =>
+    st.ho.filter(x => pOf(x.empId).noHO).forEach(x =>
       violations.push({ sev: "warn", day, empId: x.empId, msg: `${day}: ${(employees.find(e => e.id === x.empId) || {}).name} nemá mít HO` }));
 
     // Nástupy

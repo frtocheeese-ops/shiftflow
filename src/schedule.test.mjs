@@ -183,17 +183,31 @@ test("férovost: nový kolega nedostane směny z týdnů před nástupem", () =>
 });
 
 // ════════════════ Osobní pravidla ════════════════
-test("osobní pravidla platí pro celé jméno i samotné příjmení", () => {
+// Mechanismus se testuje s vlastní mapou — nezávisle na tom, co je v PERSONAL zapnuté.
+const TEST_PERSONAL = { "Slavíček": { mustOpen: true }, "Andy": { noOpen: true }, "Lochman": { noTenOn: "St" } };
+
+test("osobní pravidla: párují podle celého jména i samotného příjmení", () => {
   const emps = [{ id: "a", name: "Denis Lochman" }, { id: "b", name: "Lochman" }, { id: "c", name: "Jiří Slavíček" }, { id: "d", name: "Andy" }, { id: "e", name: "Olda Stibor" }];
-  assert.deepEqual(personalOf(emps, "a"), { noTenOn: "St" });
-  assert.deepEqual(personalOf(emps, "b"), { noTenOn: "St" });
-  assert.deepEqual(personalOf(emps, "c"), { mustOpen: true });
-  assert.deepEqual(personalOf(emps, "d"), { noOpen: true });
-  assert.deepEqual(personalOf(emps, "e"), {});
+  assert.deepEqual(personalOf(emps, "a", TEST_PERSONAL), { noTenOn: "St" });
+  assert.deepEqual(personalOf(emps, "b", TEST_PERSONAL), { noTenOn: "St" });
+  assert.deepEqual(personalOf(emps, "c", TEST_PERSONAL), { mustOpen: true });
+  assert.deepEqual(personalOf(emps, "d", TEST_PERSONAL), { noOpen: true });
+  assert.deepEqual(personalOf(emps, "e", TEST_PERSONAL), {});
 });
 
-test("osobní pravidlo se projeví v kontrole: Lochman ve středu na 10:00", () => {
+test("osobní pravidla: když jsou zapnutá, projeví se v kontrole (Lochman ve středu na 10:00)", () => {
   const emps = [{ id: "loch", name: "Denis Lochman", role: "employee" }];
   const w = empty(); w.St["10:00"] = [{ empId: "loch" }];
-  assert.ok(analyzeWeek(w, {}, emps, {}).violations.some(v => /Lochman nemá mít 10:00/.test(v.msg)));
+  assert.ok(analyzeWeek(w, {}, emps, { personal: TEST_PERSONAL }).violations.some(v => /Lochman nemá mít 10:00/.test(v.msg)));
+});
+
+test("osobní pravidla: aktuálně vypnutá — žádná upozornění, Andy smí být navržen na 8:00", () => {
+  const emps = [0, 1, 2, 3].map(i => ({ id: "e" + i, name: "E" + i, role: "employee" })).concat([{ id: "andy", name: "Andy", role: "employee" }, { id: "loch", name: "Denis Lochman", role: "employee" }]);
+  const w = empty();
+  w.Po["08:00"] = [{ empId: "e0" }]; w.Po["09:00"] = [{ empId: "andy" }, { empId: "e1" }, { empId: "e2" }]; w.Po["10:00"] = [{ empId: "e3" }, { empId: "loch", ho: true }];
+  w.St["10:00"] = [{ empId: "loch" }];
+  const r = analyzeWeek(w, {}, emps, {});
+  assert.equal(r.violations.filter(v => /nemá (otevírat|mít)/.test(v.msg)).length, 0);
+  const p = r.problems.find(x => x.key === "08:00:Po");
+  assert.ok(p.alts.some(a => a.empId === "andy"), "Andy má být mezi návrhy na 8:00");
 });
