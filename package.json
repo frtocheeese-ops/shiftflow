@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node --test src/schedule.test.mjs src/views.test.mjs",
+    "test": "node --test src/schedule.test.mjs src/views.test.mjs src/app-structure.test.mjs",
     "init": "node scripts/init-firestore.mjs",
     "lint": "eslint --ext .js,.jsx src/",
     "check": "npm test && npm run lint"

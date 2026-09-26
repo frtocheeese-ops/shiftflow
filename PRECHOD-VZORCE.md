@@ -834,3 +834,35 @@ razítek) a workflow commituje i při změně diagnostiky.
 
 Vedlejší zjištění: 25. 9. proběhl z ~20 naplánovaných pokusů jen jeden (11:15 UTC =
 13:15 Praha, záchranný běh). GitHub plánovač se tedy nejen zpožďuje, ale i vynechává.
+
+---
+
+## Aktualizace v38 — PŘÍČINA: listenery se připojovaly před přihlášením
+
+**Nález (díky diagnostice v37 — bot, síťový záznam, hlášení listenerů).** Všechna
+naslouchání (`onSnapshot`) jsou v komponentě `App` nad řádkem
+`if (!authUser) return <AuthScreen />`. Při otevření stránky **nepřihlášeným**
+uživatelem se proto připojila hned (síť: `LISTEN … bez tokenu` v 0,7 s, přihlášení
+až ve 2,8 s) → databáze je odmítla (`permission-denied`) → listenery s prázdnými
+závislostmi `[]` (pravidla, výměny, návrhy, všechny týdny, log) se **už nikdy
+nepřipojily**. `users` a `schedule` se připojily znovu jen díky jiné závislosti.
+
+**Dopad nebyl jen na bota.** Kdokoli, kdo se přihlásil ručně (po odhlášení, na novém
+zařízení, po vymazání dat), neměl do znovunačtení stránky rotace, výměny, návrhy,
+statistiky férovosti, celoroční Návrhy ani log; aktuální týden viděl jako čistý stálý
+rozvrh (bez dovolených a úprav), dokud nepřepnul týden. Kdo byl přihlášen už při
+načtení (běžný případ), problém neměl — proto se to dlouho neprojevilo.
+Bot se přihlašuje vždy znovu → pravidla neměl nikdy → snímek bez rotací.
+
+**Oprava.** Každý listener: `if (!authUser) return;` a přihlášený uživatel
+(`authUser?.uid`) v závislostech → připojí se až po přihlášení a po změně účtu znovu.
+
+**Druhý nález opraven zároveň: návrhy pro členy.** Listener četl celou kolekci
+`changeProposals`, ale pravidla členovi dovolují jen návrhy, kde je v `affected` →
+celý dotaz odmítnut → **členové nikdy neviděli návrhy čekající na jejich souhlas**
+(potvrzeno uživatelem). Nově: admin čte vše, člen
+`where("affected", "array-contains", uid)`, což pravidla splňuje.
+
+**Prevence.** `src/app-structure.test.mjs` — strukturální test: každý efekt
+s `onSnapshot` musí čekat na přihlášení a mít ho v závislostech; návrhy člena musí
+být filtrované. Ověřeno: na staré verzi oba testy selžou. 55 testů.

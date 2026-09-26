@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { auth, db, getMsg } from "./firebase";
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, sendPasswordResetEmail, updatePassword } from "firebase/auth";
-import { doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc, collection, onSnapshot, runTransaction, increment } from "firebase/firestore";
+import { doc, getDoc, setDoc, updateDoc, deleteDoc, addDoc, collection, onSnapshot, runTransaction, increment, query, where } from "firebase/firestore";
 import { getToken, onMessage } from "firebase/messaging";
 
 import {
@@ -657,8 +657,8 @@ export default function App() {
   const fairness = useMemo(() => computeFairness(allSchedules, employees, rules.rotations), [allSchedules, employees, rules.rotations]);
 
   useEffect(() => { const u = onAuthStateChanged(auth, async u => { if (u) { setAuthUser(u); const s = await getDoc(doc(db, "users", u.uid)); if (s.exists()) setProfile({ id: u.uid, ...s.data() }); else setProfile({ id: u.uid, name: u.displayName || u.email, role: "employee", setupDone: false }); initPush(u.uid); } else { setAuthUser(null); setProfile(null); } }); return u; }, []);
-  useEffect(() => { const u = onSnapshot(collection(db, "users"), s => { noteListen("users", null); const e = s.docs.map(d => ({ id: d.id, ...d.data() })); setEmployees(e); if (profile) { const m = e.find(x => x.id === profile.id); if (m) setProfile(p => ({ ...p, ...m })); } }, e => noteListen("users", e)); return u; }, [profile?.id]);
-  useEffect(() => { const u = onSnapshot(doc(db, "schedules", wk), s => { noteListen("schedule", null); if (s.exists()) { const d = s.data(); setSchedule(d.entries || null); setAbsences(d.absences || {}); setEvents(d.events || {}); setNotes(d.notes || {}); setIntake(d.intake || {}); setIntakeAllow(d.intakeAllow || {}); setSchedMeta({ at: d.modifiedAt, by: d.modifiedBy }); } else { setSchedule(null); setAbsences({}); setEvents({}); setNotes({}); setIntake({}); setIntakeAllow({}); setSchedMeta({}); } }, e => noteListen("schedule", e)); return u; }, [wk]);
+  useEffect(() => { if (!authUser) return; const u = onSnapshot(collection(db, "users"), s => { noteListen("users", null); const e = s.docs.map(d => ({ id: d.id, ...d.data() })); setEmployees(e); if (profile) { const m = e.find(x => x.id === profile.id); if (m) setProfile(p => ({ ...p, ...m })); } }, e => noteListen("users", e)); return u; }, [authUser?.uid, profile?.id]);
+  useEffect(() => { if (!authUser) return; const u = onSnapshot(doc(db, "schedules", wk), s => { noteListen("schedule", null); if (s.exists()) { const d = s.data(); setSchedule(d.entries || null); setAbsences(d.absences || {}); setEvents(d.events || {}); setNotes(d.notes || {}); setIntake(d.intake || {}); setIntakeAllow(d.intakeAllow || {}); setSchedMeta({ at: d.modifiedAt, by: d.modifiedBy }); } else { setSchedule(null); setAbsences({}); setEvents({}); setNotes({}); setIntake({}); setIntakeAllow({}); setSchedMeta({}); } }, e => noteListen("schedule", e)); return u; }, [wk, authUser?.uid]);
 
   // Auto-sync GCal when ANY week's schedule changes affecting current user
   // Listens to schedules collection and syncs the affected week if user has events there
@@ -694,20 +694,22 @@ export default function App() {
     });
     return u;
   }, [profile?.id, profile?.gcalEnabled]);
-  useEffect(() => { const u = onSnapshot(collection(db, "swapRequests"), s => { noteListen("swapRequests", null); setSwaps(s.docs.map(d => ({ id: d.id, ...d.data() }))); }, e => noteListen("swapRequests", e)); return u; }, []);
-  useEffect(() => { const u = onSnapshot(collection(db, "changeProposals"), s => { noteListen("changeProposals", null); setProposals(s.docs.map(d => ({ id: d.id, ...d.data() }))); }, e => noteListen("changeProposals", e)); return u; }, []);
+  useEffect(() => { if (!authUser) return; const u = onSnapshot(collection(db, "swapRequests"), s => { noteListen("swapRequests", null); setSwaps(s.docs.map(d => ({ id: d.id, ...d.data() }))); }, e => noteListen("swapRequests", e)); return u; }, [authUser?.uid]);
+  useEffect(() => { if (!authUser || !profile) return; const ref = profile.role === "admin" ? collection(db, "changeProposals") : query(collection(db, "changeProposals"), where("affected", "array-contains", authUser.uid));
+    const u = onSnapshot(ref, s => { noteListen("changeProposals", null); setProposals(s.docs.map(d => ({ id: d.id, ...d.data() }))); }, e => noteListen("changeProposals", e)); return u; }, [authUser?.uid, profile?.role]);
   // Všechny rozvrhy pro férovostní počítadla (malý tým → pár desítek dokumentů)
-  useEffect(() => { const u = onSnapshot(collection(db, "schedules"), s => { noteListen("allSchedules", null); const m = {}; s.docs.forEach(d => m[d.id] = d.data()); setAllSchedules(m); }, e => noteListen("allSchedules", e)); return u; }, []);
+  useEffect(() => { if (!authUser) return; const u = onSnapshot(collection(db, "schedules"), s => { noteListen("allSchedules", null); const m = {}; s.docs.forEach(d => m[d.id] = d.data()); setAllSchedules(m); }, e => noteListen("allSchedules", e)); return u; }, [authUser?.uid]);
   // Pravidla (vč. rotací). Stav načtení se zapisuje do <html data-rules>, aby ho viděl páteční bot;
   // chyba se už neztratí potichu (dřív chybějící oprávnění = tichý návrat k výchozím pravidlům bez rotací).
   useEffect(() => {
+    if (!authUser) return;
     const mark = v => { try { document.documentElement.dataset.rules = v; } catch { } };
     const u = onSnapshot(doc(db, "rules", "global"),
       s => { noteListen("rules", null); if (s.exists()) setRules(s.data()); mark(s.exists() ? `ok:${(s.data().rotations || []).length}` : "missing"); },
       err => { noteListen("rules", err); mark(`error:${err.code || err.message}`); });
     return u;
-  }, []);
-  useEffect(() => { const u = onSnapshot(collection(db, "auditLog"), s => { noteListen("auditLog", null); const a = s.docs.map(d => ({ id: d.id, ...d.data() })); a.sort((a, b) => (b.time || "").localeCompare(a.time || "")); setLogs(a.slice(0, 100)); }, e => noteListen("auditLog", e)); return u; }, []);
+  }, [authUser?.uid]);
+  useEffect(() => { if (!authUser) return; const u = onSnapshot(collection(db, "auditLog"), s => { noteListen("auditLog", null); const a = s.docs.map(d => ({ id: d.id, ...d.data() })); a.sort((a, b) => (b.time || "").localeCompare(a.time || "")); setLogs(a.slice(0, 100)); }, e => noteListen("auditLog", e)); return u; }, [authUser?.uid]);
 
   const hardSync = async () => {
     notify("Synchronizuji…");
