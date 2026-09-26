@@ -80,35 +80,6 @@ const recipients = [...new Set((ur.documents || [])
 writeFileSync("recipients.txt", recipients.join("\n"));
 console.log(`Příjemci s notify=true: ${recipients.length}`);
 
-// ── Diagnostika oprávnění: kterou kolekci smí bot číst? (výsledek do diag.txt) ──
-const fsBase = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents`;
-const probeTargets = ["rules/global", "users?pageSize=1", "schedules?pageSize=1", "changeProposals?pageSize=1", "swapRequests?pageSize=1", "auditLog?pageSize=1", "settings?pageSize=1"];
-const accessReport = [];
-for (const p of probeTargets) {
-  try {
-    const res = await fetch(`${fsBase}/${p}`, { headers: { Authorization: `Bearer ${idToken}` } });
-    let note = "";
-    if (!res.ok) { try { note = " " + ((await res.json()).error?.status || ""); } catch { } }
-    accessReport.push(`${p.split("?")[0].padEnd(16)} HTTP ${res.status}${note}`);
-  } catch (e) { accessReport.push(`${p.split("?")[0].padEnd(16)} chyba ${e.message}`); }
-}
-const botDoc = await fetch(`${fsBase}/users/${r.localId}`, { headers: { Authorization: `Bearer ${idToken}` } }).then(x => x.json()).catch(() => ({}));
-const botFields = Object.keys(botDoc.fields || {}).sort().join(", ");
-const tokenClaims = JSON.parse(Buffer.from(idToken.split(".")[1], "base64url").toString());
-console.log("Přístup bota:\n  " + accessReport.join("\n  "));
-// Obsah pro rozbor rotace: konfigurace rotací + uložené úterý cílového týdne (jen jméno/čas/HO/příznaky)
-const fv = v => v == null ? null : v.stringValue ?? v.booleanValue ?? v.integerValue ?? (v.nullValue === null ? null : v.arrayValue ? (v.arrayValue.values || []).map(fv) : v.mapValue ? Object.fromEntries(Object.entries(v.mapValue.fields || {}).map(([k, x]) => [k, fv(x)])) : null);
-const usersAll = await fetch(`${fsBase}/users?pageSize=300`, { headers: { Authorization: `Bearer ${idToken}` } }).then(x => x.json()).catch(() => ({}));
-const nameOf = Object.fromEntries((usersAll.documents || []).map(d => [d.name.split("/").pop(), d.fields?.name?.stringValue || "?"]));
-const rulesDoc = await fetch(`${fsBase}/rules/global`, { headers: { Authorization: `Bearer ${idToken}` } }).then(x => x.json()).catch(() => ({}));
-const rots = (fv(rulesDoc.fields?.rotations) || []).map(r => `${r.day} ${nameOf[r.aId] || r.aId}(${r.shiftA}) <-> ${nameOf[r.bId] || r.bId}(${r.shiftB}) ho=${r.ho} anchor=${r.anchor}`);
-const nextMon = (() => { const d = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Prague" })); d.setDate(d.getDate() + ((8 - d.getDay()) % 7 || 7)); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; })();
-const wkDoc = await fetch(`${fsBase}/schedules/${nextMon}`, { headers: { Authorization: `Bearer ${idToken}` } }).then(x => x.json()).catch(() => ({}));
-const ut = fv(wkDoc.fields?.entries)?.["Út"];
-const utLines = ut ? Object.entries(ut).flatMap(([sh, arr]) => (arr || []).map(e => `${sh} ${nameOf[e.empId] || e.empId} ho=${!!e.ho} isDefault=${e.isDefault} rot=${!!e.rot}`)) : ["(týden v DB není uložen — skládá se ze stálého rozvrhu)"];
-const rotReport = [`rotace v rules/global (${rots.length}): ${rots.length ? "\n    " + rots.join("\n    ") : "ŽÁDNÉ"}`, `ulozene utery tydne ${nextMon}:\n    ${utLines.join("\n    ")}`];
-
-
 // ── Screenshot ──
 const browser = await puppeteer.launch({ args: ["--no-sandbox", "--font-render-hinting=none"] });
 const page = await browser.newPage();
@@ -133,10 +104,10 @@ await new Promise(s => setTimeout(s, 2000));
 const rulesState = await page.waitForFunction(() => document.documentElement.dataset.rules, { timeout: 20000 })
   .then(h => h.jsonValue()).catch(() => "nezjištěno (starší verze appky?)");
 console.log(`Pravidla v appce: ${rulesState}`);
-if (String(rulesState).startsWith("error")) {
-  console.error("⚠ Appka pro bota nenačetla pravidla (rotace chybí) — snímek by byl špatně, končím bez uložení.");
-  await browser.close(); process.exit(1);
-}
+// Když appka pravidla nenačte, snímek by byl bez rotací → rozvrh.png nepřepisovat,
+// uložit jen diagnostiku (e-mail neodejde, další běh to zkusí znovu).
+const rulesBroken = String(rulesState).startsWith("error");
+if (rulesBroken) console.error("⚠ Appka nenačetla pravidla — snímek neuložím, ukládám jen diagnostiku.");
 await page.click('[aria-label="Další týden"]');
 await new Promise(s => setTimeout(s, 3500)); // onSnapshot příštího týdne
 
@@ -144,9 +115,8 @@ mkdirSync("public/nahled", { recursive: true });
 const grid = await page.$("#week-grid");
 if (!grid) throw new Error("#week-grid nenalezen");
 const box = await grid.boundingBox();
-await grid.screenshot({ path: "public/nahled/rozvrh.png" });
+await grid.screenshot({ path: rulesBroken ? "/tmp/rozvrh-chybny.png" : "public/nahled/rozvrh.png" });
 // Obsah mřížky pro diagnostiku přečíst DŘÍV, než se prohlížeč zavře
-const shownWeek = await page.evaluate(() => document.querySelector("#week-grid")?.innerText.split("\n").slice(0, 12).join(" | ") || "?");
 const listenState = await page.evaluate(() => JSON.stringify(window.__sfListen || "nehlášeno (starší verze appky)"));
 await browser.close();
 console.log("Screenshot mřížky uložen: public/nahled/rozvrh.png");
@@ -155,13 +125,9 @@ console.log("Screenshot mřížky uložen: public/nahled/rozvrh.png");
 writeFileSync("public/nahled/diag.txt", [
   `pravidla: ${rulesState}`,
   `listenery v appce: ${listenState}`,
-  `pristup bota (REST cteni):\n  ${accessReport.join("\n  ")}`,
-  ...rotReport,
-  `bot: pole v users doc: ${botFields}`,
-  `bot: email_verified=${tokenClaims.email_verified} | provider=${tokenClaims.firebase?.sign_in_provider}`,
-  `mrizka (zacatek): ${shownWeek}`,
-  `chyby stranky: ${pageProblems.length ? "\n  " + [...new Set(pageProblems)].slice(0, 15).join("\n  ") : "zadne"}`,
+  `chyby stranky: ${pageProblems.length ? "\n  " + [...new Set(pageProblems)].slice(0, 10).join("\n  ") : "zadne"}`,
 ].join("\n") + "\n");
+if (rulesBroken) { writeFileSync("send_mail.txt", "0"); console.log("Uložena jen diagnostika."); process.exit(0); }
 
 // ── OG stránka: ve WhatsAppu se u odkazu ukáže rovnou náhled rozvrhu ──
 const nm = new Date(praha); nm.setDate(nm.getDate() + ((8 - nm.getDay()) % 7 || 7));
