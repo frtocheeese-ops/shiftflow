@@ -866,3 +866,21 @@ celý dotaz odmítnut → **členové nikdy neviděli návrhy čekající na jej
 **Prevence.** `src/app-structure.test.mjs` — strukturální test: každý efekt
 s `onSnapshot` musí čekat na přihlášení a mít ho v závislostech; návrhy člena musí
 být filtrované. Ověřeno: na staré verzi oba testy selžou. 55 testů.
+
+---
+
+## Aktualizace v39 — ověřeno a uklizeno
+
+Po nasazení v38 bot sám spuštěn (token má nyní oprávnění Actions): pravidla `ok:1`,
+všech 7 listenerů `ok`, žádné chyby stránky, úterý 29. 9. s rotací (Lochman 8:00 HO,
+Andy 10:00 HO) — shodně s živým rozvrhem. Náhled opraven.
+
+Úklid bota: odstraněna ladicí sonda oprávnění (REST), výpis rotací a uloženého úterý
+a síťový záznam. Ponecháno natrvalo:
+- čekání na načtení pravidel (`<html data-rules>`) před fotografováním,
+- `public/nahled/diag.txt` (stav pravidel, stav listenerů, chyby stránky) — bez
+  časových razítek, commit jen při změně,
+- ochrana: když appka pravidla nenačte, `rozvrh.png` se nepřepíše (uloží se jen
+  diagnostika, e-mail neodejde, další běh to zkusí znovu).
+V appce ponecháno hlášení stavu listenerů (`window.__sfListen`) — chyba listeneru se
+už nikdy neztratí potichu.
