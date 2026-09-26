@@ -80,6 +80,23 @@ const recipients = [...new Set((ur.documents || [])
 writeFileSync("recipients.txt", recipients.join("\n"));
 console.log(`Příjemci s notify=true: ${recipients.length}`);
 
+// ── Diagnostika oprávnění: kterou kolekci smí bot číst? (výsledek do diag.txt) ──
+const fsBase = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents`;
+const probeTargets = ["rules/global", "users?pageSize=1", "schedules?pageSize=1", "changeProposals?pageSize=1", "swapRequests?pageSize=1", "auditLog?pageSize=1", "settings?pageSize=1"];
+const accessReport = [];
+for (const p of probeTargets) {
+  try {
+    const res = await fetch(`${fsBase}/${p}`, { headers: { Authorization: `Bearer ${idToken}` } });
+    let note = "";
+    if (!res.ok) { try { note = " " + ((await res.json()).error?.status || ""); } catch { } }
+    accessReport.push(`${p.split("?")[0].padEnd(16)} HTTP ${res.status}${note}`);
+  } catch (e) { accessReport.push(`${p.split("?")[0].padEnd(16)} chyba ${e.message}`); }
+}
+const botDoc = await fetch(`${fsBase}/users/${r.localId}`, { headers: { Authorization: `Bearer ${idToken}` } }).then(x => x.json()).catch(() => ({}));
+const botFields = Object.keys(botDoc.fields || {}).sort().join(", ");
+const tokenClaims = JSON.parse(Buffer.from(idToken.split(".")[1], "base64url").toString());
+console.log("Přístup bota:\n  " + accessReport.join("\n  "));
+
 // ── Screenshot ──
 const browser = await puppeteer.launch({ args: ["--no-sandbox", "--font-render-hinting=none"] });
 const page = await browser.newPage();
@@ -124,6 +141,9 @@ console.log("Screenshot mřížky uložen: public/nahled/rozvrh.png");
 // mění se jen při skutečné změně stavu, takže nevyrábí zbytečné commity.
 writeFileSync("public/nahled/diag.txt", [
   `pravidla: ${rulesState}`,
+  `pristup bota (REST cteni):\n  ${accessReport.join("\n  ")}`,
+  `bot: pole v users doc: ${botFields}`,
+  `bot: email_verified=${tokenClaims.email_verified} | provider=${tokenClaims.firebase?.sign_in_provider}`,
   `mrizka (zacatek): ${shownWeek}`,
   `chyby stranky: ${pageProblems.length ? "\n  " + [...new Set(pageProblems)].slice(0, 15).join("\n  ") : "zadne"}`,
 ].join("\n") + "\n");
