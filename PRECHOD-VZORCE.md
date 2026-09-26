@@ -796,3 +796,41 @@ Testy mechanismu používají vlastní mapu (nezávislé na tom, co je zapnuté)
 aktuálního stavu: žádná osobní upozornění, Andy mezi návrhy na 8:00. 53 testů.
 
 Tato větev obsahuje i v35 (odstranění „Předvyplnit rozvrh").
+
+---
+
+## Aktualizace v37 — diagnostika: náhled bez rotace
+
+**Příznak.** Admin vidí v úterý 29. 9. rotaci (Lochman 8:00 HO, Andy 10:00 HO), páteční
+snímek ukazuje úterý bez rotace (Andy 9:00 HO, Lochman 10:00 HO = výchozí pozice).
+Opakovaný snímek dává totéž.
+
+**Rozbor.** Kód je pro admina i bota shodný a pravidla se načítají bezpodmínečně;
+`firestore.rules` v repu čtení `rules/global` všem přihlášeným dovoluje. Bot je běžný
+člen → pravděpodobně **stejně špatně vidí rozvrh všichni členové**. Kandidáti:
+(1) rotace není uložená v DB, žije jen v otevřené admin relaci (před v32 se změny
+pravidel projevovaly bez uložení); (2) pravidla v konzoli Firebase se liší od repa
+a členové `rules/global` číst nesmí (známý otevřený bod „rules drift").
+
+**Co se změnilo (aby to šlo příště poznat hned):**
+- Listener `rules/global` má obsluhu chyby — dřív chybějící oprávnění znamenalo tichý
+  návrat k výchozím pravidlům bez rotací. Stav načtení se zapisuje do
+  `<html data-rules="ok:N | missing | error:kód">`.
+- Bot přeposílá chyby a výjimky stránky do logu Actions, **čeká na načtení pravidel**
+  a vypíše „Pravidla v appce: …". Pokud se pravidla nenačetla, **skončí chybou bez
+  uložení snímku** — raději ponechá předchozí snímek, než aby zveřejnil špatný.
+
+**Doplnění v37 po dalším rozboru.** Tvůj členský účet rotaci vidí (i po znovunačtení),
+takže oprávnění i uložení jsou v pořádku — chyba je jen u bota. Vyloučeno:
+- časové pásmo (bot běží v UTC): celá testovací sada i parita rotace dávají v UTC,
+  Praze i New Yorku shodný výsledek;
+- náhoda: ruční běh 25. 9. 15:31 UTC vyfotil **bajtově stejný** obrázek (commit přeskočen).
+Snímek ukazuje úterý úplně **bez** rotace (výchozí pozice), ne s obrácenou paritou →
+bot fotí dřív, než appka načte `rules/global`. Bot dosud jen napevno čekal (2 s + 3,5 s),
+na pravidla nijak. Oprava v této větvi: čekání na `data-rules`. Pro ověření bez přístupu
+k logům (hostitel logů Actions je mimo povolenou síť) bot nově ukládá
+`public/nahled/diag.txt` (stav pravidel, začátek mřížky, chyby stránky; bez časových
+razítek) a workflow commituje i při změně diagnostiky.
+
+Vedlejší zjištění: 25. 9. proběhl z ~20 naplánovaných pokusů jen jeden (11:15 UTC =
+13:15 Praha, záchranný běh). GitHub plánovač se tedy nejen zpožďuje, ale i vynechává.
