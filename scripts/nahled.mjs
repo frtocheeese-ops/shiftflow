@@ -116,11 +116,12 @@ const grid = await page.$("#week-grid");
 if (!grid) throw new Error("#week-grid nenalezen");
 const box = await grid.boundingBox();
 await grid.screenshot({ path: "public/nahled/rozvrh.png" });
+// Obsah mřížky pro diagnostiku přečíst DŘÍV, než se prohlížeč zavře
+const shownWeek = await page.evaluate(() => document.querySelector("#week-grid")?.innerText.split("\n").slice(0, 12).join(" | ") || "?");
 await browser.close();
 console.log("Screenshot mřížky uložen: public/nahled/rozvrh.png");
 // Diagnostika do repa (čitelná i bez přístupu k logům Actions). Bez časových razítek →
 // mění se jen při skutečné změně stavu, takže nevyrábí zbytečné commity.
-const shownWeek = await page.evaluate(() => document.querySelector("#week-grid")?.innerText.split("\n").slice(0, 12).join(" | ") || "?");
 writeFileSync("public/nahled/diag.txt", [
   `pravidla: ${rulesState}`,
   `mrizka (zacatek): ${shownWeek}`,
