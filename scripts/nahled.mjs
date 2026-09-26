@@ -147,12 +147,14 @@ const box = await grid.boundingBox();
 await grid.screenshot({ path: "public/nahled/rozvrh.png" });
 // Obsah mřížky pro diagnostiku přečíst DŘÍV, než se prohlížeč zavře
 const shownWeek = await page.evaluate(() => document.querySelector("#week-grid")?.innerText.split("\n").slice(0, 12).join(" | ") || "?");
+const listenState = await page.evaluate(() => JSON.stringify(window.__sfListen || "nehlášeno (starší verze appky)"));
 await browser.close();
 console.log("Screenshot mřížky uložen: public/nahled/rozvrh.png");
 // Diagnostika do repa (čitelná i bez přístupu k logům Actions). Bez časových razítek →
 // mění se jen při skutečné změně stavu, takže nevyrábí zbytečné commity.
 writeFileSync("public/nahled/diag.txt", [
   `pravidla: ${rulesState}`,
+  `listenery v appce: ${listenState}`,
   `pristup bota (REST cteni):\n  ${accessReport.join("\n  ")}`,
   ...rotReport,
   `bot: pole v users doc: ${botFields}`,

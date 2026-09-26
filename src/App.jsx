@@ -22,6 +22,9 @@ import ProposalsView from "./views/ProposalsView";
 import ScheduleView from "./views/ScheduleView";
 import { Badge, Btn, Input, Sel, Toggle, Modal, Card, RANK_TIERS, rankOf, HALF_LBL, HalfTag, RankBadge } from "./ui";
 
+// Diagnostika listenerů: stav každého naslouchání do window.__sfListen (čte ho páteční bot).
+// Dřív se chyba listeneru (např. chybějící oprávnění) potichu ztratila a data prostě chyběla.
+const noteListen = (name, err) => { try { window.__sfListen = { ...(window.__sfListen || {}), [name]: err ? `error:${err.code || err.message}` : "ok" }; if (err) console.error(`Listener ${name} selhal:`, err); } catch { } };
 const AE = "admin@shiftflow.app"; // admin se přihlašuje svým skutečným heslem (žádné heslo v kódu)
 
 function getWeekDates(wo) { const d = new Date(); d.setDate(d.getDate() + wo * 7); const mon = getMon(d); return DAYS.map((_, i) => { const x = new Date(mon); x.setDate(mon.getDate() + i); return localISO(x); }); }
@@ -654,8 +657,8 @@ export default function App() {
   const fairness = useMemo(() => computeFairness(allSchedules, employees, rules.rotations), [allSchedules, employees, rules.rotations]);
 
   useEffect(() => { const u = onAuthStateChanged(auth, async u => { if (u) { setAuthUser(u); const s = await getDoc(doc(db, "users", u.uid)); if (s.exists()) setProfile({ id: u.uid, ...s.data() }); else setProfile({ id: u.uid, name: u.displayName || u.email, role: "employee", setupDone: false }); initPush(u.uid); } else { setAuthUser(null); setProfile(null); } }); return u; }, []);
-  useEffect(() => { const u = onSnapshot(collection(db, "users"), s => { const e = s.docs.map(d => ({ id: d.id, ...d.data() })); setEmployees(e); if (profile) { const m = e.find(x => x.id === profile.id); if (m) setProfile(p => ({ ...p, ...m })); } }); return u; }, [profile?.id]);
-  useEffect(() => { const u = onSnapshot(doc(db, "schedules", wk), s => { if (s.exists()) { const d = s.data(); setSchedule(d.entries || null); setAbsences(d.absences || {}); setEvents(d.events || {}); setNotes(d.notes || {}); setIntake(d.intake || {}); setIntakeAllow(d.intakeAllow || {}); setSchedMeta({ at: d.modifiedAt, by: d.modifiedBy }); } else { setSchedule(null); setAbsences({}); setEvents({}); setNotes({}); setIntake({}); setIntakeAllow({}); setSchedMeta({}); } }); return u; }, [wk]);
+  useEffect(() => { const u = onSnapshot(collection(db, "users"), s => { noteListen("users", null); const e = s.docs.map(d => ({ id: d.id, ...d.data() })); setEmployees(e); if (profile) { const m = e.find(x => x.id === profile.id); if (m) setProfile(p => ({ ...p, ...m })); } }, e => noteListen("users", e)); return u; }, [profile?.id]);
+  useEffect(() => { const u = onSnapshot(doc(db, "schedules", wk), s => { noteListen("schedule", null); if (s.exists()) { const d = s.data(); setSchedule(d.entries || null); setAbsences(d.absences || {}); setEvents(d.events || {}); setNotes(d.notes || {}); setIntake(d.intake || {}); setIntakeAllow(d.intakeAllow || {}); setSchedMeta({ at: d.modifiedAt, by: d.modifiedBy }); } else { setSchedule(null); setAbsences({}); setEvents({}); setNotes({}); setIntake({}); setIntakeAllow({}); setSchedMeta({}); } }, e => noteListen("schedule", e)); return u; }, [wk]);
 
   // Auto-sync GCal when ANY week's schedule changes affecting current user
   // Listens to schedules collection and syncs the affected week if user has events there
@@ -691,20 +694,20 @@ export default function App() {
     });
     return u;
   }, [profile?.id, profile?.gcalEnabled]);
-  useEffect(() => { const u = onSnapshot(collection(db, "swapRequests"), s => setSwaps(s.docs.map(d => ({ id: d.id, ...d.data() })))); return u; }, []);
-  useEffect(() => { const u = onSnapshot(collection(db, "changeProposals"), s => setProposals(s.docs.map(d => ({ id: d.id, ...d.data() })))); return u; }, []);
+  useEffect(() => { const u = onSnapshot(collection(db, "swapRequests"), s => { noteListen("swapRequests", null); setSwaps(s.docs.map(d => ({ id: d.id, ...d.data() }))); }, e => noteListen("swapRequests", e)); return u; }, []);
+  useEffect(() => { const u = onSnapshot(collection(db, "changeProposals"), s => { noteListen("changeProposals", null); setProposals(s.docs.map(d => ({ id: d.id, ...d.data() }))); }, e => noteListen("changeProposals", e)); return u; }, []);
   // Všechny rozvrhy pro férovostní počítadla (malý tým → pár desítek dokumentů)
-  useEffect(() => { const u = onSnapshot(collection(db, "schedules"), s => { const m = {}; s.docs.forEach(d => m[d.id] = d.data()); setAllSchedules(m); }); return u; }, []);
+  useEffect(() => { const u = onSnapshot(collection(db, "schedules"), s => { noteListen("allSchedules", null); const m = {}; s.docs.forEach(d => m[d.id] = d.data()); setAllSchedules(m); }, e => noteListen("allSchedules", e)); return u; }, []);
   // Pravidla (vč. rotací). Stav načtení se zapisuje do <html data-rules>, aby ho viděl páteční bot;
   // chyba se už neztratí potichu (dřív chybějící oprávnění = tichý návrat k výchozím pravidlům bez rotací).
   useEffect(() => {
     const mark = v => { try { document.documentElement.dataset.rules = v; } catch { } };
     const u = onSnapshot(doc(db, "rules", "global"),
-      s => { if (s.exists()) setRules(s.data()); mark(s.exists() ? `ok:${(s.data().rotations || []).length}` : "missing"); },
-      err => { console.error("Pravidla se nenačetla:", err); mark(`error:${err.code || err.message}`); });
+      s => { noteListen("rules", null); if (s.exists()) setRules(s.data()); mark(s.exists() ? `ok:${(s.data().rotations || []).length}` : "missing"); },
+      err => { noteListen("rules", err); mark(`error:${err.code || err.message}`); });
     return u;
   }, []);
-  useEffect(() => { const u = onSnapshot(collection(db, "auditLog"), s => { const a = s.docs.map(d => ({ id: d.id, ...d.data() })); a.sort((a, b) => (b.time || "").localeCompare(a.time || "")); setLogs(a.slice(0, 100)); }); return u; }, []);
+  useEffect(() => { const u = onSnapshot(collection(db, "auditLog"), s => { noteListen("auditLog", null); const a = s.docs.map(d => ({ id: d.id, ...d.data() })); a.sort((a, b) => (b.time || "").localeCompare(a.time || "")); setLogs(a.slice(0, 100)); }, e => noteListen("auditLog", e)); return u; }, []);
 
   const hardSync = async () => {
     notify("Synchronizuji…");
