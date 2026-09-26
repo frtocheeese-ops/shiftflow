@@ -1,4 +1,5 @@
-pravidla: nezjištěno (starší verze appky?)
+pravidla: ok:1
+listenery v appce: {"users":"ok","schedule":"ok","swapRequests":"ok","allSchedules":"ok","rules":"ok","auditLog":"ok","changeProposals":"ok"}
 pristup bota (REST cteni):
   rules/global     HTTP 200
   users            HTTP 200
@@ -10,15 +11,14 @@ pristup bota (REST cteni):
 rotace v rules/global (1): 
     Út Andy(08:00) <-> Denis Lochman(10:00) ho=true anchor=2026-09-21
 ulozene utery tydne 2026-09-28:
-    09:00 Vláďa Švarc ho=false isDefault=true rot=false
     08:00 Viktor Koutný ho=false isDefault=true rot=false
     08:00 Jiří Slavíček ho=false isDefault=true rot=false
     08:00 Olda Stibor ho=false isDefault=true rot=false
     08:00 Andy ho=true isDefault=true rot=true
     10:00 Patrik Frťala ho=false isDefault=true rot=false
     10:00 Denis Lochman ho=true isDefault=true rot=true
+    09:00 Vláďa Švarc ho=false isDefault=true rot=false
 bot: pole v users doc: createdAt, defaultSchedule, email, fcmToken, name, notify, notifyEmail, role, setupDone, sickTotal, sickUsed, vacationTotal, vacationUsed, whateverTotal, whateverUsed
 bot: email_verified=false | provider=password
 mrizka (zacatek): ⏱	 | Pondělí | 28.9. | DEN ČESKÉ STÁTNOSTI	 | Úterý | 29.9. | 	 | Středa | 30.9. | 	 | Čtvrtek | 1.10.
-chyby stranky: 
-  [error] [2026-09-26T19:19:54.349Z]  @firebase/firestore: Firestore (11.10.0): Uncaught Error in snapshot listener: FirebaseError: [code=permission-denied]: Missing or insufficient permissions.
+chyby stranky: zadne
