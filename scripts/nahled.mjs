@@ -74,10 +74,11 @@ const ur = await fetch(`https://firestore.googleapis.com/v1/projects/${projectId
 }).then(x => x.json());
 const recipients = [...new Set((ur.documents || [])
   .map(d => d.fields || {})
-  .filter(f => f.notify?.booleanValue === true)
+  .filter(f => f.notify?.booleanValue === true && ["employee", "admin"].includes(f.role?.stringValue)) // jen schválení členové
   .map(f => f.notifyEmail?.stringValue || f.email?.stringValue)
   .filter(e => e && e !== BOT_EMAIL))];
 writeFileSync("recipients.txt", recipients.join("\n"));
+writeFileSync("gas_token.txt", idToken); // pro e-mail přes relay (platí 1 h; necommituje se)
 console.log(`Příjemci s notify=true: ${recipients.length}`);
 
 // ── Screenshot ──

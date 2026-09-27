@@ -922,3 +922,31 @@ Nechtěný vedlejší efekt ověřovacího běhu: byl první toho dne (neděle 2
 rozeslal týmu e-mail s odkazem na náhled. Oprava: krok e-mailu v `nahled.yml` nově
 vyžaduje `github.event_name == 'schedule'` — ruční spuštění (testy, ladění) nikdy
 nemailuje; e-mail odchází jen z pravidelného pátečního běhu.
+
+---
+
+## Aktualizace v42 — zabezpečení e-mailového relay (Apps Script)
+
+**Nález.** `gas/Code.gs` byl nasazen jako veřejná webová aplikace bez jakékoli
+kontroly; adresa je v kódu appky. Kdokoli mohl: poslat e-mail z Gmailu správce komukoli
+s libovolným obsahem (HTML se vkládalo neošetřené → phishing jménem ShiftFlow),
+volat Claude API na klíč správce (`aiOptimize`; klíč uživatel smazal a zrušil),
+posílat push notifikace a zakládat tabulky na jeho Drive. Appka přitom používala jen
+`sendEmail`.
+
+**Nový skript.**
+- Každý požadavek musí nést Firebase ID token. Skript s ním načte profil volajícího
+  z Firestore — **token ověří sama databáze** (pravost, platnost) a pravidla; projde jen
+  role `employee` / `admin`. Bez klíčů a tajemství ve skriptu.
+- Příjemce musí být e-mail nebo notifikační e-mail **schváleného člena týmu**.
+- Veškerý text je escapovaný; klikatelné jsou jen odkazy na `smenyjt.netlify.app`.
+- Odstraněny `sendPush`, `exportToSheets`, `aiOptimize`. `checkYearlyReset` ponechána
+  jako prázdná (případný časovač by jinak denně hlásil chybu).
+- Testy `gas/gas.test.mjs` (skript v Node s napodobeninami Gmail/UrlFetch): 8/8;
+  proti původnímu skriptu 7 selhání.
+
+**Appka a bot.** `callGAS` přikládá `idToken` přihlášeného uživatele; bot ukládá svůj
+token do `gas_token.txt` (necommituje se) a workflow ho přikládá; bot posílá jen
+schváleným členům. S původním skriptem vše funguje dál (token ignoruje) → pořadí:
+1) merge, 2) vložit `gas/Code.gs` do Apps Scriptu a nasadit NOVOU VERZI stávajícího
+nasazení (adresa se nesmí změnit). 67 testů.
