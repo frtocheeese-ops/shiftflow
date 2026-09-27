@@ -286,4 +286,22 @@ test("ScheduleView: admin vidí přepínač Nástupů, člen ne", async () => {
   assert.doesNotMatch(await render(V, await scheduleFixture({ isA: false })), /Označit jako Nástupy/);
 });
 
+test("PendingView: čekající účet vidí jen výzvu, zamítnutý může požádat znovu", async () => {
+  const V = await loadView("PendingView");
+  const cek = await render(V, { profile: { name: "Nový Kolega", role: "pending" }, onRequest() {}, onSignOut() {} });
+  assert.match(cek, /Čekáš na schválení/); assert.match(cek, /Nový Kolega/); assert.match(cek, /Odhlásit/);
+  assert.doesNotMatch(cek, /Požádat o přístup/);
+  const zam = await render(V, { profile: { name: "X", role: "pending", noDoc: true }, onRequest() {}, onSignOut() {} });
+  assert.match(zam, /Požádat o přístup/);
+});
+
+test("PeopleView: čekající účty se schválením nahoře, bez nich sekce chybí", async () => {
+  const V = await loadView("PeopleView");
+  const base = { employees: [{ id: "a", name: "Andy", role: "employee" }], onAdd() {}, onEditDays() {}, onDelete() {}, onAdjustFixes() {}, onApprove() {}, onReject() {} };
+  const html = await render(V, { ...base, pendingUsers: [{ id: "p", name: "Nový Kolega", email: "novy@firma.cz", role: "pending" }] });
+  assert.match(html, /Čekají na schválení \(1\)/); assert.match(html, /Nový Kolega/); assert.match(html, /novy@firma\.cz/);
+  assert.match(html, /Schválit/); assert.match(html, /Zamítnout/);
+  assert.doesNotMatch(await render(V, { ...base, pendingUsers: [] }), /Čekají na schválení/);
+});
+
 test.after(() => rmSync(OUT, { recursive: true, force: true }));

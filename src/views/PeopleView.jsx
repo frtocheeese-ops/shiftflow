@@ -2,9 +2,20 @@
    Nic nezapisuje: přidání, úprava, smazání i změna počtu fixů volá funkce z App.jsx. */
 import { Btn, Card, RankBadge } from "../ui";
 
-export default function PeopleView({ employees, onAdd, onEditDays, onDelete, onAdjustFixes }) {
+export default function PeopleView({ employees, pendingUsers = [], onApprove, onReject, onAdd, onEditDays, onDelete, onAdjustFixes }) {
   return (
     <div>
+      {pendingUsers.length > 0 && <Card style={{ marginBottom: 16, borderLeft: "3px solid var(--amb)" }}>
+        <div style={{ fontFamily: "'Barlow Condensed',sans-serif", fontSize: 15, letterSpacing: 1, textTransform: "uppercase", color: "var(--amb)", marginBottom: 8 }}>Čekají na schválení ({pendingUsers.length})</div>
+        {pendingUsers.map(u => <div key={u.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 0", borderTop: "1px solid var(--brd)", flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 160 }}>
+            <div style={{ fontWeight: 600, color: "var(--w)" }}>{u.name}</div>
+            <div style={{ fontSize: 12, color: "var(--tx3)" }}>{u.email}{u.createdAt ? ` · ${new Date(u.createdAt).toLocaleDateString("cs")}` : ""}</div>
+          </div>
+          <Btn small warm onClick={() => onApprove(u)}>Schválit</Btn>
+          <Btn small danger onClick={() => onReject(u)}>Zamítnout</Btn>
+        </div>)}
+      </Card>}
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20, borderBottom: "1px solid var(--brd)", paddingBottom: 12 }}><div style={{ fontSize: 20, fontWeight: 600, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 2 }}>Tým</div><Btn warm onClick={onAdd}>+ Přidat</Btn></div>
           <div style={{ marginBottom: 24 }}>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 12 }}>{employees.filter(e => e.role !== "admin").map(emp => <Card key={emp.id}>
