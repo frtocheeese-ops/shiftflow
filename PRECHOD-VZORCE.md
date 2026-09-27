@@ -950,3 +950,19 @@ token do `gas_token.txt` (necommituje se) a workflow ho přikládá; bot posíl�
 schváleným členům. S původním skriptem vše funguje dál (token ignoruje) → pořadí:
 1) merge, 2) vložit `gas/Code.gs` do Apps Scriptu a nasadit NOVOU VERZI stávajícího
 nasazení (adresa se nesmí změnit). 67 testů.
+
+---
+
+## Aktualizace v43 — relay ověřen; bot vyřazen z týmu
+
+**Ověření relay (v42) zvenku** (dočasný test z GitHub Actions, větev smazána): bez tokenu
+→ `unauthorized`; člen → cizí adresa → `recipient not in team`; člen → schránka bota →
+odesláno; `aiOptimize` → `Unknown action`. Appka volá stejnou adresu jako nová verze
+nasazení (AKfycbw4dt90…).
+
+**Bot mimo tým.** Profil bota nese značku `bot: true` (bot si ji nastavuje při každém
+běhu PATCHem s `updateMask=bot` — mění jen toto pole vlastního profilu, pravidla to
+dovolují; nově zakládaný bot ji má od začátku). Appka lidi s `bot: true` vynechá z
+`employees` → nezobrazí se v Týmu, statistikách férovosti, stálém rozvrhu ani ve
+výběrech (rotace, výměny). Čekající bot se ale v seznamu ke schválení ukáže (jinak by
+ho admin nemohl schválit). Strukturální test hlídá filtr. 68 testů.
