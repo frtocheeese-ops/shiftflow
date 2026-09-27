@@ -884,3 +884,29 @@ a síťový záznam. Ponecháno natrvalo:
   diagnostika, e-mail neodejde, další běh to zkusí znovu).
 V appce ponecháno hlášení stavu listenerů (`window.__sfListen`) — chyba listeneru se
 už nikdy neztratí potichu.
+
+---
+
+## Aktualizace v40 — bezpečnost: pravidla databáze a schvalování účtů
+
+**Nález.** Pravidla v konzoli (ověřeno — shodná s repem) kontrolovala skoro všude jen
+„přihlášený". Registrace je otevřená, tedy prakticky kdokoli mohl: nastavit si
+`role: "admin"` (update vlastního profilu i create), číst celý tým včetně nemocí a
+dovolených, přepsat či smazat libovolný týden, padělat log. Navíc člen nemohl zrušit
+vlastní žádost o výměnu (delete jen admin).
+
+**Nová pravidla (`firestore.rules`).** Role `pending | employee | admin`; `isMember()`
+= profil s rolí employee/admin. Registrace smí založit jen vlastní profil a jen jako
+`pending`; roli mění jen admin; čekající vidí jen sebe; data jen pro členy; výměnu smí
+zrušit její autor; log nejde upravit ani smazat; vše ostatní zakázáno.
+Testy na **emulátoru Firebase** v GitHub Actions (`rules-tests/`, 18 testů): nová
+pravidla 18/18, **současná produkční pravidla 10 selhání** = každá díra potvrzena.
+Před nasazením ověřeno, že všech 9 účtů má platnou roli (nikdo nebude zamčen).
+
+**Appka.** Registrace → `pending`; přihlášený bez profilu → `pending` (dřív se lokálně
+tvářil jako člen); `isMember` hlídá všechna datová připojení; čekající sleduje jen
+vlastní profil a po schválení se appka odemkne sama (`PendingView`); zamítnutý může
+požádat znovu. Admin: sekce „Čekají na schválení" v Týmu + odznak v menu. Bot se nově
+zakládá jako `pending`. Kompatibilní se starými i novými pravidly → pořadí nasazení:
+1) merge appky, 2) publikace pravidel v konzoli, 3) zabezpečení e-mailového skriptu.
+59 testů appky + 18 testů pravidel.

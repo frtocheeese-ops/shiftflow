@@ -64,6 +64,24 @@ samostatných chyb (viz PRECHOD-VZORCE.md v16, v18, v20, v21, v28).
    s `mergeFields` — nikdy `setDoc(..., { merge: true })` na mapy (`absences`),
    jinak nejdou mazat klíče a hrozí přepsání souběžné změny.
 
+## Bezpečnost: role a pravidla databáze
+
+Registrace je otevřená komukoli (veřejný klíč Firebase je v kódu každé webové appky),
+proto **„přihlášený" ≠ „člen"**:
+
+| Role | Kdo | Co vidí |
+|---|---|---|
+| `pending` | nový účet po registraci | jen obrazovku „Čekáš na schválení" (`PendingView`) |
+| `employee` | schválený člen | celou appku |
+| `admin` | správce | celou appku + schvalování, pravidla, tým |
+
+- Roli mění **jen admin** (Tým → Čekají na schválení → Schválit / Zamítnout).
+- Zdroj pravdy pro pravidla je `firestore.rules` v repu; do Firebase konzole se
+  publikují **ručně celým souborem**. Před publikací musí projít testy na emulátoru
+  (`rules-tests/`, workflow *Test pravidel databaze* — spouští se samo při změně pravidel).
+- V appce se každé naslouchání na data připojuje až pro schváleného člena (`isMember`),
+  hlídá to `src/app-structure.test.mjs`.
+
 ## Stálý rozvrh žije jen v databázi
 
 Stálý rozvrh každého člena je `users/{id}.defaultSchedule` a upravuje se v appce
