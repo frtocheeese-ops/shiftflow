@@ -30,7 +30,8 @@ const AE = "admin@shiftflow.app"; // admin se přihlašuje svým skutečným hes
 
 function getWeekDates(wo) { const d = new Date(); d.setDate(d.getDate() + wo * 7); const mon = getMon(d); return DAYS.map((_, i) => { const x = new Date(mon); x.setDate(mon.getDate() + i); return localISO(x); }); }
 const GAS = import.meta.env.VITE_GAS_URL;
-async function callGAS(a, d) { if (!GAS) return; try { await fetch(GAS, { method: "POST", headers: { "Content-Type": "text/plain" }, body: JSON.stringify({ action: a, data: d }) }); } catch { } }
+// E-mailový relay přijme jen požadavek s platným přihlášením schváleného člena (ověří ho u Firestore)
+async function callGAS(a, d) { if (!GAS) return; try { const idToken = await auth.currentUser?.getIdToken(); await fetch(GAS, { method: "POST", headers: { "Content-Type": "text/plain" }, body: JSON.stringify({ action: a, data: d, idToken }) }); } catch { } }
 async function initPush(u) { try { const m = await getMsg(); if (!m) return; if ((await Notification.requestPermission()) !== "granted") return; const v = import.meta.env.VITE_FIREBASE_VAPID_KEY; if (!v) return; const t = await getToken(m, { vapidKey: v }); await updateDoc(doc(db, "users", u), { fcmToken: t }); onMessage(m, p => { if (p.notification) new Notification(p.notification.title || "SF", { body: p.notification.body, icon: "/icon-192.png" }); }); } catch { } }
 
 /* ═══ GOOGLE CALENDAR ═══ */

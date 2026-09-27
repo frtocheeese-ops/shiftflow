@@ -60,11 +60,12 @@ jobs:
         run: |
           GAS=$(cat gas_url.txt)
           if [ -z "$GAS" ]; then echo "GAS URL nenalezena — e-mail přeskočen"; exit 0; fi
+          TOK=$(cat gas_token.txt 2>/dev/null)   # přihlášení bota — relay bez něj nic nepošle
           MONDAY=$(date -d 'next monday' +%d.%m.%Y)
           LINK="https://smenyjt.netlify.app/nahled/"
           if [ -s recipients.txt ]; then RCPT=$(cat recipients.txt); else RCPT="$NAHLED_EMAIL"; fi
           for TO in $RCPT; do
-            curl -s -X POST "$GAS" -H "Content-Type: text/plain" --data "{\"action\":\"sendEmail\",\"data\":{\"to\":\"$TO\",\"employeeName\":\"ShiftFlow náhled\",\"changeDescription\":\"Rozvrh na týden od $MONDAY je připravený: $LINK\",\"weekLabel\":\"týden od $MONDAY\"}}"
+            curl -s -X POST "$GAS" -H "Content-Type: text/plain" --data "{\"action\":\"sendEmail\",\"idToken\":\"$TOK\",\"data\":{\"to\":\"$TO\",\"employeeName\":\"ShiftFlow náhled\",\"changeDescription\":\"Rozvrh na týden od $MONDAY je připravený: $LINK\",\"weekLabel\":\"týden od $MONDAY\"}}"
             echo "→ $TO"
             sleep 2
           done
