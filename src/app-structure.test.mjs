@@ -39,3 +39,7 @@ test("registrace a přihlášení bez profilu nevytvoří člena", () => {
   assert.match(src, /else setProfile\(\{[^}]*role: "pending"/);
   assert.doesNotMatch(src, /setDoc\(doc\(db, "users", c\.user\.uid\), \{[^}]*role: "employee"/);
 });
+
+test("bot (páteční snímek) se nepočítá mezi členy týmu", () => {
+  assert.match(src, /setEmployees\(e\.filter\(x => [^)]*!x\.bot\)\)/);
+});

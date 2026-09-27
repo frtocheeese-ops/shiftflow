@@ -57,7 +57,7 @@ if (r.error && /EMAIL_NOT_FOUND|INVALID_LOGIN_CREDENTIALS|INVALID_EMAIL/.test(r.
     defaultSchedule: { nullValue: null }, setupDone: { booleanValue: true },
     vacationTotal: { integerValue: "0" }, sickTotal: { integerValue: "0" }, whateverTotal: { integerValue: "0" },
     vacationUsed: { integerValue: "0" }, sickUsed: { integerValue: "0" }, whateverUsed: { integerValue: "0" },
-    createdAt: { stringValue: new Date().toISOString() }
+    createdAt: { stringValue: new Date().toISOString() }, bot: { booleanValue: true }
   };
   const fs = await fetch(`https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/users/${r.localId}`, {
     method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${r.idToken}` },
@@ -67,6 +67,15 @@ if (r.error && /EMAIL_NOT_FOUND|INVALID_LOGIN_CREDENTIALS|INVALID_EMAIL/.test(r.
   console.log("Bot založen jako čekající:", r.localId, "— admin ho musí schválit v sekci Tým, jinak neuvidí rozvrh.");
 } else if (r.error) throw new Error("signIn: " + r.error.message);
 const idToken = r.idToken;
+// Značka „bot: true" — appka podle ní bota vynechá z týmu, statistik a rozvrhu.
+// Nastavuje se při každém běhu (idempotentní, mění jen toto pole ve vlastním profilu).
+{
+  const m = await fetch(`https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/users/${r.localId}?updateMask.fieldPaths=bot`, {
+    method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+    body: JSON.stringify({ fields: { bot: { booleanValue: true } } })
+  });
+  console.log(m.ok ? "::notice title=Bot::Značka bota nastavena" : `::warning title=Bot::Značka bota: chyba ${m.status}`);
+}
 
 // ── Příjemci: všichni s notify=true (jako u běžných e-mail notifikací appky) ──
 const ur = await fetch(`https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/users?pageSize=300`, {
