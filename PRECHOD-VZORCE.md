@@ -910,3 +910,15 @@ požádat znovu. Admin: sekce „Čekají na schválení" v Týmu + odznak v men
 zakládá jako `pending`. Kompatibilní se starými i novými pravidly → pořadí nasazení:
 1) merge appky, 2) publikace pravidel v konzoli, 3) zabezpečení e-mailového skriptu.
 59 testů appky + 18 testů pravidel.
+
+---
+
+## Aktualizace v41 — pravidla zveřejněna a ověřena; ruční běh bota nemailuje
+
+Uživatel zveřejnil nová pravidla v konzoli. Ověřeno během bota (člen): pravidla `ok:1`,
+všech 7 listenerů `ok`, žádné chyby stránky.
+
+Nechtěný vedlejší efekt ověřovacího běhu: byl první toho dne (neděle 27. 9.) → bot
+rozeslal týmu e-mail s odkazem na náhled. Oprava: krok e-mailu v `nahled.yml` nově
+vyžaduje `github.event_name == 'schedule'` — ruční spuštění (testy, ladění) nikdy
+nemailuje; e-mail odchází jen z pravidelného pátečního běhu.
