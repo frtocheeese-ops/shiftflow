@@ -52,7 +52,7 @@ if (r.error && /EMAIL_NOT_FOUND|INVALID_LOGIN_CREDENTIALS|INVALID_EMAIL/.test(r.
   r = await idt("signUp", { email: BOT_EMAIL, password: BOT_PASSWORD, displayName: "📸 Bot", returnSecureToken: true });
   if (r.error) throw new Error("signUp: " + r.error.message);
   const fields = {
-    name: { stringValue: "📸 Bot" }, email: { stringValue: BOT_EMAIL }, role: { stringValue: "employee" },
+    name: { stringValue: "📸 Bot" }, email: { stringValue: BOT_EMAIL }, role: { stringValue: "pending" },
     notify: { booleanValue: false }, notifyEmail: { stringValue: "" }, fcmToken: { nullValue: null },
     defaultSchedule: { nullValue: null }, setupDone: { booleanValue: true },
     vacationTotal: { integerValue: "0" }, sickTotal: { integerValue: "0" }, whateverTotal: { integerValue: "0" },
@@ -64,7 +64,7 @@ if (r.error && /EMAIL_NOT_FOUND|INVALID_LOGIN_CREDENTIALS|INVALID_EMAIL/.test(r.
     body: JSON.stringify({ fields })
   });
   if (!fs.ok) throw new Error("Firestore users doc: " + await fs.text());
-  console.log("Bot založen:", r.localId);
+  console.log("Bot založen jako čekající:", r.localId, "— admin ho musí schválit v sekci Tým, jinak neuvidí rozvrh.");
 } else if (r.error) throw new Error("signIn: " + r.error.message);
 const idToken = r.idToken;
 

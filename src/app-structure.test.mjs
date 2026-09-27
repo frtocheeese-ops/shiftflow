@@ -23,3 +23,19 @@ test("každé naslouchání na databázi čeká na přihlášení a po něm se p
 test("návrhy: člen čte jen ty, které se ho týkají (celou kolekci mu pravidla odmítnou)", () => {
   assert.match(src, /where\("affected", "array-contains", authUser\.uid\)/);
 });
+
+test("datová připojení čekají na schválené členství (čekající účet nic nenačítá)", () => {
+  const effects = [...src.matchAll(/useEffect\(\(\) => \{([\s\S]*?)\n?\s*\}, (\[[^\]]*\])\);/g)];
+  const data = effects.filter(([, body]) => /onSnapshot\((?:ref|collection|doc\(db, "(?:schedules|rules)")/.test(body));
+  assert.ok(data.length >= 7, `nalezeno ${data.length}`);
+  for (const [, body, deps] of data) {
+    assert.match(body, /!isMember/, `bez podmínky členství: ${body.trim().slice(0, 80)}`);
+    assert.match(deps, /isMember/, `isMember chybí v závislostech: ${deps}`);
+  }
+});
+
+test("registrace a přihlášení bez profilu nevytvoří člena", () => {
+  assert.match(src, /setDoc\(doc\(db, "users", c\.user\.uid\), \{[^}]*role: "pending"/);
+  assert.match(src, /else setProfile\(\{[^}]*role: "pending"/);
+  assert.doesNotMatch(src, /setDoc\(doc\(db, "users", c\.user\.uid\), \{[^}]*role: "employee"/);
+});

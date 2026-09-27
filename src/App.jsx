@@ -18,6 +18,7 @@ import SwapsView from "./views/SwapsView";
 import DefaultsView from "./views/DefaultsView";
 import PeopleView from "./views/PeopleView";
 import SettingsView from "./views/SettingsView";
+import PendingView from "./views/PendingView";
 import ProposalsView from "./views/ProposalsView";
 import ScheduleView from "./views/ScheduleView";
 import { Badge, Btn, Input, Sel, Toggle, Modal, Card, RANK_TIERS, rankOf, HALF_LBL, HalfTag, RankBadge } from "./ui";
@@ -400,7 +401,7 @@ function AuthScreen() {
     } catch (e) { setErr(e.code === "auth/invalid-credential" || e.code === "auth/wrong-password" ? "Neplatné údaje" : e.message); }
     setLoading(false);
   };
-  const doReg = async () => { setErr(""); setLoading(true); try { if (!rn.trim() || !rEmail || !rp) { setErr("Vyplňte pole"); setLoading(false); return; } if (rp !== rp2) { setErr("Hesla neshodují"); setLoading(false); return; } if (rp.length < 6) { setErr("Min. 6 znaků"); setLoading(false); return; } const c = await createUserWithEmailAndPassword(auth, rEmail, rp); await updateProfile(c.user, { displayName: rn.trim() }); await setDoc(doc(db, "users", c.user.uid), { name: rn.trim(), email: rEmail, role: "employee", notify: rNotify, notifyEmail: rNotify ? rNotifEmail : "", fcmToken: null, defaultSchedule: null, setupDone: false, vacationTotal: 20, sickTotal: 5, whateverTotal: 3, vacationUsed: 0, sickUsed: 0, whateverUsed: 0, createdAt: new Date().toISOString() }); } catch (e) { setErr(e.message); } setLoading(false); };
+  const doReg = async () => { setErr(""); setLoading(true); try { if (!rn.trim() || !rEmail || !rp) { setErr("Vyplňte pole"); setLoading(false); return; } if (rp !== rp2) { setErr("Hesla neshodují"); setLoading(false); return; } if (rp.length < 6) { setErr("Min. 6 znaků"); setLoading(false); return; } const c = await createUserWithEmailAndPassword(auth, rEmail, rp); await updateProfile(c.user, { displayName: rn.trim() }); await setDoc(doc(db, "users", c.user.uid), { name: rn.trim(), email: rEmail, role: "pending", notify: rNotify, notifyEmail: rNotify ? rNotifEmail : "", fcmToken: null, defaultSchedule: null, setupDone: false, vacationTotal: 20, sickTotal: 5, whateverTotal: 3, vacationUsed: 0, sickUsed: 0, whateverUsed: 0, createdAt: new Date().toISOString() }); } catch (e) { setErr(e.message); } setLoading(false); };
   return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg)", padding: 16 }}><style>{CSS}</style><ParallaxBg />
     <div className="gl" style={{ width: "100%", maxWidth: 440, padding: "40px 28px", animation: "mu .5s", position: "relative", zIndex: 1 }}>
       <div style={{ textAlign: "center", marginBottom: 36, borderBottom: "1px solid var(--brd)", paddingBottom: 28 }}>
@@ -545,7 +546,7 @@ export default function App() {
   const [absences, setAbsences] = useState({}); const [events, setEvents] = useState({});
   const [swaps, setSwaps] = useState([]); const [selCell, setSelCell] = useState(null); const [noteView, setNoteView] = useState(null);
   const [proposals, setProposals] = useState([]);
-  const [allSchedules, setAllSchedules] = useState({}); const [resolveTarget, setResolveTarget] = useState(null);
+  const [allSchedules, setAllSchedules] = useState({}); const [pendingUsers, setPendingUsers] = useState([]); const [resolveTarget, setResolveTarget] = useState(null);
   const [showPerma, setShowPerma] = useState(false); const [showCompare, setShowCompare] = useState(false);
   const [modal, setModal] = useState(null); const [notifs, setNotifs] = useState([]);
   const [logs, setLogs] = useState([]); const [notes, setNotes] = useState({});
@@ -567,6 +568,8 @@ export default function App() {
 
   const cw = useMemo(() => { const d = new Date(); d.setDate(d.getDate() + wo * 7); return d; }, [wo]);
   const wk = wKey(cw); const isA = profile?.role === "admin";
+  // Člen = schválený účet. „pending" (čeká na schválení) nevidí žádná data — pravidla databáze ho nepustí.
+  const isMember = profile?.role === "employee" || profile?.role === "admin";
   const ge = id => employees.find(e => e.id === id);
   // půldenní absence se nejdřív zeptá, která polovina směny
   // ── základní pomocníci komponenty (definovat PŘED prvním použitím) ──
@@ -656,9 +659,9 @@ export default function App() {
   // Férovost: výpočet v schedule.js (computeFairness), tady jen napojení na živá data
   const fairness = useMemo(() => computeFairness(allSchedules, employees, rules.rotations), [allSchedules, employees, rules.rotations]);
 
-  useEffect(() => { const u = onAuthStateChanged(auth, async u => { if (u) { setAuthUser(u); const s = await getDoc(doc(db, "users", u.uid)); if (s.exists()) setProfile({ id: u.uid, ...s.data() }); else setProfile({ id: u.uid, name: u.displayName || u.email, role: "employee", setupDone: false }); initPush(u.uid); } else { setAuthUser(null); setProfile(null); } }); return u; }, []);
-  useEffect(() => { if (!authUser) return; const u = onSnapshot(collection(db, "users"), s => { noteListen("users", null); const e = s.docs.map(d => ({ id: d.id, ...d.data() })); setEmployees(e); if (profile) { const m = e.find(x => x.id === profile.id); if (m) setProfile(p => ({ ...p, ...m })); } }, e => noteListen("users", e)); return u; }, [authUser?.uid, profile?.id]);
-  useEffect(() => { if (!authUser) return; const u = onSnapshot(doc(db, "schedules", wk), s => { noteListen("schedule", null); if (s.exists()) { const d = s.data(); setSchedule(d.entries || null); setAbsences(d.absences || {}); setEvents(d.events || {}); setNotes(d.notes || {}); setIntake(d.intake || {}); setIntakeAllow(d.intakeAllow || {}); setSchedMeta({ at: d.modifiedAt, by: d.modifiedBy }); } else { setSchedule(null); setAbsences({}); setEvents({}); setNotes({}); setIntake({}); setIntakeAllow({}); setSchedMeta({}); } }, e => noteListen("schedule", e)); return u; }, [wk, authUser?.uid]);
+  useEffect(() => { const u = onAuthStateChanged(auth, async u => { if (u) { setAuthUser(u); const s = await getDoc(doc(db, "users", u.uid)); if (s.exists()) setProfile({ id: u.uid, ...s.data() }); else setProfile({ id: u.uid, name: u.displayName || u.email, email: u.email, role: "pending", noDoc: true, setupDone: false }); initPush(u.uid); } else { setAuthUser(null); setProfile(null); } }); return u; }, []);
+  useEffect(() => { if (!authUser || !isMember) return; const u = onSnapshot(collection(db, "users"), s => { noteListen("users", null); const e = s.docs.map(d => ({ id: d.id, ...d.data() })); setEmployees(e.filter(x => x.role !== "pending")); setPendingUsers(e.filter(x => x.role === "pending")); if (profile) { const m = e.find(x => x.id === profile.id); if (m) setProfile(p => ({ ...p, ...m })); } }, e => noteListen("users", e)); return u; }, [authUser?.uid, profile?.id, isMember]);
+  useEffect(() => { if (!authUser || !isMember) return; const u = onSnapshot(doc(db, "schedules", wk), s => { noteListen("schedule", null); if (s.exists()) { const d = s.data(); setSchedule(d.entries || null); setAbsences(d.absences || {}); setEvents(d.events || {}); setNotes(d.notes || {}); setIntake(d.intake || {}); setIntakeAllow(d.intakeAllow || {}); setSchedMeta({ at: d.modifiedAt, by: d.modifiedBy }); } else { setSchedule(null); setAbsences({}); setEvents({}); setNotes({}); setIntake({}); setIntakeAllow({}); setSchedMeta({}); } }, e => noteListen("schedule", e)); return u; }, [wk, authUser?.uid, isMember]);
 
   // Auto-sync GCal when ANY week's schedule changes affecting current user
   // Listens to schedules collection and syncs the affected week if user has events there
@@ -666,7 +669,7 @@ export default function App() {
   const empRef = useRef(employees); useEffect(() => { empRef.current = employees; }, [employees]);
   const rulesRef = useRef(rules); useEffect(() => { rulesRef.current = rules; }, [rules]);
   useEffect(() => {
-    if (!profile?.gcalEnabled || !profile?.id) return;
+    if (!profile?.gcalEnabled || !profile?.id || !isMember) return;
     // POZOR: první snapshot doručí CELOU kolekci jako "added". Bez tohoto přeskočení
     // by se při každém načtení appky (a při každém obnovení listeneru) rozjel sync všech ~52 týdnů.
     let primed = false;
@@ -693,23 +696,25 @@ export default function App() {
       });
     });
     return u;
-  }, [profile?.id, profile?.gcalEnabled]);
-  useEffect(() => { if (!authUser) return; const u = onSnapshot(collection(db, "swapRequests"), s => { noteListen("swapRequests", null); setSwaps(s.docs.map(d => ({ id: d.id, ...d.data() }))); }, e => noteListen("swapRequests", e)); return u; }, [authUser?.uid]);
-  useEffect(() => { if (!authUser || !profile) return; const ref = profile.role === "admin" ? collection(db, "changeProposals") : query(collection(db, "changeProposals"), where("affected", "array-contains", authUser.uid));
-    const u = onSnapshot(ref, s => { noteListen("changeProposals", null); setProposals(s.docs.map(d => ({ id: d.id, ...d.data() }))); }, e => noteListen("changeProposals", e)); return u; }, [authUser?.uid, profile?.role]);
+  }, [profile?.id, profile?.gcalEnabled, isMember]);
+  useEffect(() => { if (!authUser || !isMember) return; const u = onSnapshot(collection(db, "swapRequests"), s => { noteListen("swapRequests", null); setSwaps(s.docs.map(d => ({ id: d.id, ...d.data() }))); }, e => noteListen("swapRequests", e)); return u; }, [authUser?.uid, isMember]);
+  useEffect(() => { if (!authUser || !isMember) return; const ref = profile.role === "admin" ? collection(db, "changeProposals") : query(collection(db, "changeProposals"), where("affected", "array-contains", authUser.uid));
+    const u = onSnapshot(ref, s => { noteListen("changeProposals", null); setProposals(s.docs.map(d => ({ id: d.id, ...d.data() }))); }, e => noteListen("changeProposals", e)); return u; }, [authUser?.uid, profile?.role, isMember]);
   // Všechny rozvrhy pro férovostní počítadla (malý tým → pár desítek dokumentů)
-  useEffect(() => { if (!authUser) return; const u = onSnapshot(collection(db, "schedules"), s => { noteListen("allSchedules", null); const m = {}; s.docs.forEach(d => m[d.id] = d.data()); setAllSchedules(m); }, e => noteListen("allSchedules", e)); return u; }, [authUser?.uid]);
+  useEffect(() => { if (!authUser || !isMember) return; const u = onSnapshot(collection(db, "schedules"), s => { noteListen("allSchedules", null); const m = {}; s.docs.forEach(d => m[d.id] = d.data()); setAllSchedules(m); }, e => noteListen("allSchedules", e)); return u; }, [authUser?.uid, isMember]);
+  // Čekající účet sleduje JEN vlastní profil — jakmile ho admin schválí, appka se sama odemkne.
+  useEffect(() => { if (!authUser || !profile || isMember) return; const u = onSnapshot(doc(db, "users", authUser.uid), s => { noteListen("me", null); if (s.exists()) setProfile({ id: authUser.uid, ...s.data() }); else setProfile(p => ({ ...p, role: "pending", noDoc: true })); }, e => noteListen("me", e)); return u; }, [authUser?.uid, isMember]);
   // Pravidla (vč. rotací). Stav načtení se zapisuje do <html data-rules>, aby ho viděl páteční bot;
   // chyba se už neztratí potichu (dřív chybějící oprávnění = tichý návrat k výchozím pravidlům bez rotací).
   useEffect(() => {
-    if (!authUser) return;
+    if (!authUser || !isMember) return;
     const mark = v => { try { document.documentElement.dataset.rules = v; } catch { } };
     const u = onSnapshot(doc(db, "rules", "global"),
       s => { noteListen("rules", null); if (s.exists()) setRules(s.data()); mark(s.exists() ? `ok:${(s.data().rotations || []).length}` : "missing"); },
       err => { noteListen("rules", err); mark(`error:${err.code || err.message}`); });
     return u;
-  }, [authUser?.uid]);
-  useEffect(() => { if (!authUser) return; const u = onSnapshot(collection(db, "auditLog"), s => { noteListen("auditLog", null); const a = s.docs.map(d => ({ id: d.id, ...d.data() })); a.sort((a, b) => (b.time || "").localeCompare(a.time || "")); setLogs(a.slice(0, 100)); }, e => noteListen("auditLog", e)); return u; }, [authUser?.uid]);
+  }, [authUser?.uid, isMember]);
+  useEffect(() => { if (!authUser || !isMember) return; const u = onSnapshot(collection(db, "auditLog"), s => { noteListen("auditLog", null); const a = s.docs.map(d => ({ id: d.id, ...d.data() })); a.sort((a, b) => (b.time || "").localeCompare(a.time || "")); setLogs(a.slice(0, 100)); }, e => noteListen("auditLog", e)); return u; }, [authUser?.uid, isMember]);
 
   const hardSync = async () => {
     notify("Synchronizuji…");
@@ -993,6 +998,23 @@ export default function App() {
       notify('Chyba výměny: ' + err.message);
     }
   };
+  // ═══ SCHVALOVÁNÍ NOVÝCH ÚČTŮ (admin) ═══
+  const approveUser = async u => {
+    try { await updateDoc(doc(db, "users", u.id), { role: "employee", approvedAt: new Date().toISOString(), approvedBy: profile?.id }); notify(`${u.name} schválen ✓`); log(`Schválen nový člen: ${u.name}`); }
+    catch (err) { notify("Chyba: " + err.message); }
+  };
+  const rejectUser = async u => {
+    if (!confirm(`Zamítnout žádost ${u.name} (${u.email || ""})?\n\nÚčet nezíská přístup k datům. Může požádat znovu.`)) return;
+    try { await deleteDoc(doc(db, "users", u.id)); notify("Žádost zamítnuta"); log(`Zamítnuta žádost: ${u.name}`); }
+    catch (err) { notify("Chyba: " + err.message); }
+  };
+  // Čekající bez profilu (zamítnutý) může požádat znovu
+  const requestAccess = async () => {
+    try {
+      await setDoc(doc(db, "users", authUser.uid), { name: profile?.name || authUser.email, email: authUser.email, role: "pending", notify: false, notifyEmail: "", fcmToken: null, defaultSchedule: null, setupDone: false, vacationTotal: 20, sickTotal: 5, whateverTotal: 3, vacationUsed: 0, sickUsed: 0, whateverUsed: 0, createdAt: new Date().toISOString() });
+      setProfile(p => ({ ...p, noDoc: false }));
+    } catch (err) { alert("Chyba: " + err.message); }
+  };
   const delUser = async eid => { if (!confirm(`Smazat ${ge(eid)?.name}?`)) return; await deleteDoc(doc(db, "users", eid)); notify("Smazán"); };
 
   /* ═══ NÁVRHY ZMĚN (admin + dotčení) ═══ */
@@ -1217,6 +1239,7 @@ export default function App() {
 
   if (authUser === undefined) return <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center" }}><style>{CSS}</style><div style={{ color: "var(--tx3)", fontSize: 14, letterSpacing: 4, fontFamily: "'Barlow Condensed',sans-serif", animation: "pulse 1.5s infinite" }}>SHIFTFLOW</div></div>;
   if (!authUser) return <AuthScreen />;
+  if (profile && !isMember) return <><style>{CSS}</style><PendingView profile={profile} onRequest={requestAccess} onSignOut={() => signOut(auth)} /></>;
   if (!profile) return <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--tx3)" }}><style>{CSS}</style>Načítání…</div>;
   if (!isA && !profile.setupDone) return <Setup profile={profile} onDone={() => setProfile(p => ({ ...p, setupDone: true }))} />;
 
@@ -1225,7 +1248,7 @@ export default function App() {
   const visibleProps = openProps.filter(p => isA || p.affected?.includes(profile.id));
   const myPendingProps = openProps.filter(p => isA ? !p.consents?.admin : (p.affected?.includes(profile.id) && !p.consents?.[profile.id]));
   const probBadge = isA ? yearProblems.length : yearProblems.filter(pr => pr.alts.some(a => a.empId === profile.id)).length;
-  const NAV = [{ id: "schedule", l: "Rozvrh", ic: "▦", b: 0 }, { id: "proposals", l: "Návrhy", ic: "⚑", b: myPendingProps.length + probBadge }, { id: "swaps", l: "Výměny", ic: "⇄", b: openSw.length }, ...(isA ? [{ id: "people", l: "Tým", ic: "◉", b: 0 }] : []), { id: "stats", l: "Stats", ic: "◫", b: 0 }, { id: "vacation", l: "Dovolená", ic: "🏖", b: 0 }, { id: "log", l: "Log", ic: "≡", b: 0 }, ...(isA ? [{ id: "defaults", l: "Stálý rozvrh", ic: "✎", b: 0 }] : []), { id: "settings", l: "Nastavení", ic: "⚙", b: 0 }];
+  const NAV = [{ id: "schedule", l: "Rozvrh", ic: "▦", b: 0 }, { id: "proposals", l: "Návrhy", ic: "⚑", b: myPendingProps.length + probBadge }, { id: "swaps", l: "Výměny", ic: "⇄", b: openSw.length }, ...(isA ? [{ id: "people", l: "Tým", ic: "◉", b: pendingUsers.length }] : []), { id: "stats", l: "Stats", ic: "◫", b: 0 }, { id: "vacation", l: "Dovolená", ic: "🏖", b: 0 }, { id: "log", l: "Log", ic: "≡", b: 0 }, ...(isA ? [{ id: "defaults", l: "Stálý rozvrh", ic: "✎", b: 0 }] : []), { id: "settings", l: "Nastavení", ic: "⚙", b: 0 }];
   const dayHol = wh[selDay];
   const getEntries = (day, shift) => (cs[day]?.[shift] || []).filter(e => ge(e.empId));
   const getDayAbs = day => Object.entries(absences).filter(([k]) => k.endsWith(`__${day}`)).map(([k, t]) => ({ empId: k.split("__")[0], type: t })).filter(a => ge(a.empId));
@@ -1269,7 +1292,7 @@ export default function App() {
             onAccept={sw => doSwap(sw.id, profile.id)} onCancel={cancelSwap} onDelete={deleteSwap}
             onNewRequest={() => setModal({ type: "swap", day: DAYS[selDay], shift: SHIFTS[0] })} />}
 
-          {view === "people" && isA && <PeopleView employees={employees} onAdd={() => setModal("addMember")}
+          {view === "people" && isA && <PeopleView employees={employees} pendingUsers={pendingUsers} onApprove={approveUser} onReject={rejectUser} onAdd={() => setModal("addMember")}
             onEditDays={emp => setModal({ type: "editDays", emp })} onDelete={delUser} onAdjustFixes={adjustFixCount} />}
 
           {view === "vacation" && <div>
