@@ -53,7 +53,8 @@ jobs:
         if: steps.commit.outputs.made == '1'
         run: sleep 120
       - name: E-mail s odkazem přes GAS relay
-        if: steps.commit.outputs.made == '1' && steps.commit.outputs.mail == '1'
+        # E-mail jen z pravidelného pátečního běhu — ruční spuštění (testy, ladění) nikdy nemailuje
+        if: steps.commit.outputs.made == '1' && steps.commit.outputs.mail == '1' && github.event_name == 'schedule'
         env:
           NAHLED_EMAIL: ${{ secrets.NAHLED_EMAIL }}
         run: |
