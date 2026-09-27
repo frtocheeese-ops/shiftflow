@@ -1,48 +1,69 @@
 rules_version = '2';
+// ═══════════════════════════════════════════════════════════════════════════
+// Pravidla databáze ShiftFlow — ZDROJ PRAVDY JE TENTO SOUBOR (publikovat do konzole
+// Firebase celý, ručně upravené pravidlo v konzoli se při dalším nasazení přepíše).
+//
+// Registrace je otevřená komukoli, proto „přihlášený" ≠ „člen týmu":
+//   pending  … nový účet po registraci, čeká na schválení adminem, NEVIDÍ žádná data
+//   employee … schválený člen
+//   admin    … správce
+// Roli mění jen admin. Testy: rules-tests/ (spouští se na emulátoru v GitHub Actions).
+// ═══════════════════════════════════════════════════════════════════════════
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function isAuth() { return request.auth != null; }
-    function isAdmin() {
-      return isAuth() &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    function isAuth()     { return request.auth != null; }
+    function profilePath(){ return /databases/$(database)/documents/users/$(request.auth.uid); }
+    function hasProfile() { return isAuth() && exists(profilePath()); }
+    function myRole()     { return get(profilePath()).data.role; }
+    function isMember()   { return hasProfile() && myRole() in ['employee', 'admin']; }
+    function isAdmin()    { return hasProfile() && myRole() == 'admin'; }
+    function isSelf(uid)  { return isAuth() && request.auth.uid == uid; }
+    function roleUnchanged() {
+      return request.resource.data.get('role', null) == resource.data.get('role', null);
     }
 
     match /users/{userId} {
-      allow read: if isAuth();
-      allow create: if isAuth();
-      allow update: if isAuth() && (request.auth.uid == userId || isAdmin());
+      // člen vidí tým; čekající vidí jen sám sebe (aby appka věděla, že čeká)
+      allow read:   if isMember() || isSelf(userId);
+      // registrace: jen vlastní profil a jen jako „pending"; admin zakládá kohokoli (Přidat člena)
+      allow create: if (isSelf(userId) && request.resource.data.role == 'pending') || isAdmin();
+      // sám sobě cokoli kromě role; admin komukoli
+      allow update: if (isSelf(userId) && roleUnchanged()) || isAdmin();
       allow delete: if isAdmin();
     }
 
     match /schedules/{weekId} {
-      allow read: if isAuth();
-      allow write: if isAuth();
+      allow read, write: if isMember();
     }
 
     match /swapRequests/{requestId} {
-      allow read: if isAuth();
-      allow create: if isAuth();
-      allow update: if isAuth();
-      allow delete: if isAdmin();
+      allow read, create, update: if isMember();
+      // žádost smí zrušit její autor nebo admin
+      allow delete: if isAdmin() || (isMember() && resource.data.rid == request.auth.uid);
     }
 
     match /changeProposals/{proposalId} {
-      allow read: if isAdmin() || (isAuth() && request.auth.uid in resource.data.affected);
-      allow create: if isAuth();
-      allow update: if isAdmin() || (isAuth() && request.auth.uid in resource.data.affected);
+      // člen čte jen návrhy, které se ho týkají (appka se ptá přes where affected array-contains)
+      allow read:   if isAdmin() || (isMember() && request.auth.uid in resource.data.affected);
+      allow create: if isMember();
+      allow update: if isAdmin() || (isMember() && request.auth.uid in resource.data.affected);
       allow delete: if isAdmin();
     }
 
     match /rules/{ruleId} {
-      allow read: if isAuth();
+      allow read:  if isMember();
       allow write: if isAdmin();
     }
 
     match /auditLog/{logId} {
-      allow read: if isAuth();
-      allow create: if isAuth();
-      allow delete: if false;
+      allow read, create: if isMember();
+      allow update, delete: if false;
+    }
+
+    // Vše ostatní zakázáno (výchozí chování, uvedeno pro jasnost).
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
