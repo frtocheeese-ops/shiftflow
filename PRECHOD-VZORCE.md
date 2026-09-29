@@ -1005,3 +1005,14 @@ přesune). Testy férovosti záměrně zůstávají na pevných datech (počíta
 **Zbývá (krok 3b):** strukturální prvky z návrhu, které CSS samo neudělá — vlk v medailonu
 v hlavičce, praporce místo dnů, římské číslice ve štítech u směn, pergamenová deska
 s nadpisem dne, pečeť „z domova".
+
+---
+
+## Aktualizace v46 — Sever: ostrá námraza na desktopu
+
+Námraza je obrázek na výšku (1 : 2). Na desktopu se roztahovala přes celou širokou
+obrazovku zhruba 3× do šířky → rozmazaná a zdeformovaná, v rozích příliš dominantní.
+Nově na šířce ≥ 900 px jen **levý a pravý okraj** vyříznuté z originálu v plném rozlišení
+(`namraza-l.webp`, `namraza-r.webp`, 248 × 1774 px, ~70 kB) — levý začíná hned za
+postranním menu (200 px), průhlednost 0,42. Mobil dál celý rám, nově z ostřejšího zdroje
+(780 × 1560 px = 2× na 390px displeji).

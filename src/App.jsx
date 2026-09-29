@@ -282,6 +282,8 @@ const CSS = `
 }
 html[data-theme="sever"] body{background-color:#161d25;background-image:linear-gradient(rgba(12,18,25,.60),rgba(12,18,25,.74)),url(/skins/sever/kamen.webp);background-size:auto,400px auto}
 html[data-theme="sever"] body::before{content:"";position:fixed;inset:0;background:url(/skins/sever/namraza.webp) center/100% 100% no-repeat;mix-blend-mode:screen;opacity:.5;pointer-events:none;z-index:0}
+/* Desktop: obrázek na výšku by se roztáhl ~3× do šířky (rozmazané, deformované) → jen levý a pravý okraj v plném rozlišení; levý hned za postranním menu (200 px) */
+@media(min-width:900px){html[data-theme="sever"] body::before{background:url(/skins/sever/namraza-l.webp) 200px 0/auto 100% no-repeat,url(/skins/sever/namraza-r.webp) 100% 0/auto 100% no-repeat;opacity:.42}}
 html[data-theme="sever"] body::after{content:"";position:fixed;right:-90px;bottom:70px;width:380px;height:380px;background:url(/skins/sever/vlk.webp) center/contain no-repeat;opacity:.06;pointer-events:none;z-index:0}
 [data-theme="sever"] .pg{background-image:linear-gradient(rgba(20,30,40,.58),rgba(12,18,24,.76)),url(/skins/sever/drevo.webp)!important;background-size:auto,420px auto!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
 [data-theme="sever"] header.pg{position:relative;box-shadow:inset 0 -4px 0 #4a5560,0 3px 8px rgba(0,0,0,.55)}
