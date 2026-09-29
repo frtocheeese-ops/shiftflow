@@ -43,3 +43,16 @@ test("registrace a přihlášení bez profilu nevytvoří člena", () => {
 test("bot (páteční snímek) se nepočítá mezi členy týmu", () => {
   assert.match(src, /setEmployees\(e\.filter\(x => [^)]*!x\.bot\)\)/);
 });
+
+test("skin Sever: každý soubor, na který CSS odkazuje, existuje v public/", async () => {
+  const { existsSync } = await import("node:fs");
+  const urls = [...src.matchAll(/url\((\/skins\/[^)'"]+)\)/g)].map(m => m[1]);
+  assert.ok(urls.length >= 7, `odkazů na soubory skinu: ${urls.length}`);
+  for (const u of new Set(urls)) assert.ok(existsSync(new URL(`../public${u}`, import.meta.url)), `chybí soubor ${u}`);
+});
+
+test("skin Sever: přepíná písma i barvy a je ve výběru vzhledu", () => {
+  assert.match(src, /\[data-theme="sever"\]\{[^}]*--font-head:'Ringbearer CE'/);
+  assert.match(src, /\[data-theme="sever"\]\{[^}]*--acc2:/);
+  assert.match(readFileSync(new URL("./views/SettingsView.jsx", import.meta.url), "utf8"), /id: "sever"/);
+});

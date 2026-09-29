@@ -985,3 +985,23 @@ Nově: Rozvrh v testech vždy příští týden; rotace v týdnech W0/W1 počít
 přesune). Testy férovosti záměrně zůstávají na pevných datech (počítají od 22. 7.).
 
 **Poučení:** v testech nepoužívat pevná data tam, kde logika závisí na „dnešku".
+
+---
+
+## Aktualizace v45 — skiny, kroky 2–3a: výběr vzhledu a skin Sever (barvy, písma, materiály)
+
+- **Výběr vzhledu** v Nastavení → Vzhled: Světlý / Tmavý / Sever (`SKINS` v SettingsView,
+  hodnota `theme`). Přepínač ●/○ v hlavičce dál přepíná světlý/tmavý.
+- **Skin Sever přes CSS:** proměnné (ledově modrá `--acc2` místo oranžové, Ringbearer CE
+  na nadpisy, Alegreya Sans na text, Cinzel na čísla a časy), pozadí z granitu s tmavým
+  závojem, námraza (`mix-blend-mode: screen`) a rytina vlka jako pevné vrstvy za obsahem,
+  hlavička/menu (`.pg`) z tmavého dřeva s ocelovou linkou a **kožešinovým lemem**, karty
+  (`.gl`) z kůže s prošitím (`outline dashed` s negativním odsazením — bez pseudoelementů).
+- Soubory v `public/skins/sever/` (369 kB celkem, textury 16–82 kB) se stahují jen při
+  zapnutém skinu; Cinzel + Alegreya Sans se přidají z Google Fonts až při prvním zapnutí.
+- Testy: výběr vzhledu (3 možnosti, jedna zvolená), existence všech souborů skinu
+  (ověřeno sabotáží — přejmenovaná textura test shodí), skin přepíná písma i barvy. 71 testů.
+
+**Zbývá (krok 3b):** strukturální prvky z návrhu, které CSS samo neudělá — vlk v medailonu
+v hlavičce, praporce místo dnů, římské číslice ve štítech u směn, pergamenová deska
+s nadpisem dne, pečeť „z domova".
