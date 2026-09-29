@@ -47,9 +47,9 @@ export default function SettingsView({
 
   return (
     <div style={{ maxWidth: 560 }}>
-          <div style={{ fontSize: 20, fontWeight: 600, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 2, marginBottom: 20, borderBottom: "1px solid var(--brd)", paddingBottom: 12 }}>Nastavení</div>
+          <div style={{ fontSize: 20, fontWeight: 600, color: "var(--w)", fontFamily: "var(--font-head)", textTransform: "uppercase", letterSpacing: 2, marginBottom: 20, borderBottom: "1px solid var(--brd)", paddingBottom: 12 }}>Nastavení</div>
           <Card style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, fontFamily: "'Barlow Condensed',sans-serif" }}>Účet</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, fontFamily: "var(--font-head)" }}>Účet</div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <Btn ghost onClick={() => onOpenModal("changeName")}>Změnit jméno</Btn>
               <Btn ghost onClick={() => onOpenModal("changePass")}>Změnit heslo</Btn>
@@ -57,7 +57,7 @@ export default function SettingsView({
             </div>
           </Card>
           {isA && <Card style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, fontFamily: "'Barlow Condensed',sans-serif" }}>Páteční snímek rozvrhu</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, fontFamily: "var(--font-head)" }}>Páteční snímek rozvrhu</div>
             <div style={{ fontSize: 13, color: "var(--tx2)", marginBottom: 12, lineHeight: 1.7 }}>
               {nahledInfo === null ? <span style={{ color: "var(--tx3)" }}>Načítám stav…</span> : <>
                 Publikovaný týden: <b style={{ color: "var(--w)" }}>{nahledInfo.week || "neznámý"}</b><br />
@@ -71,7 +71,7 @@ export default function SettingsView({
             </p>
           </Card>}
           <Card style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, fontFamily: "'Barlow Condensed',sans-serif" }}>Aplikace</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, fontFamily: "var(--font-head)" }}>Aplikace</div>
             {installState === "standalone" ? <p style={{ fontSize: 13, color: "var(--grn)", margin: 0 }}>✓ Běžíš v nainstalované aplikaci.</p>
               : installState === "installable" ? <>
                 <Btn warm onClick={onInstall}>📲 Nainstalovat aplikaci</Btn>
@@ -81,12 +81,12 @@ export default function SettingsView({
               : <p style={{ fontSize: 13, color: "var(--tx2)", margin: 0 }}>Instalaci nabídne menu prohlížeče (⋮ → „Přidat na plochu" / „Nainstalovat aplikaci"). Pokud už je nainstalovaná, tlačítko se tady nezobrazuje.</p>}
           </Card>
           {showGyro && <Card style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, fontFamily: "'Barlow Condensed',sans-serif" }}>Vzhled</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, fontFamily: "var(--font-head)" }}>Vzhled</div>
             <Toggle checked={gyroOn} label="Parallax pozadí (gyroskop)" onChange={onGyroChange} />
             <p style={{ fontSize: 12, color: "var(--tx3)", margin: 0 }}>Experiment: pozadí se lehce hýbe podle náklonu telefonu. Pokud by aplikace ztratila plynulost, vypni to tady — projeví se okamžitě, bez restartu.</p>
           </Card>}
           <Card style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, fontFamily: "'Barlow Condensed',sans-serif" }}>Google Calendar</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, fontFamily: "var(--font-head)" }}>Google Calendar</div>
             {!gcalConfigured ? <p style={{ fontSize: 13, color: "var(--tx3)" }}>Google Calendar integrace není nakonfigurována (chybí VITE_GOOGLE_CLIENT_ID).</p> : <>
               <Toggle checked={profile.gcalEnabled || false} onChange={onGcalToggle} label="Synchronizovat rozvrh do Google Calendar" />
               {profile.gcalEnabled && <>
@@ -101,9 +101,9 @@ export default function SettingsView({
             </>}
           </Card>
           {isA && <Card style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, fontFamily: "'Barlow Condensed',sans-serif" }}>Pravidla směn</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 12, fontFamily: "var(--font-head)" }}>Pravidla směn</div>
             <Input label="Minimum lidí v kanceláři" type="number" value={draft.officeMin ?? 4} onChange={e => edit(r => ({ ...r, officeMin: +e.target.value }))} /><Input label="Minimum v kanceláři od 8:00" type="number" value={draft.min8 ?? 2} onChange={e => edit(r => ({ ...r, min8: +e.target.value }))} /><Input label="Minimum na 10:00 (vč. HO)" type="number" value={draft.min10 ?? 2} onChange={e => edit(r => ({ ...r, min10: +e.target.value }))} /><Input label="Max HO / den" type="number" value={draft.hoCapDay ?? 3} onChange={e => edit(r => ({ ...r, hoCapDay: +e.target.value }))} /><Input label="Max HO / osoba / týden" type="number" value={draft.hoPerWeek ?? 2} onChange={e => edit(r => ({ ...r, hoPerWeek: +e.target.value }))} /><Toggle checked={draft.cover8 !== false} onChange={v => edit(r => ({ ...r, cover8: v }))} label="Vyžadovat minimum na 8:00" /><Toggle checked={draft.cover10 !== false} onChange={v => edit(r => ({ ...r, cover10: v }))} label="Vyžadovat minimum na 10:00" /><div style={{ borderTop: "1px solid var(--brd)", marginTop: 12, paddingTop: 12 }}><Toggle checked={draft.allowAllDnD || false} onChange={v => edit(r => ({ ...r, allowAllDnD: v }))} label="Povolit Drag & Drop pro všechny" /><p style={{ fontSize: 12, color: "var(--tx3)", marginTop: -8, marginBottom: 12 }}>Zaměstnanci budou moci přesouvat kohokoliv v rozvrhu.</p></div><div style={{ borderTop: "1px solid var(--brd)", marginTop: 16, paddingTop: 12 }}>
-              <div style={{ fontFamily: "'Barlow Condensed',sans-serif", fontSize: 15, letterSpacing: 1, textTransform: "uppercase", color: "var(--w)", marginBottom: 4 }}>Rotace dvojic</div>
+              <div style={{ fontFamily: "var(--font-head)", fontSize: 15, letterSpacing: 1, textTransform: "uppercase", color: "var(--w)", marginBottom: 4 }}>Rotace dvojic</div>
               <p style={{ fontSize: 12, color: "var(--tx3)", marginBottom: 10 }}>Dvojici se v daný den každý týden prohodí směna. Ruční úprava rozvrhu má vždy přednost — rotace se uplatní jen tam, kde nikdo nezasáhl.</p>
               {(draft.rotations || []).map((rot, i) => {
                 const nameOf = id => employees.find(e => e.id === id)?.name || "?";
@@ -114,7 +114,7 @@ export default function SettingsView({
                     <span style={{ fontSize: 13, color: "var(--w)", flex: 1 }}>{nameOf(rot.aId)} ⇄ {nameOf(rot.bId)} · {rot.shiftA} / {rot.shiftB}{rot.ho !== false ? " · HO" : ""}</span>
                     <Btn small danger onClick={() => edit(r => ({ ...r, rotations: (r.rotations || []).filter((_, j) => j !== i) }))}>Odebrat</Btn>
                   </div>
-                  <div style={{ fontSize: 11.5, color: "var(--tx3)", fontFamily: "'IBM Plex Mono',monospace", lineHeight: 1.6 }}>
+                  <div style={{ fontSize: 11.5, color: "var(--tx3)", fontFamily: "var(--font-mono)", lineHeight: 1.6 }}>
                     {[0, 1, 2, 3].map(k => {
                       const d = new Date(wk + "T00:00:00"); d.setDate(d.getDate() + k * 7);
                       const key = localISO(getMon(d)); const sw = rotIsSwapped(key, rot.anchor);

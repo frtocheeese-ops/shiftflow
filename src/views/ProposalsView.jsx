@@ -7,17 +7,17 @@ import { Badge, Btn, Card } from "../ui";
 export default function ProposalsView({ isA, profile, yearProblems, visibleProps, myPendingProps, ge, onApplyFix, onConsent, onReject }) {
   return (
     <div>
-          <div style={{ fontSize: 20, fontWeight: 600, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 2, marginBottom: 20, borderBottom: "1px solid var(--brd)", paddingBottom: 12 }}>Návrhy změn</div>
+          <div style={{ fontSize: 20, fontWeight: 600, color: "var(--w)", fontFamily: "var(--font-head)", textTransform: "uppercase", letterSpacing: 2, marginBottom: 20, borderBottom: "1px solid var(--brd)", paddingBottom: 12 }}>Návrhy změn</div>
     
           {/* Plakát „Your colleagues need YOU" — ukáže se, když uživatel může něco udělat: čeká se na jeho souhlas, nebo má u problému tlačítko „Provést úpravu" */}
           {(myPendingProps.length > 0 || yearProblems.some(pr => pr.alts.some(a => isA || a.empId === profile.id))) && <div style={{ textAlign: "center", margin: "0 0 24px" }}>
             <img src="/kolegove-te-potrebuji.webp" alt="Your colleagues need YOU — můžeš pomoct s řešením" loading="lazy"
               style={{ maxWidth: 230, width: "100%", border: "1px solid var(--brd)", display: "inline-block" }} />
-            <div style={{ fontSize: 12, color: "var(--tx3)", marginTop: 6, textTransform: "uppercase", letterSpacing: 1, fontFamily: "'Barlow Condensed',sans-serif" }}>Můžeš pomoct ↓</div>
+            <div style={{ fontSize: 12, color: "var(--tx3)", marginTop: 6, textTransform: "uppercase", letterSpacing: 1, fontFamily: "var(--font-head)" }}>Můžeš pomoct ↓</div>
           </div>}
     
           {/* Celoroční detekované problémy — ode dneška dál, přímá aplikace */}
-          <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10, fontFamily: "'Barlow Condensed',sans-serif" }}>Problémy k vyřešení · ode dneška</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10, fontFamily: "var(--font-head)" }}>Problémy k vyřešení · ode dneška</div>
           {yearProblems.length === 0 && <Card style={{ marginBottom: 24, borderLeft: "3px solid var(--grn)" }}><span style={{ fontSize: 14 }}>✓ Žádné otevřené problémy — všechny dny splňují pravidla.</span></Card>}
           {yearProblems.length > 0 && <div style={{ marginBottom: 24 }}>
             {yearProblems.slice(0, 30).map((pr, pi) => {
@@ -45,7 +45,7 @@ export default function ProposalsView({ isA, profile, yearProblems, visibleProps
           </div>}
     
           {/* Čekající návrhy — admin vidí vše, člen jen svoje */}
-          <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10, fontFamily: "'Barlow Condensed',sans-serif" }}>Čeká na schválení</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10, fontFamily: "var(--font-head)" }}>Čeká na schválení</div>
           {visibleProps.map(p => {
             const required = ["admin", ...(p.affected || [])];
             const canConsent = (isA && !p.consents?.admin) || (p.affected?.includes(profile.id) && !p.consents?.[profile.id]);
