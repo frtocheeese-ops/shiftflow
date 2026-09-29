@@ -33,8 +33,15 @@ function RotationForm({ employees, onAdd }) {
   </div>;
 }
 
+// Dostupné vzhledy. Nový skin = záznam sem + blok [data-theme="…"] v CSS (App.jsx).
+const SKINS = [
+  { id: "light", name: "Světlý", sub: "původní světlý vzhled", swatch: "linear-gradient(135deg, #e3e7ee, #bec4d0)" },
+  { id: "dark", name: "Tmavý", sub: "původní tmavý vzhled", swatch: "linear-gradient(135deg, #0c0c12, #d47820)" },
+  { id: "sever", name: "Sever", sub: "kámen, dřevo, kůže a námraza", swatch: "linear-gradient(135deg, #1e2831, #8fc3e6)" },
+];
+
 export default function SettingsView({
-  isA, profile, employees, wk, rules, nahledInfo, installState, showGyro, gyroOn, gcalConfigured,
+  theme = "light", onThemeChange = () => {}, isA, profile, employees, wk, rules, nahledInfo, installState, showGyro, gyroOn, gcalConfigured,
   onOpenModal, onInstall, onGyroChange, onGcalToggle, onGcalSyncWeek, onGcalSyncYear, onGcalClear,
   onGcalDisconnect, onSaveRules, onResetWeek, onExportCSV,
 }) {
@@ -54,6 +61,17 @@ export default function SettingsView({
               <Btn ghost onClick={() => onOpenModal("changeName")}>Změnit jméno</Btn>
               <Btn ghost onClick={() => onOpenModal("changePass")}>Změnit heslo</Btn>
               <Btn ghost onClick={() => onOpenModal("changeNotif")}>Email notifikace</Btn>
+            </div>
+          </Card>
+          <Card style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: "var(--tx2)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 10 }}>Vzhled</div>
+            <div role="radiogroup" aria-label="Vzhled aplikace" style={{ display: "grid", gap: 6 }}>
+              {SKINS.map(k => <button key={k.id} type="button" role="radio" aria-checked={theme === k.id} onClick={() => onThemeChange(k.id)}
+                style={{ display: "flex", alignItems: "center", gap: 12, minHeight: 52, padding: "6px 12px", textAlign: "left", cursor: "pointer", background: theme === k.id ? "var(--adim)" : "transparent", border: `1px solid ${theme === k.id ? "var(--abrd)" : "var(--brd)"}`, color: "var(--tx)" }}>
+                <span aria-hidden="true" style={{ width: 32, height: 32, flexShrink: 0, background: k.swatch, border: "1px solid var(--brd2)" }} />
+                <span style={{ flex: 1 }}><span style={{ display: "block", fontSize: 15, fontWeight: 600 }}>{k.name}</span><span style={{ fontSize: 12, color: "var(--tx3)" }}>{k.sub}</span></span>
+                {theme === k.id && <span style={{ fontSize: 12, color: "var(--acc2)", fontWeight: 600 }}>zvoleno</span>}
+              </button>)}
             </div>
           </Card>
           {isA && <Card style={{ marginBottom: 16 }}>

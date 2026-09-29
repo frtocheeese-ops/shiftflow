@@ -266,6 +266,29 @@ const CSS = `
   --sheen:linear-gradient(135deg,rgba(255,255,255,.06) 0%,transparent 50%,rgba(255,255,255,.03) 100%);
   --grid:none;--moon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='800'%3E%3Crect width='800' height='800' fill='%23060610'/%3E%3Cdefs%3E%3CradialGradient id='n1' cx='.3' cy='.4' r='.5'%3E%3Cstop offset='0' stop-color='rgba(40,50,100,.12)'/%3E%3Cstop offset='1' stop-color='transparent'/%3E%3C/radialGradient%3E%3CradialGradient id='n2' cx='.7' cy='.6' r='.4'%3E%3Cstop offset='0' stop-color='rgba(80,40,60,.08)'/%3E%3Cstop offset='1' stop-color='transparent'/%3E%3C/radialGradient%3E%3C/defs%3E%3Crect width='800' height='800' fill='url(%23n1)'/%3E%3Crect width='800' height='800' fill='url(%23n2)'/%3E%3Ccircle cx='65' cy='90' r='1.2' fill='rgba(255,255,255,.6)'/%3E%3Ccircle cx='180' cy='40' r='.5' fill='rgba(255,255,255,.3)'/%3E%3Ccircle cx='310' cy='120' r='1.4' fill='rgba(255,255,255,.55)'/%3E%3Ccircle cx='450' cy='60' r='.7' fill='rgba(255,255,255,.4)'/%3E%3Ccircle cx='590' cy='130' r='1' fill='rgba(255,255,255,.45)'/%3E%3Ccircle cx='720' cy='50' r='.6' fill='rgba(255,255,255,.35)'/%3E%3Ccircle cx='100' cy='220' r='.8' fill='rgba(255,255,255,.5)'/%3E%3Ccircle cx='240' cy='190' r='1.1' fill='rgba(255,255,255,.4)'/%3E%3Ccircle cx='370' cy='250' r='.6' fill='rgba(255,255,255,.55)'/%3E%3Ccircle cx='520' cy='200' r='1.3' fill='rgba(255,255,255,.35)'/%3E%3Ccircle cx='660' cy='240' r='.9' fill='rgba(255,255,255,.45)'/%3E%3Ccircle cx='780' cy='180' r='.5' fill='rgba(255,255,255,.3)'/%3E%3Ccircle cx='50' cy='350' r='1' fill='rgba(255,255,255,.5)'/%3E%3Ccircle cx='150' cy='380' r='.7' fill='rgba(255,255,255,.35)'/%3E%3Ccircle cx='280' cy='330' r='1.2' fill='rgba(255,255,255,.45)'/%3E%3Ccircle cx='410' cy='370' r='.8' fill='rgba(255,255,255,.5)'/%3E%3Ccircle cx='550' cy='340' r='1.5' fill='rgba(255,255,255,.3)'/%3E%3Ccircle cx='680' cy='390' r='.6' fill='rgba(255,255,255,.4)'/%3E%3Ccircle cx='750' cy='320' r='1.1' fill='rgba(255,255,255,.35)'/%3E%3Ccircle cx='90' cy='480' r='.9' fill='rgba(255,255,255,.45)'/%3E%3Ccircle cx='210' cy='510' r='1.3' fill='rgba(255,255,255,.4)'/%3E%3Ccircle cx='340' cy='460' r='.7' fill='rgba(255,255,255,.5)'/%3E%3Ccircle cx='470' cy='520' r='1' fill='rgba(255,255,255,.35)'/%3E%3Ccircle cx='600' cy='480' r='.8' fill='rgba(255,255,255,.45)'/%3E%3Ccircle cx='730' cy='510' r='1.2' fill='rgba(255,255,255,.3)'/%3E%3Ccircle cx='130' cy='620' r='1.1' fill='rgba(255,255,255,.4)'/%3E%3Ccircle cx='260' cy='650' r='.6' fill='rgba(255,255,255,.5)'/%3E%3Ccircle cx='400' cy='600' r='1.4' fill='rgba(255,255,255,.35)'/%3E%3Ccircle cx='530' cy='660' r='.9' fill='rgba(255,255,255,.45)'/%3E%3Ccircle cx='670' cy='620' r='.7' fill='rgba(255,255,255,.4)'/%3E%3Ccircle cx='770' cy='680' r='1' fill='rgba(255,255,255,.3)'/%3E%3Ccircle cx='40' cy='740' r='.8' fill='rgba(255,255,255,.45)'/%3E%3Ccircle cx='190' cy='770' r='1.2' fill='rgba(255,255,255,.35)'/%3E%3Ccircle cx='350' cy='730' r='.5' fill='rgba(255,255,255,.5)'/%3E%3Ccircle cx='500' cy='760' r='1.1' fill='rgba(255,255,255,.4)'/%3E%3Ccircle cx='640' cy='750' r='.7' fill='rgba(255,255,255,.45)'/%3E%3Ccircle cx='760' cy='780' r='1.3' fill='rgba(255,255,255,.3)'/%3E%3C/svg%3E");
 }
+/* ═══ SKIN: SEVER ═══ kámen, dřevo, kůže, námraza; Ringbearer CE (svolení autora) + Cinzel. Soubory v public/skins/sever/ (načtou se jen při zapnutém skinu) */
+@font-face{font-family:'Ringbearer CE';src:url(/skins/sever/ringbearer-ce.woff2) format('woff2');font-display:swap}
+[data-theme="sever"]{
+  --font-head:'Ringbearer CE','Cinzel',Georgia,serif;--font-body:'Alegreya Sans','Segoe UI',sans-serif;--font-mono:'Cinzel',Georgia,serif;
+  --bg:#161d25;--bg2:rgba(20,27,35,.86);--bg3:rgba(26,34,43,.82);--bg4:rgba(32,42,52,.82);
+  --panel:rgba(16,22,29,.90);--card:rgba(22,29,37,.74);--card-h:rgba(44,58,72,.82);
+  --brd:rgba(142,163,179,.22);--brd2:rgba(142,163,179,.36);--bt:rgba(142,163,179,.42);
+  --tx:#dbe4eb;--tx2:#a9b8c4;--tx3:#7f909d;--w:#f2f6f9;
+  --acc:#9fb2c1;--acc2:#8fc3e6;--acc3:#6fa6cc;--adim:rgba(143,195,230,.13);--abrd:rgba(143,195,230,.38);
+  --l1:#9fb2c1;--sd:#6fa6cc;--red:#d0605a;--grn:#79b888;--amb:#d8a84e;
+  --sel:rgba(143,195,230,.18);--stx:#f2f6f9;--blur:blur(6px);--glass:rgba(16,22,29,.88);
+  --sheen:linear-gradient(135deg,rgba(255,255,255,.05) 0%,transparent 50%,rgba(255,255,255,.03) 100%);
+  --grid:none;--moon:none;
+}
+html[data-theme="sever"] body{background-color:#161d25;background-image:linear-gradient(rgba(12,18,25,.60),rgba(12,18,25,.74)),url(/skins/sever/kamen.webp);background-size:auto,400px auto}
+html[data-theme="sever"] body::before{content:"";position:fixed;inset:0;background:url(/skins/sever/namraza.webp) center/100% 100% no-repeat;mix-blend-mode:screen;opacity:.5;pointer-events:none;z-index:0}
+html[data-theme="sever"] body::after{content:"";position:fixed;right:-90px;bottom:70px;width:380px;height:380px;background:url(/skins/sever/vlk.webp) center/contain no-repeat;opacity:.06;pointer-events:none;z-index:0}
+[data-theme="sever"] .pg{background-image:linear-gradient(rgba(20,30,40,.58),rgba(12,18,24,.76)),url(/skins/sever/drevo.webp)!important;background-size:auto,420px auto!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+[data-theme="sever"] header.pg{position:relative;box-shadow:inset 0 -4px 0 #4a5560,0 3px 8px rgba(0,0,0,.55)}
+[data-theme="sever"] header.pg::after{content:"";position:absolute;left:0;right:0;bottom:-16px;height:20px;background-image:linear-gradient(rgba(10,14,18,.12),rgba(10,14,18,.12)),url(/skins/sever/kozesina.webp);background-size:auto,180px auto;-webkit-mask-image:linear-gradient(180deg,#000 0%,#000 40%,rgba(0,0,0,.6) 70%,transparent 100%);mask-image:linear-gradient(180deg,#000 0%,#000 40%,rgba(0,0,0,.6) 70%,transparent 100%);pointer-events:none;z-index:2}
+[data-theme="sever"] .gl{background-image:linear-gradient(rgba(20,26,32,.10),rgba(8,10,12,.45)),url(/skins/sever/kuze.webp)!important;background-size:auto,400px auto!important;border-color:rgba(142,163,179,.42)!important;outline:1px dashed rgba(214,190,150,.36);outline-offset:-5px;box-shadow:0 2px 6px rgba(0,0,0,.45);backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+[data-theme="sever"] .ent{background-color:rgba(0,0,0,.16)}
+[data-theme="sever"] ::-webkit-scrollbar-thumb{background:#5c6d7b}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 body{background:var(--bg)}
 ::-webkit-scrollbar{width:4px;height:4px}::-webkit-scrollbar-thumb{background:var(--brd2)}
@@ -566,6 +589,13 @@ export default function App() {
   const switchV = v => { viewKey.current++; setView(v); };
 
   useEffect(() => { document.documentElement.setAttribute("data-theme", theme); localStorage.setItem("sf_theme", theme); }, [theme]);
+  // Skin Sever potřebuje Cinzel + Alegreya Sans z Google Fonts — přidat až při prvním zapnutí
+  useEffect(() => {
+    if (theme !== "sever" || document.getElementById("sf-fonts-sever")) return;
+    const l = document.createElement("link"); l.id = "sf-fonts-sever"; l.rel = "stylesheet";
+    l.href = "https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Alegreya+Sans:wght@400;500;700&display=swap";
+    document.head.appendChild(l);
+  }, [theme]);
   useEffect(() => { const fn = () => setIsMobile(window.innerWidth < 900); window.addEventListener('resize', fn); return () => window.removeEventListener('resize', fn); }, []);
 
   const cw = useMemo(() => { const d = new Date(); d.setDate(d.getDate() + wo * 7); return d; }, [wo]);
@@ -1360,7 +1390,7 @@ export default function App() {
 
           {view === "log" && <LogView logs={logs} />}
           {view === "defaults" && isA && <DefaultsView employees={employees} onSaveDefault={saveDefaultSchedule} />}
-          {view === "settings" && <SettingsView isA={isA} profile={profile} employees={employees} wk={wk} rules={rules} nahledInfo={nahledInfo}
+          {view === "settings" && <SettingsView theme={theme} onThemeChange={setTheme} isA={isA} profile={profile} employees={employees} wk={wk} rules={rules} nahledInfo={nahledInfo}
             installState={isStandalone() ? "standalone" : installable ? "installable" : isIOS() ? "ios" : "other"}
             showGyro={isMobile && MOBILE_GYRO_PARALLAX} gyroOn={gyroOn} gcalConfigured={!!GCAL_CLIENT_ID}
             onOpenModal={name => setModal(name)} onInstall={installApp} onGyroChange={changeGyro}

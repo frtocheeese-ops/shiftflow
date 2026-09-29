@@ -306,4 +306,13 @@ test("PeopleView: čekající účty se schválením nahoře, bez nich sekce chy
   assert.doesNotMatch(await render(V, { ...base, pendingUsers: [] }), /Čekají na schválení/);
 });
 
+test("SettingsView: výběr vzhledu — tři možnosti, zvolená je označená", async () => {
+  const SettingsView = await loadView("SettingsView");
+  const html = await render(SettingsView, setProps({ theme: "sever", onThemeChange() {} }));
+  assert.match(html, /Vzhled aplikace/);
+  for (const n of ["Světlý", "Tmavý", "Sever"]) assert.match(html, new RegExp(`>${n}<`));
+  assert.equal((html.match(/aria-checked="true"/g) || []).length, 1);
+  assert.match(html, /aria-checked="true"[^>]*>(?:(?!<\/button>).)*Sever/s);
+});
+
 test.after(() => rmSync(OUT, { recursive: true, force: true }));
