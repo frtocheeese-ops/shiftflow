@@ -82,6 +82,21 @@ proto **„přihlášený" ≠ „člen"**:
 - V appce se každé naslouchání na data připojuje až pro schváleného člena (`isMember`),
   hlídá to `src/app-structure.test.mjs`.
 
+## Vzhledy (skiny)
+
+Vzhled = hodnota `theme` (`light` | `dark` | `sever`), uložená v `localStorage` a zapsaná
+do `data-theme`. Každý skin se skládá ze čtyř částí:
+1. blok `[data-theme="sever"]{...}` v CSS (`App.jsx`) - barvy a písma přes proměnné
+   (`--font-head`, `--font-body`, `--font-mono`, `--bg`, `--acc2` a další),
+2. volitelně textury přes třídy klíčových prvků (`.pg` hlavička a menu, `.gl` karty, `.ent` řádky),
+3. soubory v `public/skins/<skin>/` - stahují se jen při zapnutém skinu,
+4. záznam v seznamu `SKINS` ve `views/SettingsView.jsx` (výběr v Nastavení, sekce Vzhled).
+Test hlídá, že každý soubor, na který CSS skinu odkazuje, existuje.
+
+**Licence písem:** Ringbearer CE (Pete Klassen) má licenci jen pro soukromé použití; pro
+tuto appku udělil autor výslovné svolení e-mailem (září 2026, uloženo u Patrika).
+Písmo Game of Thrones se NEPOUŽÍVÁ (bez licence) - římské číslice jsou v Cinzel (OFL).
+
 ## Stálý rozvrh žije jen v databázi
 
 Stálý rozvrh každého člena je `users/{id}.defaultSchedule` a upravuje se v appce
