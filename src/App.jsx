@@ -291,6 +291,17 @@ html[data-theme="sever"] body::after{content:"";position:fixed;right:-90px;botto
 [data-theme="sever"] .gl{background-image:linear-gradient(rgba(20,26,32,.10),rgba(8,10,12,.45)),url(/skins/sever/kuze.webp)!important;background-size:auto,400px auto!important;border-color:rgba(142,163,179,.42)!important;outline:1px dashed rgba(214,190,150,.36);outline-offset:-5px;box-shadow:0 2px 6px rgba(0,0,0,.45);backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
 [data-theme="sever"] .ent{background-color:rgba(0,0,0,.16)}
 [data-theme="sever"] ::-webkit-scrollbar-thumb{background:#5c6d7b}
+/* Čitelnost: text přímo na kameni a námraze */
+html[data-theme="sever"] body{text-shadow:0 1px 2px rgba(0,0,0,.65)}
+@media(max-width:899px){html[data-theme="sever"] body::before{opacity:.38}}
+/* Spodní menu: textové písmo (Ringbearer má vysoké tvary a v pevné výšce se usekne) */
+[data-theme="sever"] .pill-lbl{font-family:var(--font-body)!important;letter-spacing:.4px!important;line-height:1.35;padding:1px 0;max-width:96px}
+/* Dny jako praporce na ocelové tyči; vybraný den z pergamenu */
+[data-theme="sever"] .day-pills{position:relative;padding-top:9px;gap:5px!important}
+[data-theme="sever"] .day-pills::before{content:"";position:absolute;left:-4px;right:-4px;top:0;height:5px;border-radius:3px;background:linear-gradient(180deg,#9aa9b5 0%,#4a5560 45%,#2b333b 55%,#6b7884 100%);box-shadow:0 2px 3px rgba(0,0,0,.6)}
+[data-theme="sever"] .day-pill{clip-path:polygon(0 0,100% 0,100% 100%,50% 88%,0 100%);border:none!important;outline:none!important;background-image:linear-gradient(rgba(14,22,30,.60),rgba(14,22,30,.78)),url(/skins/sever/drevo.webp)!important;background-size:auto,300px auto!important;padding:6px 2px 15px!important;min-height:66px!important;line-height:1.2}
+[data-theme="sever"] .day-pill>div:first-child{font-size:17px;line-height:1.25}
+[data-theme="sever"] .day-pill[data-sel="1"]{background-image:linear-gradient(rgba(255,255,255,.10),rgba(90,60,25,.20)),url(/skins/sever/pergamen.webp)!important;background-size:auto,240px auto!important;color:#23180e!important;text-shadow:none}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 body{background:var(--bg)}
 ::-webkit-scrollbar{width:4px;height:4px}::-webkit-scrollbar-thumb{background:var(--brd2)}
@@ -389,7 +400,7 @@ function PillNav({ view, setView, NAV }) {
   return <nav className="pg" style={{ position: 'fixed', bottom: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 100, display: 'flex', gap: 2, padding: 4, border: '1px solid var(--bt)', boxShadow: '0 8px 32px rgba(0,0,0,.22)' }}>
     {NAV.map(n => <button key={n.id} onClick={() => setView(n.id)} style={{ display: 'flex', alignItems: 'center', gap: view === n.id ? 7 : 0, padding: view === n.id ? '10px 16px' : '10px 13px', border: 'none', background: view === n.id ? 'var(--adim)' : 'transparent', outline: view === n.id ? '1px solid var(--abrd)' : 'none', cursor: 'pointer', color: view === n.id ? 'var(--acc2)' : 'var(--tx3)', transition: 'all .28s', minHeight: 44, position: 'relative' }}>
       <span style={{ fontSize: 16, fontFamily: "var(--font-mono)" }}>{n.ic}</span>
-      <span style={{ fontFamily: "var(--font-head)", fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, overflow: 'hidden', maxWidth: view === n.id ? 80 : 0, whiteSpace: 'nowrap', transition: 'max-width .28s' }}>{n.l}</span>
+      <span className="pill-lbl" style={{ fontFamily: "var(--font-head)", fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, overflow: 'hidden', maxWidth: view === n.id ? 80 : 0, whiteSpace: 'nowrap', transition: 'max-width .28s' }}>{n.l}</span>
       {n.b > 0 && view !== n.id && <span style={{ position: 'absolute', top: 2, right: 2, background: 'var(--red)', color: '#fff', fontSize: 8, fontWeight: 700, width: 14, height: 14, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{n.b}</span>}
     </button>)}
   </nav>;

@@ -1016,3 +1016,17 @@ Nově na šířce ≥ 900 px jen **levý a pravý okraj** vyříznuté z origin�
 (`namraza-l.webp`, `namraza-r.webp`, 248 × 1774 px, ~70 kB) — levý začíná hned za
 postranním menu (200 px), průhlednost 0,42. Mobil dál celý rám, nově z ostřejšího zdroje
 (780 × 1560 px = 2× na 390px displeji).
+
+---
+
+## Aktualizace v47 — Sever na mobilu: praporce u dnů, čitelné menu a text
+
+- **Spodní menu:** popisek aktivní položky byl v Ringbearer se `overflow: hidden` v pevné
+  výšce → vysoká písmena se usekla (a delší slova i do šířky). V Severu teď textové
+  písmo (`.pill-lbl` → `--font-body`), výška řádku 1,35, šířka až 96 px.
+- **Dny jako praporce:** výběr dnů dostal třídy `day-pills` / `day-pill` a `data-sel`.
+  Skin z nich dělá praporce (clip-path s vystřiženým spodkem) z tmavého dřeva zavěšené na
+  ocelové tyči (`::before`); vybraný den z pergamenu s inkoustovým textem.
+- **Čitelnost:** text přímo na kameni a námraze byl slabý → jemný stín textu v celém
+  skinu (na pergamenu vypnutý), námraza na mobilu průhlednější (0,38).
+- Test hlídá třídy i pravidla skinu. 72 testů.

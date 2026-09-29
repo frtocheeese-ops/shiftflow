@@ -75,8 +75,8 @@ export default function ScheduleView(props) {
           {/* ── DAY VIEW ── */}
           {schedView === "day" && <>
             {/* Day pills */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 3, marginBottom: 16 }}>
-              {DAYS.map((d, i) => { const it = isTd(i, wo); const hol = !!wh[i]; return <button key={d} className={it && selDay === i ? 'atp' : ''} onClick={() => goDay(i)} style={{ padding: "8px 4px", border: `1px solid ${selDay === i ? "var(--abrd)" : "var(--brd)"}`, background: selDay === i ? "var(--adim)" : "transparent", color: selDay === i ? "var(--acc2)" : "var(--tx3)", cursor: "pointer", fontFamily: "var(--font-head)", fontSize: 14, fontWeight: 600, textTransform: "uppercase", textAlign: "center", minHeight: 52, opacity: hol ? .6 : 1 }}>
+            <div className="day-pills" style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 3, marginBottom: 16 }}>
+              {DAYS.map((d, i) => { const it = isTd(i, wo); const hol = !!wh[i]; return <button key={d} className={`day-pill${it && selDay === i ? ' atp' : ''}`} data-sel={selDay === i ? "1" : "0"} aria-pressed={selDay === i} onClick={() => goDay(i)} style={{ padding: "8px 4px", border: `1px solid ${selDay === i ? "var(--abrd)" : "var(--brd)"}`, background: selDay === i ? "var(--adim)" : "transparent", color: selDay === i ? "var(--acc2)" : "var(--tx3)", cursor: "pointer", fontFamily: "var(--font-head)", fontSize: 14, fontWeight: 600, textTransform: "uppercase", textAlign: "center", minHeight: 52, opacity: hol ? .6 : 1 }}>
                 <div>{d}</div>
                 <div style={{ fontSize: 11, fontFamily: "var(--font-mono)", marginTop: 2 }}>{fmtDate(wd[i])}</div>
                 {it && <span style={{ width: 5, height: 5, borderRadius: "50%", background: "var(--acc2)", display: "block", margin: "2px auto 0" }} />}
