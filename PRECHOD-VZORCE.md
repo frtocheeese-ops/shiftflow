@@ -1030,3 +1030,20 @@ postranním menu (200 px), průhlednost 0,42. Mobil dál celý rám, nově z ost
 - **Čitelnost:** text přímo na kameni a námraze byl slabý → jemný stín textu v celém
   skinu (na pergamenu vypnutý), námraza na mobilu průhlednější (0,38).
 - Test hlídá třídy i pravidla skinu. 72 testů.
+
+---
+
+## Aktualizace v48 — Sever: vlk v medailonu, římské číslice ve štítech, pergamenová deska
+
+Všechny tři prvky se projeví jen ve skinu Sever; ostatní vzhledy beze změny.
+- **Vlk v medailonu:** `header.pg::before` — kulatý medailon s ocelovým prstencem na
+  začátku hlavičky (čistě CSS; hlavička v Severu `justify-content:flex-start`, tlačítka
+  vpravo přes `margin-left:auto`).
+- **Římské číslice ve štítech:** blok směny má `className="shift-sec"` a
+  `data-roman="VIII|IX|X"`. Skin: `::before` ocelový štít (nová textura `ocel.webp`,
+  22 kB), `::after` tmavé pole s číslicí z `attr(data-roman)` v Cinzel; blok odsazen
+  o 62 px, štít zarovnán k prvnímu jménu.
+- **Pergamenová deska:** nový prvek `.day-plaque` s celým názvem dne a datem
+  („Úterý", „29. září"); globálně `display:none`, v Severu pergamen s nýty v rozích
+  (čtyři radiální přechody jako vrstvy pozadí) a inkoustovým písmem.
+- Testy: vykreslení desky (název dne + datum) a číslic u směn; pravidla skinu. 74 testů.
