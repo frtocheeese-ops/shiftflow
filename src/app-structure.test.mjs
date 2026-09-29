@@ -56,3 +56,11 @@ test("skin Sever: přepíná písma i barvy a je ve výběru vzhledu", () => {
   assert.match(src, /\[data-theme="sever"\]\{[^}]*--acc2:/);
   assert.match(readFileSync(new URL("./views/SettingsView.jsx", import.meta.url), "utf8"), /id: "sever"/);
 });
+
+test("skin Sever: dny jako praporce a čitelné spodní menu", () => {
+  const sched = readFileSync(new URL("./views/ScheduleView.jsx", import.meta.url), "utf8");
+  assert.match(sched, /className="day-pills"/); assert.match(sched, /day-pill\$\{/); assert.match(sched, /data-sel=/);
+  assert.match(src, /\[data-theme="sever"\] \.day-pill\{clip-path:polygon/);
+  assert.match(src, /\[data-theme="sever"\] \.day-pill\[data-sel="1"\]\{[^}]*pergamen/);
+  assert.match(src, /className="pill-lbl"/); assert.match(src, /\[data-theme="sever"\] \.pill-lbl\{font-family:var\(--font-body\)/);
+});
