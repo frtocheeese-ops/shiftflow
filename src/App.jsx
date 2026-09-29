@@ -302,6 +302,19 @@ html[data-theme="sever"] body{text-shadow:0 1px 2px rgba(0,0,0,.65)}
 [data-theme="sever"] .day-pill{clip-path:polygon(0 0,100% 0,100% 100%,50% 88%,0 100%);border:none!important;outline:none!important;background-image:linear-gradient(rgba(14,22,30,.60),rgba(14,22,30,.78)),url(/skins/sever/drevo.webp)!important;background-size:auto,300px auto!important;padding:6px 2px 15px!important;min-height:66px!important;line-height:1.2}
 [data-theme="sever"] .day-pill>div:first-child{font-size:17px;line-height:1.25}
 [data-theme="sever"] .day-pill[data-sel="1"]{background-image:linear-gradient(rgba(255,255,255,.10),rgba(90,60,25,.20)),url(/skins/sever/pergamen.webp)!important;background-size:auto,240px auto!important;color:#23180e!important;text-shadow:none}
+/* Vlk v medailonu na začátku hlavičky */
+[data-theme="sever"] header.pg{justify-content:flex-start!important;gap:10px}
+[data-theme="sever"] header.pg>:last-child{margin-left:auto}
+[data-theme="sever"] header.pg::before{content:"";flex-shrink:0;width:44px;height:44px;border-radius:50%;background:url(/skins/sever/vlk.webp) center/38px no-repeat,radial-gradient(circle at 50% 40%,#3a4855,#121820);box-shadow:0 0 0 3px #7d8a95,0 0 0 5px rgba(0,0,0,.5),0 3px 8px rgba(0,0,0,.6)}
+/* Římské číslice ve štítech: ocelový štít (::before) + tmavé pole s číslicí (::after), zarovnané k prvnímu jménu */
+[data-theme="sever"] .shift-sec{position:relative;padding-left:62px}
+[data-theme="sever"] .shift-sec::before{content:"";position:absolute;left:0;top:24px;width:52px;height:60px;clip-path:polygon(0 0,100% 0,100% 62%,50% 100%,0 62%);background:linear-gradient(155deg,rgba(255,255,255,.55),rgba(255,255,255,.05) 45%,rgba(0,0,0,.40)),url(/skins/sever/ocel.webp);background-size:auto,200px auto}
+[data-theme="sever"] .shift-sec::after{content:attr(data-roman);position:absolute;left:3px;top:27px;width:46px;height:54px;clip-path:polygon(0 0,100% 0,100% 62%,50% 100%,0 62%);background:radial-gradient(circle at 50% 30%,#2c3845,#121820);color:#e6edf2;font-family:'Cinzel',Georgia,serif;font-weight:700;font-size:17px;line-height:1;text-align:center;padding-top:11px;box-sizing:border-box;text-shadow:0 1px 2px rgba(0,0,0,.8);pointer-events:none}
+/* Pergamenová deska s nadpisem dne (v ostatních vzhledech skrytá) */
+.day-plaque{display:none}
+[data-theme="sever"] .day-plaque{display:block;position:relative;width:min(280px,80%);margin:2px auto 16px;padding:14px 18px 12px;text-align:center;border:1px solid #7a6440;text-shadow:none;box-shadow:0 3px 8px rgba(0,0,0,.55),inset 0 0 18px rgba(90,60,25,.35);background:radial-gradient(circle,#eef3f6 0,#8c9ba7 2px,#2b333b 3.5px,transparent 4px) 5px 5px/10px 10px no-repeat,radial-gradient(circle,#eef3f6 0,#8c9ba7 2px,#2b333b 3.5px,transparent 4px) calc(100% - 5px) 5px/10px 10px no-repeat,radial-gradient(circle,#eef3f6 0,#8c9ba7 2px,#2b333b 3.5px,transparent 4px) 5px calc(100% - 5px)/10px 10px no-repeat,radial-gradient(circle,#eef3f6 0,#8c9ba7 2px,#2b333b 3.5px,transparent 4px) calc(100% - 5px) calc(100% - 5px)/10px 10px no-repeat,radial-gradient(ellipse at 50% 50%,rgba(255,250,235,.10),rgba(90,60,25,.28)),url(/skins/sever/pergamen.webp) 0 0/260px auto}
+[data-theme="sever"] .dp-title{font-family:var(--font-head);font-size:32px;line-height:1.3;color:#23180e}
+[data-theme="sever"] .dp-date{font-size:14px;color:#5a4533;margin-top:2px}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 body{background:var(--bg)}
 ::-webkit-scrollbar{width:4px;height:4px}::-webkit-scrollbar-thumb{background:var(--brd2)}

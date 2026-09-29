@@ -4,6 +4,11 @@ import { DAYS, DAYS_F, SHIFTS, ABS, fmtW, fmtDate, getMon, fsKey, isTd } from ".
 import { Badge, Btn, HALF_LBL, HalfTag, RankBadge } from "../ui";
 import ShiftCard from "./ShiftCard";
 
+// Pro skin Sever: římské číslice směn a měsíce ve 2. pádě (pergamenová deska s nadpisem dne)
+const ROMAN = { "08:00": "VIII", "09:00": "IX", "10:00": "X" };
+const MONTHS_GEN = ["ledna", "února", "března", "dubna", "května", "června", "července", "srpna", "září", "října", "listopadu", "prosince"];
+const longDate = iso => { const d = new Date(iso + "T00:00:00"); return `${d.getDate()}. ${MONTHS_GEN[d.getMonth()]}`; };
+
 export default function ScheduleView(props) {
   // Data a akce z App.jsx — stejná jména jako dřív, takže JSX níže zůstalo beze změny
   const {
@@ -98,9 +103,12 @@ export default function ScheduleView(props) {
               {isA && <Btn small warm={!intake[DAYS[selDay]]} danger={intake[DAYS[selDay]]} onClick={() => toggleIntake(DAYS[selDay])}>{intake[DAYS[selDay]] ? "Zrušit Nástupy" : "Označit jako Nástupy"}</Btn>}
             </div>}
     
+            {/* Nadpis dne — zobrazuje jen skin Sever (pergamenová deska), jinde display:none */}
+            <div className="day-plaque"><div className="dp-title">{DAYS_F[selDay]}</div><div className="dp-date">{longDate(wd[selDay])}</div></div>
+
             {/* Shifts */}
             <div key={`${selDay}-${wo}`} className={slideDir === 'right' ? 'asr' : 'asl'}>
-              {!dayHol && SHIFTS.map(shift => <div key={shift} style={{ marginBottom: 12 }}>
+              {!dayHol && SHIFTS.map(shift => <div key={shift} className="shift-sec" data-roman={ROMAN[shift] || ""} style={{ marginBottom: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
                   <span style={{ fontFamily: "var(--font-mono)", color: "var(--acc2)", fontSize: 16, fontWeight: 500 }}>{shift}</span>
                   <div style={{ flex: 1, height: 1, background: "var(--brd)" }} />

@@ -315,4 +315,14 @@ test("SettingsView: výběr vzhledu — tři možnosti, zvolená je označená",
   assert.match(html, /aria-checked="true"[^>]*>(?:(?!<\/button>).)*Sever/s);
 });
 
+test("ScheduleView: nadpis dne pro pergamenovou desku a římské číslice u směn", async () => {
+  const V = await loadView("ScheduleView");
+  const p = await scheduleFixture();
+  const html = await render(V, p);
+  const d = new Date(p.wd[1] + "T00:00:00");
+  assert.match(html, /class="day-plaque"><div class="dp-title">Úterý<\/div>/);
+  assert.match(html, new RegExp(`class="dp-date">${d.getDate()}\\. `));
+  for (const r of ["VIII", "IX", "X"]) assert.match(html, new RegExp(`class="shift-sec" data-roman="${r}"`));
+});
+
 test.after(() => rmSync(OUT, { recursive: true, force: true }));

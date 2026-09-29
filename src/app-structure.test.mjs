@@ -64,3 +64,10 @@ test("skin Sever: dny jako praporce a čitelné spodní menu", () => {
   assert.match(src, /\[data-theme="sever"\] \.day-pill\[data-sel="1"\]\{[^}]*pergamen/);
   assert.match(src, /className="pill-lbl"/); assert.match(src, /\[data-theme="sever"\] \.pill-lbl\{font-family:var\(--font-body\)/);
 });
+
+test("skin Sever: vlk v medailonu, štíty s číslicemi, pergamenová deska (jinde skrytá)", () => {
+  assert.match(src, /\[data-theme="sever"\] header\.pg::before\{[^}]*vlk\.webp/);
+  assert.match(src, /\[data-theme="sever"\] \.shift-sec::after\{content:attr\(data-roman\)/);
+  assert.match(src, /\n\.day-plaque\{display:none\}/);
+  assert.match(src, /\[data-theme="sever"\] \.day-plaque\{display:block[^}]*pergamen/);
+});
