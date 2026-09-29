@@ -224,7 +224,9 @@ async function scheduleFixture(over = {}) {
   const team = Object.keys(TEAM_WEEK).map((n, i) => ({ id: "u" + i, name: n, role: "employee", setupDone: true, defaultSchedule: TEAM_WEEK[n] }));
   const byId = Object.fromEntries(team.map(e => [e.id, e]));
   const absences = over.absences || {};
-  const wk = "2026-09-21";
+  // Vždy PŘÍŠTÍ týden — napevno zapsané datum by časem přešlo do minulosti, kde appka
+  // záměrně nepřepočítává historii, a test by „vybuchl" jen tím, že uběhl čas.
+  const wk = S.localISO(S.getMon(new Date(Date.now() + 7 * 864e5)));
   const cs = S.withDefaults(null, absences, team, wk, [], {}, {});
   const res = S.analyzeWeek(cs, absences, team, {}, {}, {});
   const wd = [0, 1, 2, 3, 4].map(i => { const d = new Date(wk + "T00:00:00"); d.setDate(d.getDate() + i); return S.localISO(d); });

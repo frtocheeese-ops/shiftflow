@@ -16,12 +16,15 @@ const find = (w, day, id) => { for (const sh of SHIFTS) { const e = (w[day]?.[sh
 const count = (w, day, id) => SHIFTS.reduce((n, sh) => n + (w[day]?.[sh] || []).filter(x => x.empId === id).length, 0);
 const mondayOffset = weeks => localISO(getMon(new Date(Date.now() + weeks * 7 * 864e5)));
 const FUTURE = mondayOffset(3), PAST = "2025-01-06";
+// Týdny pro rotace — vždy v budoucnosti (pevná data by časem přešla do minulosti,
+// kde se nic nepřepočítává, a testy by procházely, aniž by cokoli ověřovaly).
+const W0 = mondayOffset(4), W1 = mondayOffset(5);
 
 const pair = () => [
   { id: "loch", name: "Lochman", role: "employee", setupDone: true, defaultSchedule: { Po: "08:00", "Út": "10:00", "Út_ho": true, St: "08:00" } },
   { id: "andy", name: "Andy", role: "employee", setupDone: true, defaultSchedule: { Po: "10:00", "Út": "09:00", "Út_ho": true, St: "09:00" } },
 ];
-const ROT = [{ day: "Út", aId: "loch", bId: "andy", shiftA: "08:00", shiftB: "10:00", ho: true, anchor: "2026-09-07" }];
+const ROT = [{ day: "Út", aId: "loch", bId: "andy", shiftA: "08:00", shiftB: "10:00", ho: true, anchor: W0 }];
 const team = () => Object.keys(TEAM_WEEK).map((n, i) => ({ id: "u" + i, name: n, role: "employee", setupDone: true, defaultSchedule: TEAM_WEEK[n] }));
 
 // ════════════════ Stálý rozvrh ════════════════
@@ -72,7 +75,7 @@ test("nový kolega se doplní do budoucího týdne materializovaného před jeho
 
 // ════════════════ Rotace dvojic ════════════════
 test("rotace se střídá po týdnech", () => {
-  const a = withDefaults(null, {}, pair(), "2026-09-07", ROT), b = withDefaults(null, {}, pair(), "2026-09-14", ROT);
+  const a = withDefaults(null, {}, pair(), W0, ROT), b = withDefaults(null, {}, pair(), W1, ROT);
   assert.equal(find(a, "Út", "loch").sh, "08:00"); assert.equal(find(b, "Út", "andy").sh, "08:00");
 });
 
@@ -82,19 +85,19 @@ test("rotace: parita stabilní přes přechod na zimní čas", () => {
 });
 
 test("rotace v den Nástupů prohodí časy, ale bez HO a bez porušení", () => {
-  const w = withDefaults(null, {}, pair(), "2026-09-14", ROT, { "Út": true }, {});
+  const w = withDefaults(null, {}, pair(), W1, ROT, { "Út": true }, {});
   assert.equal(find(w, "Út", "andy").e.ho, false); assert.equal(find(w, "Út", "loch").e.ho, false);
   assert.equal(analyzeWeek(w, {}, pair(), {}, { "Út": true }, {}).violations.filter(v => v.intake).length, 0);
 });
 
 test("rotace v den Nástupů respektuje výjimku", () => {
-  const w = withDefaults(null, {}, pair(), "2026-09-14", ROT, { "Út": true }, { "Út": ["andy"] });
+  const w = withDefaults(null, {}, pair(), W1, ROT, { "Út": true }, { "Út": ["andy"] });
   assert.equal(find(w, "Út", "andy").e.ho, true); assert.equal(find(w, "Út", "loch").e.ho, false);
 });
 
 test("rotace: ruční úprava jednoho z dvojice rotaci v tom týdnu vypne", () => {
   const stored = empty(); stored["Út"]["09:00"].push({ empId: "andy", ho: true, isDefault: false }); stored["Út"]["10:00"].push({ empId: "loch", ho: true, isDefault: true });
-  assert.equal(find(withDefaults(stored, {}, pair(), FUTURE, ROT), "Út", "andy").sh, "09:00");
+  assert.equal(find(withDefaults(stored, {}, pair(), W1, ROT), "Út", "andy").sh, "09:00");
 });
 
 // ════════════════ Půlden ════════════════
@@ -106,9 +109,9 @@ test("půlden: člověk zůstává ve směně a nese označení i zvolenou polov
 });
 
 test("půlden: rotace se nevypne a druhý z dvojice neskočí na staré místo", () => {
-  const stored = withDefaults(null, {}, pair(), "2026-09-14", ROT);
+  const stored = withDefaults(null, {}, pair(), W1, ROT);
   Object.assign(find(stored, "Út", "loch").e, { halfAbs: "half_vacation", halfPart: "first" });
-  const w = withDefaults(stored, { "loch__Út": "half_vacation" }, pair(), "2026-09-14", ROT);
+  const w = withDefaults(stored, { "loch__Út": "half_vacation" }, pair(), W1, ROT);
   assert.equal(find(w, "Út", "andy").sh, "08:00"); assert.equal(find(w, "Út", "loch").e.halfAbs, "half_vacation");
 });
 
@@ -129,15 +132,15 @@ test("půlden: do plného pokrytí dne se nepočítá", () => {
 });
 
 test("žádné duplicity: člověk je v jednom dni nejvýš jednou", () => {
-  const stored = withDefaults(null, {}, pair(), "2026-09-14", ROT);
+  const stored = withDefaults(null, {}, pair(), W1, ROT);
   Object.assign(find(stored, "Út", "loch").e, { halfAbs: "half_vacation", halfPart: "first" });
-  const w = withDefaults(withDefaults(stored, { "loch__Út": "half_vacation" }, pair(), "2026-09-14", ROT), { "loch__Út": "half_vacation" }, pair(), "2026-09-14", ROT);
+  const w = withDefaults(withDefaults(stored, { "loch__Út": "half_vacation" }, pair(), W1, ROT), { "loch__Út": "half_vacation" }, pair(), W1, ROT);
   for (const d of DAYS) for (const id of ["loch", "andy"]) assert.ok(count(w, d, id) <= 1, `${id} ${d} ×${count(w, d, id)}`);
 });
 
 test("withDefaults je idempotentní (opakované načtení nic nemění)", () => {
-  const once = withDefaults(null, { "loch__Út": "half_vacation" }, pair(), "2026-09-14", ROT, { "Út": true }, {});
-  const twice = withDefaults(dc(once), { "loch__Út": "half_vacation" }, pair(), "2026-09-14", ROT, { "Út": true }, {});
+  const once = withDefaults(null, { "loch__Út": "half_vacation" }, pair(), W1, ROT, { "Út": true }, {});
+  const twice = withDefaults(dc(once), { "loch__Út": "half_vacation" }, pair(), W1, ROT, { "Út": true }, {});
   assert.deepEqual(twice, once);
 });
 
