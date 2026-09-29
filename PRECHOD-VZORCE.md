@@ -966,3 +966,22 @@ dovolují; nově zakládaný bot ji má od začátku). Appka lidi s `bot: true` 
 `employees` → nezobrazí se v Týmu, statistikách férovosti, stálém rozvrhu ani ve
 výběrech (rotace, výměny). Čekající bot se ale v seznamu ke schválení ukáže (jinak by
 ho admin nemohl schválit). Strukturální test hlídá filtr. 68 testů.
+
+---
+
+## Aktualizace v44 — skiny, krok 1: písma přes proměnné; oprava časovaných testů
+
+**Příprava na skiny (bez viditelné změny).** Písma byla v kódu natvrdo na 97 místech
+(54× `'Barlow Condensed'`, 40× `'IBM Plex Mono'`, 3× `'Barlow'`). Nově proměnné
+`--font-head`, `--font-body`, `--font-mono` definované na `:root` se stejnými hodnotami.
+Skin je přepíše jedním řádkem (`[data-theme="sever"]{--font-head:…}`).
+
+**Časované testy.** Test „půlden v denním i týdenním pohledu" začal selhávat i na main:
+používal napevno týden 21. 9., který přešel do minulosti — a minulé týdny appka záměrně
+nepřepočítává. Horší bylo, že testy rotací (týdny 7. a 14. 9.) sice dál procházely,
+ale **přestaly cokoli ověřovat** (v minulosti se nic neděje, takže výsledek seděl vždy).
+Nově: Rozvrh v testech vždy příští týden; rotace v týdnech W0/W1 počítaných od dneška
+(kotva rotace = W0). Ověřeno, že test ruční úpravy znovu měří (bez ní rotace Andyho
+přesune). Testy férovosti záměrně zůstávají na pevných datech (počítají od 22. 7.).
+
+**Poučení:** v testech nepoužívat pevná data tam, kde logika závisí na „dnešku".
