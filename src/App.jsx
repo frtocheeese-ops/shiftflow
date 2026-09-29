@@ -242,6 +242,7 @@ async function _syncRangeCore(userId, employees, db, weeksAhead = 52, onProgress
 /* ═══ CSS ═══ */
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;500;600;700&family=Barlow:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
+:root{--font-body:'Barlow',sans-serif;--font-head:'Barlow Condensed',sans-serif;--font-mono:'IBM Plex Mono',monospace}
 :root,[data-theme="light"]{
   --bg:#bec4d0;--bg2:rgba(210,215,225,.45);--bg3:rgba(200,208,222,.35);--bg4:rgba(190,198,215,.48);
   --panel:rgba(215,220,230,.65);--card:rgba(220,225,235,.42);--card-h:rgba(210,218,230,.6);
@@ -347,23 +348,23 @@ function ParallaxBg() {
 /* ═══ NAV ═══ */
 function SideNav({ view, setView, NAV, theme, setTheme }) {
   return <aside className="pg" style={{ width: 200, height: "100vh", position: "fixed", left: 0, top: 0, zIndex: 50, display: "flex", flexDirection: "column", borderRight: "1px solid var(--bt)" }}>
-    <div style={{ padding: "20px 20px 16px", fontSize: 20, fontWeight: 700, color: "var(--w)", letterSpacing: 4, fontFamily: "'Barlow Condensed',sans-serif", borderBottom: "1px solid var(--brd)" }}>SHIFTFLOW</div>
+    <div style={{ padding: "20px 20px 16px", fontSize: 20, fontWeight: 700, color: "var(--w)", letterSpacing: 4, fontFamily: "var(--font-head)", borderBottom: "1px solid var(--brd)" }}>SHIFTFLOW</div>
     <div style={{ flex: 1, padding: "12px 0", overflowY: "auto" }}>
-      {NAV.map(n => <button key={n.id} onClick={() => setView(n.id)} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "12px 20px", border: "none", background: view === n.id ? "var(--adim)" : "transparent", borderLeft: view === n.id ? "3px solid var(--acc2)" : "3px solid transparent", color: view === n.id ? "var(--acc2)" : "var(--tx2)", cursor: "pointer", fontSize: 14, fontWeight: 600, fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 1, transition: "all .2s", minHeight: 44, textAlign: "left", position: "relative" }}>
-        <span style={{ fontSize: 16, fontFamily: "'IBM Plex Mono',monospace", width: 20, textAlign: "center", opacity: .8 }}>{n.ic}</span>{n.l}
+      {NAV.map(n => <button key={n.id} onClick={() => setView(n.id)} style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "12px 20px", border: "none", background: view === n.id ? "var(--adim)" : "transparent", borderLeft: view === n.id ? "3px solid var(--acc2)" : "3px solid transparent", color: view === n.id ? "var(--acc2)" : "var(--tx2)", cursor: "pointer", fontSize: 14, fontWeight: 600, fontFamily: "var(--font-head)", textTransform: "uppercase", letterSpacing: 1, transition: "all .2s", minHeight: 44, textAlign: "left", position: "relative" }}>
+        <span style={{ fontSize: 16, fontFamily: "var(--font-mono)", width: 20, textAlign: "center", opacity: .8 }}>{n.ic}</span>{n.l}
         {n.b > 0 && <span style={{ background: "var(--red)", color: "#fff", fontSize: 10, fontWeight: 700, width: 18, height: 18, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", marginLeft: "auto" }}>{n.b}</span>}
       </button>)}
     </div>
     <div style={{ padding: "12px 20px", borderTop: "1px solid var(--brd)" }}>
-      <button onClick={() => setTheme(t => t === "light" ? "dark" : "light")} style={{ background: "none", border: "1px solid var(--brd2)", width: "100%", height: 38, cursor: "pointer", fontSize: 14, color: "var(--tx2)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 1 }}>{theme === "light" ? "● Dark" : "○ Light"}</button>
+      <button onClick={() => setTheme(t => t === "light" ? "dark" : "light")} style={{ background: "none", border: "1px solid var(--brd2)", width: "100%", height: 38, cursor: "pointer", fontSize: 14, color: "var(--tx2)", fontFamily: "var(--font-head)", textTransform: "uppercase", letterSpacing: 1 }}>{theme === "light" ? "● Dark" : "○ Light"}</button>
     </div>
   </aside>;
 }
 function PillNav({ view, setView, NAV }) {
   return <nav className="pg" style={{ position: 'fixed', bottom: 16, left: '50%', transform: 'translateX(-50%)', zIndex: 100, display: 'flex', gap: 2, padding: 4, border: '1px solid var(--bt)', boxShadow: '0 8px 32px rgba(0,0,0,.22)' }}>
     {NAV.map(n => <button key={n.id} onClick={() => setView(n.id)} style={{ display: 'flex', alignItems: 'center', gap: view === n.id ? 7 : 0, padding: view === n.id ? '10px 16px' : '10px 13px', border: 'none', background: view === n.id ? 'var(--adim)' : 'transparent', outline: view === n.id ? '1px solid var(--abrd)' : 'none', cursor: 'pointer', color: view === n.id ? 'var(--acc2)' : 'var(--tx3)', transition: 'all .28s', minHeight: 44, position: 'relative' }}>
-      <span style={{ fontSize: 16, fontFamily: "'IBM Plex Mono',monospace" }}>{n.ic}</span>
-      <span style={{ fontFamily: "'Barlow Condensed',sans-serif", fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, overflow: 'hidden', maxWidth: view === n.id ? 80 : 0, whiteSpace: 'nowrap', transition: 'max-width .28s' }}>{n.l}</span>
+      <span style={{ fontSize: 16, fontFamily: "var(--font-mono)" }}>{n.ic}</span>
+      <span style={{ fontFamily: "var(--font-head)", fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 1, overflow: 'hidden', maxWidth: view === n.id ? 80 : 0, whiteSpace: 'nowrap', transition: 'max-width .28s' }}>{n.l}</span>
       {n.b > 0 && view !== n.id && <span style={{ position: 'absolute', top: 2, right: 2, background: 'var(--red)', color: '#fff', fontSize: 8, fontWeight: 700, width: 14, height: 14, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{n.b}</span>}
     </button>)}
   </nav>;
@@ -376,11 +377,11 @@ function Setup({ profile, onDone }) {
   return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg)", padding: 16 }}><style>{CSS}</style><ParallaxBg />
     <div className="gl" style={{ width: "100%", maxWidth: 520, padding: "36px 24px", animation: "mu .5s", position: "relative", zIndex: 1 }}>
       <div style={{ textAlign: "center", marginBottom: 32, borderBottom: "1px solid var(--brd)", paddingBottom: 24 }}>
-        <h2 style={{ fontSize: 24, fontWeight: 600, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 2 }}>Stálý rozvrh</h2>
+        <h2 style={{ fontSize: 24, fontWeight: 600, color: "var(--w)", fontFamily: "var(--font-head)", textTransform: "uppercase", letterSpacing: 2 }}>Stálý rozvrh</h2>
       </div>
       {DAYS.map(day => <div key={day} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", background: "var(--bg3)", border: "1px solid var(--brd)", marginBottom: 4 }}>
-        <span style={{ fontWeight: 600, fontSize: 16, minWidth: 50, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif" }}>{day}</span>
-        <div style={{ display: "flex", gap: 2, flex: 1 }}>{SHIFTS.map(sh => <button key={sh} onClick={() => setSched(s => ({ ...s, [day]: sh }))} style={{ flex: 1, padding: "10px 0", border: `1px solid ${sched[day] === sh ? "var(--acc2)" : "var(--brd)"}`, fontSize: 15, fontFamily: "'IBM Plex Mono',monospace", cursor: "pointer", background: sched[day] === sh ? "var(--adim)" : "transparent", color: sched[day] === sh ? "var(--w)" : "var(--tx3)", minHeight: 44 }}>{sh}</button>)}</div>
+        <span style={{ fontWeight: 600, fontSize: 16, minWidth: 50, color: "var(--w)", fontFamily: "var(--font-head)" }}>{day}</span>
+        <div style={{ display: "flex", gap: 2, flex: 1 }}>{SHIFTS.map(sh => <button key={sh} onClick={() => setSched(s => ({ ...s, [day]: sh }))} style={{ flex: 1, padding: "10px 0", border: `1px solid ${sched[day] === sh ? "var(--acc2)" : "var(--brd)"}`, fontSize: 15, fontFamily: "var(--font-mono)", cursor: "pointer", background: sched[day] === sh ? "var(--adim)" : "transparent", color: sched[day] === sh ? "var(--w)" : "var(--tx3)", minHeight: 44 }}>{sh}</button>)}</div>
         <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 13, color: "var(--tx3)", cursor: "pointer" }}><input type="checkbox" checked={sched[`${day}_ho`] || false} onChange={e => setSched(s => ({ ...s, [`${day}_ho`]: e.target.checked }))} style={{ width: 18, height: 18 }} />HO</label>
       </div>)}
       <Btn warm disabled={saving} onClick={async () => { setSaving(true); await updateDoc(doc(db, "users", profile.id), { defaultSchedule: sched, setupDone: true }); onDone(); }} style={{ width: "100%", marginTop: 20, padding: "14px 0", fontSize: 17 }}>{saving ? "..." : "POTVRDIT"}</Btn>
@@ -406,15 +407,15 @@ function AuthScreen() {
   return <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--bg)", padding: 16 }}><style>{CSS}</style><ParallaxBg />
     <div className="gl" style={{ width: "100%", maxWidth: 440, padding: "40px 28px", animation: "mu .5s", position: "relative", zIndex: 1 }}>
       <div style={{ textAlign: "center", marginBottom: 36, borderBottom: "1px solid var(--brd)", paddingBottom: 28 }}>
-        <div style={{ fontSize: 36, letterSpacing: 8, fontFamily: "'Barlow Condensed',sans-serif", fontWeight: 300, color: "var(--w)" }}>SHIFTFLOW</div>
+        <div style={{ fontSize: 36, letterSpacing: 8, fontFamily: "var(--font-head)", fontWeight: 300, color: "var(--w)" }}>SHIFTFLOW</div>
         <div style={{ width: 40, height: 2, background: "var(--acc2)", margin: "8px auto" }} />
       </div>
-      <div style={{ display: "flex", marginBottom: 28, border: "1px solid var(--brd)" }}>{["login", "register"].map(m => <button key={m} onClick={() => { setMode(m); setErr(""); }} style={{ flex: 1, padding: "12px 0", border: "none", fontSize: 14, fontFamily: "'Barlow Condensed',sans-serif", cursor: "pointer", background: mode === m ? "var(--sel)" : "transparent", color: mode === m ? "var(--stx)" : "var(--tx3)", textTransform: "uppercase", letterSpacing: 1.5, minHeight: 48 }}>{m === "login" ? "Přihlášení" : "Registrace"}</button>)}</div>
+      <div style={{ display: "flex", marginBottom: 28, border: "1px solid var(--brd)" }}>{["login", "register"].map(m => <button key={m} onClick={() => { setMode(m); setErr(""); }} style={{ flex: 1, padding: "12px 0", border: "none", fontSize: 14, fontFamily: "var(--font-head)", cursor: "pointer", background: mode === m ? "var(--sel)" : "transparent", color: mode === m ? "var(--stx)" : "var(--tx3)", textTransform: "uppercase", letterSpacing: 1.5, minHeight: 48 }}>{m === "login" ? "Přihlášení" : "Registrace"}</button>)}</div>
       {mode === "login" ? <>
         <Input label="Email" value={login} onChange={e => setLogin(e.target.value)} />
         <Input label="Heslo" type="password" value={pass} onChange={e => setPass(e.target.value)} onKeyDown={e => e.key === "Enter" && doLogin()} />
         <div style={{ display: "flex", gap: 8 }}><Btn warm disabled={loading} onClick={doLogin} style={{ flex: 1 }}>{loading ? "..." : "Přihlásit"}</Btn><Btn ghost onClick={async () => { try { const s = localStorage.getItem("sf_bio_email"), p = localStorage.getItem("sf_bio_token"); if (!s || !p) return setErr("Přihlaste se heslem a povolte biometrii"); await signInWithEmailAndPassword(auth, s, p); } catch (e) { setErr("Bio: " + e.message); } }} style={{ fontSize: 20 }}>🔐</Btn></div>
-        <button onClick={async () => { if (!login || !login.includes("@")) return setErr("Zadejte email"); try { await sendPasswordResetEmail(auth, login); setErr(""); alert("Odkaz pro reset hesla odeslán na " + login); } catch (e) { setErr(e.message); } }} style={{ background: "none", border: "none", color: "var(--acc2)", cursor: "pointer", fontSize: 13, fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 1, marginTop: 12, width: "100%", textAlign: "center" }}>Zapomenuté heslo?</button>
+        <button onClick={async () => { if (!login || !login.includes("@")) return setErr("Zadejte email"); try { await sendPasswordResetEmail(auth, login); setErr(""); alert("Odkaz pro reset hesla odeslán na " + login); } catch (e) { setErr(e.message); } }} style={{ background: "none", border: "none", color: "var(--acc2)", cursor: "pointer", fontSize: 13, fontFamily: "var(--font-head)", textTransform: "uppercase", letterSpacing: 1, marginTop: 12, width: "100%", textAlign: "center" }}>Zapomenuté heslo?</button>
       </> : <>
         <Input label="Jméno" value={rn} onChange={e => setRn(e.target.value)} />
         <Input label="Email" value={rEmail} onChange={e => setREmail(e.target.value)} />
@@ -449,7 +450,7 @@ function SwF({ dDay, dShift, wd, onSubmit }) {
     <Btn warm disabled={!dateISO || isWeekend || isPast} onClick={() => onSubmit(dateISO, sh, comment)} style={{ width: "100%", marginTop: 8 }}>Odeslat</Btn>
   </div>;
 }
-function MyAbsF({ profile, wd, onSubmit }) { const [dayIdx, setDayIdx] = useState(Math.max(0, todayIdx)); const [t, setT] = useState(ABS[0].id); const r = { sick: (profile.sickTotal || 5) - (profile.sickUsed || 0), vacation: (profile.vacationTotal || 20) - (profile.vacationUsed || 0), whatever: (profile.whateverTotal || 3) - (profile.whateverUsed || 0) }; return <div><div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 20 }}>{[{ l: "Dovol.", v: r.vacation, c: "var(--sd)" }, { l: "Sick", v: r.sick, c: "var(--red)" }, { l: "What.", v: r.whatever, c: "var(--amb)" }].map(b => <div key={b.l} style={{ textAlign: "center", padding: 12, border: "1px solid var(--brd)", background: "var(--bg3)" }}><div style={{ fontSize: 28, fontWeight: 600, color: b.c, fontFamily: "'IBM Plex Mono',monospace" }}>{b.v}</div><div style={{ fontSize: 11, color: "var(--tx3)", textTransform: "uppercase" }}>{b.l}</div></div>)}</div><Sel label="Den" value={dayIdx} onChange={e => setDayIdx(+e.target.value)} options={DAYS.map((d, i) => ({ value: i, label: `${DAYS_F[i]} ${fmtDate(wd[i])}` }))} /><Sel label="Typ" value={t} onChange={e => setT(e.target.value)} options={ABS.map(a => ({ value: a.id, label: `${a.icon} ${a.label}` }))} /><Btn warm onClick={() => onSubmit(DAYS[dayIdx], t)} style={{ width: "100%", marginTop: 8 }}>Zadat</Btn></div>; }
+function MyAbsF({ profile, wd, onSubmit }) { const [dayIdx, setDayIdx] = useState(Math.max(0, todayIdx)); const [t, setT] = useState(ABS[0].id); const r = { sick: (profile.sickTotal || 5) - (profile.sickUsed || 0), vacation: (profile.vacationTotal || 20) - (profile.vacationUsed || 0), whatever: (profile.whateverTotal || 3) - (profile.whateverUsed || 0) }; return <div><div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 20 }}>{[{ l: "Dovol.", v: r.vacation, c: "var(--sd)" }, { l: "Sick", v: r.sick, c: "var(--red)" }, { l: "What.", v: r.whatever, c: "var(--amb)" }].map(b => <div key={b.l} style={{ textAlign: "center", padding: 12, border: "1px solid var(--brd)", background: "var(--bg3)" }}><div style={{ fontSize: 28, fontWeight: 600, color: b.c, fontFamily: "var(--font-mono)" }}>{b.v}</div><div style={{ fontSize: 11, color: "var(--tx3)", textTransform: "uppercase" }}>{b.l}</div></div>)}</div><Sel label="Den" value={dayIdx} onChange={e => setDayIdx(+e.target.value)} options={DAYS.map((d, i) => ({ value: i, label: `${DAYS_F[i]} ${fmtDate(wd[i])}` }))} /><Sel label="Typ" value={t} onChange={e => setT(e.target.value)} options={ABS.map(a => ({ value: a.id, label: `${a.icon} ${a.label}` }))} /><Btn warm onClick={() => onSubmit(DAYS[dayIdx], t)} style={{ width: "100%", marginTop: 8 }}>Zadat</Btn></div>; }
 function EditDF({ emp, onDone }) { const [vac, setVac] = useState(emp?.vacationTotal || 20); const [sick, setSick] = useState(emp?.sickTotal || 5); const [what, setWhat] = useState(emp?.whateverTotal || 3); const [l, setL] = useState(false); if (!emp) return null; return <div><Input label="Dovolená" type="number" value={vac} onChange={e => setVac(+e.target.value)} /><Input label="Sick Days" type="number" value={sick} onChange={e => setSick(+e.target.value)} /><Input label="Whatever Days" type="number" value={what} onChange={e => setWhat(+e.target.value)} /><Btn warm disabled={l} onClick={async () => { setL(true); await updateDoc(doc(db, "users", emp.id), { vacationTotal: vac, sickTotal: sick, whateverTotal: what }); setL(false); onDone(); }} style={{ width: "100%", marginTop: 8 }}>Uložit</Btn></div>; }
 function AddF({ onDone }) { const [name, setName] = useState(""); const [email, setEmail] = useState(""); const [pass, setPass] = useState(""); const [l, setL] = useState(false); const [err, setErr] = useState(""); return <div><Input label="Jméno" value={name} onChange={e => setName(e.target.value)} /><Input label="Email" value={email} onChange={e => setEmail(e.target.value)} /><Input label="Heslo (min. 6)" type="password" value={pass} onChange={e => setPass(e.target.value)} />{err && <p style={{ color: "var(--red)", fontSize: 14, marginBottom: 8, padding: 10, border: "1px solid var(--red)" }}>{err}</p>}<Btn warm disabled={l} onClick={async () => { setErr(""); if (!name.trim() || !email || !pass) return setErr("Vyplňte vše"); if (pass.length < 6) return setErr("Min. 6 znaků"); setL(true); try { const r = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${import.meta.env.VITE_FIREBASE_API_KEY}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password: pass, displayName: name.trim(), returnSecureToken: false }) }); const d = await r.json(); if (d.error) { setErr(d.error.message); setL(false); return; } await setDoc(doc(db, "users", d.localId), { name: name.trim(), email, role: "employee", notify: false, notifyEmail: "", fcmToken: null, defaultSchedule: null, setupDone: false, vacationTotal: 20, sickTotal: 5, whateverTotal: 3, vacationUsed: 0, sickUsed: 0, whateverUsed: 0, createdAt: new Date().toISOString() }); onDone(`Přidán: ${name.trim()}`); } catch (e) { setErr(e.message); } setL(false); }} style={{ width: "100%" }}>Přidat</Btn></div>; }
 function MoveForm({ curDay, curShift, onMove }) {
@@ -521,12 +522,12 @@ function DirectSwapF({ targetEmp, dateLabel, dateISO, targetDay, targetShift, on
   const [comment, setComment] = useState("");
   return <div>
     <div style={{ padding: 16, background: "var(--bg3)", border: "1px solid var(--brd)", marginBottom: 16 }}>
-      <div style={{ fontSize: 13, color: "var(--tx3)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8, fontFamily: "'Barlow Condensed',sans-serif" }}>Požádat o výměnu</div>
+      <div style={{ fontSize: 13, color: "var(--tx3)", textTransform: "uppercase", letterSpacing: 1, marginBottom: 8, fontFamily: "var(--font-head)" }}>Požádat o výměnu</div>
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
         <div style={{ width: 40, height: 40, background: "var(--acc2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 17, fontWeight: 600, color: "#fff" }}>{targetEmp.name.charAt(0)}</div>
         <div>
           <div style={{ fontWeight: 600, fontSize: 17, color: "var(--w)" }}>{targetEmp.name}</div>
-          <div style={{ fontSize: 14, color: "var(--acc2)", fontFamily: "'IBM Plex Mono',monospace" }}>{dateLabel} · {targetShift}</div>
+          <div style={{ fontSize: 14, color: "var(--acc2)", fontFamily: "var(--font-mono)" }}>{dateLabel} · {targetShift}</div>
         </div>
       </div>
     </div>
@@ -1238,7 +1239,7 @@ export default function App() {
     return m;
   }, [allSchedules, vacYear]);
 
-  if (authUser === undefined) return <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center" }}><style>{CSS}</style><div style={{ color: "var(--tx3)", fontSize: 14, letterSpacing: 4, fontFamily: "'Barlow Condensed',sans-serif", animation: "pulse 1.5s infinite" }}>SHIFTFLOW</div></div>;
+  if (authUser === undefined) return <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center" }}><style>{CSS}</style><div style={{ color: "var(--tx3)", fontSize: 14, letterSpacing: 4, fontFamily: "var(--font-head)", animation: "pulse 1.5s infinite" }}>SHIFTFLOW</div></div>;
   if (!authUser) return <AuthScreen />;
   if (profile && !isMember) return <><style>{CSS}</style><PendingView profile={profile} onRequest={requestAccess} onSignOut={() => signOut(auth)} /></>;
   if (!profile) return <div style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--tx3)" }}><style>{CSS}</style>Načítání…</div>;
@@ -1256,7 +1257,7 @@ export default function App() {
 
   // Shift card renderer (reused in day + week views)
 
-  return <div style={{ minHeight: "100vh", fontFamily: "'Barlow',sans-serif", color: "var(--tx)", display: "flex" }} data-theme={theme}>
+  return <div style={{ minHeight: "100vh", fontFamily: "var(--font-body)", color: "var(--tx)", display: "flex" }} data-theme={theme}>
     <style>{CSS}</style>
     <ParallaxBg />
 
@@ -1269,7 +1270,7 @@ export default function App() {
     {/* MAIN */}
     <div style={{ flex: 1, marginLeft: isMobile ? 0 : 200, paddingBottom: isMobile ? 80 : 20, position: "relative", zIndex: 1 }}>
       <header className="pg" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 16px", borderBottom: "1px solid var(--bt)" }}>
-        <div style={{ fontSize: 14, color: "var(--tx2)", fontFamily: "'Barlow Condensed',sans-serif" }}>{profile.name} · <Badge small color={isA ? "var(--amb)" : "var(--acc)"}>{isA ? "ADM" : "CREW"}</Badge></div>
+        <div style={{ fontSize: 14, color: "var(--tx2)", fontFamily: "var(--font-head)" }}>{profile.name} · <Badge small color={isA ? "var(--amb)" : "var(--acc)"}>{isA ? "ADM" : "CREW"}</Badge></div>
         <div style={{ display: "flex", gap: 6 }}>
           <button onClick={hardSync} title="Sync — načíst čerstvý stav" style={{ background: "none", border: "1px solid var(--brd2)", color: "var(--acc2)", width: 38, height: 38, cursor: "pointer", fontSize: 15, display: "flex", alignItems: "center", justifyContent: "center" }}>⟳</button>
           {isMobile && <button onClick={() => setTheme(t => t === "light" ? "dark" : "light")} style={{ background: "none", border: "1px solid var(--brd2)", width: 38, height: 38, cursor: "pointer", color: "var(--tx2)", fontSize: 14 }}>{theme === "light" ? "●" : "○"}</button>}
@@ -1298,10 +1299,10 @@ export default function App() {
 
           {view === "vacation" && <div>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 20, borderBottom: "1px solid var(--brd)", paddingBottom: 12, flexWrap: "wrap" }}>
-              <div style={{ fontSize: 20, fontWeight: 600, color: "var(--w)", fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 2 }}>Dovolená {vacYear}</div>
+              <div style={{ fontSize: 20, fontWeight: 600, color: "var(--w)", fontFamily: "var(--font-head)", textTransform: "uppercase", letterSpacing: 2 }}>Dovolená {vacYear}</div>
               <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                 <button aria-label="Předchozí rok" onClick={() => setVacYear(y => y - 1)} style={{ background: "none", border: "1px solid var(--brd2)", color: "var(--tx2)", width: 32, height: 32, cursor: "pointer" }}>‹</button>
-                <span style={{ fontFamily: "'IBM Plex Mono',monospace", color: "var(--w)", minWidth: 46, textAlign: "center" }}>{vacYear}</span>
+                <span style={{ fontFamily: "var(--font-mono)", color: "var(--w)", minWidth: 46, textAlign: "center" }}>{vacYear}</span>
                 <button aria-label="Další rok" onClick={() => setVacYear(y => y + 1)} style={{ background: "none", border: "1px solid var(--brd2)", color: "var(--tx2)", width: 32, height: 32, cursor: "pointer" }}>›</button>
               </div>
             </div>
@@ -1320,8 +1321,8 @@ export default function App() {
                 const total = team.reduce((n, e) => n + days.filter(d => vacMap[e.id]?.[`${vacYear}-${String(mi + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`]).length, 0);
                 return <Card key={mi} style={{ padding: 0, overflow: "hidden" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderBottom: "1px solid var(--brd)" }}>
-                    <span style={{ fontFamily: "'Barlow Condensed',sans-serif", textTransform: "uppercase", letterSpacing: 1, color: "var(--w)", fontWeight: 600 }}>{mName}</span>
-                    <span style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 12, color: total ? "var(--sd)" : "var(--tx3)" }}>{total} dní</span>
+                    <span style={{ fontFamily: "var(--font-head)", textTransform: "uppercase", letterSpacing: 1, color: "var(--w)", fontWeight: 600 }}>{mName}</span>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: total ? "var(--sd)" : "var(--tx3)" }}>{total} dní</span>
                   </div>
                   <div style={{ overflowX: "auto" }}>
                     <table style={{ borderCollapse: "collapse", fontSize: 11, minWidth: "100%" }}>
@@ -1330,7 +1331,7 @@ export default function App() {
                         {days.map(d => {
                           const dt = new Date(vacYear, mi, d); const wd = dt.getDay(); const iso = localISO(dt);
                           const off = wd === 0 || wd === 6 || HMAP[iso];
-                          return <th key={d} title={HMAP[iso] || undefined} style={{ padding: "4px 0", width: 22, minWidth: 22, textAlign: "center", fontWeight: 500, color: off ? "var(--tx3)" : "var(--tx2)", background: off ? "var(--brd)" : "transparent", borderBottom: "1px solid var(--brd)", fontFamily: "'IBM Plex Mono',monospace" }}>{d}</th>;
+                          return <th key={d} title={HMAP[iso] || undefined} style={{ padding: "4px 0", width: 22, minWidth: 22, textAlign: "center", fontWeight: 500, color: off ? "var(--tx3)" : "var(--tx2)", background: off ? "var(--brd)" : "transparent", borderBottom: "1px solid var(--brd)", fontFamily: "var(--font-mono)" }}>{d}</th>;
                         })}
                       </tr></thead>
                       <tbody>{team.map(e => <tr key={e.id}>
@@ -1441,10 +1442,10 @@ export default function App() {
       <div style={{ fontSize: 12, color: "var(--tx3)", marginBottom: 10 }}>Trvalý týdenní rozpis dle výchozích rozvrhů členů. Bez zohlednění dovolených a úprav konkrétního týdne.</div>
       <div style={{ overflow: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13, minWidth: 460 }}>
-          <thead><tr><th style={{ padding: "8px 10px", textAlign: "left", color: "var(--tx3)", borderBottom: "1px solid var(--brd)", fontFamily: "'Barlow Condensed',sans-serif", letterSpacing: 1 }}>Člen</th>{DAYS.map(d => <th key={d} style={{ padding: "8px 6px", textAlign: "center", color: "var(--tx3)", borderBottom: "1px solid var(--brd)", fontFamily: "'IBM Plex Mono',monospace" }}>{d}</th>)}</tr></thead>
+          <thead><tr><th style={{ padding: "8px 10px", textAlign: "left", color: "var(--tx3)", borderBottom: "1px solid var(--brd)", fontFamily: "var(--font-head)", letterSpacing: 1 }}>Člen</th>{DAYS.map(d => <th key={d} style={{ padding: "8px 6px", textAlign: "center", color: "var(--tx3)", borderBottom: "1px solid var(--brd)", fontFamily: "var(--font-mono)" }}>{d}</th>)}</tr></thead>
           <tbody>{employees.filter(e => e.role !== "admin").map(emp => <tr key={emp.id} style={{ borderBottom: "1px solid var(--brd)" }}>
             <td style={{ padding: "8px 10px", fontWeight: 600, color: "var(--w)" }}><span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>{emp.name}<RankBadge fixes={emp.fixCount} size={18} /></span></td>
-            {DAYS.map(d => { const t = emp.setupDone ? emp.defaultSchedule?.[d] : null; const ho = emp.defaultSchedule?.[`${d}_ho`]; return <td key={d} style={{ padding: "6px", textAlign: "center" }}>{t ? <span style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 12, color: ho ? "var(--grn)" : "var(--acc2)", border: `1px solid ${ho ? "var(--grn)" : "var(--brd)"}`, padding: "2px 6px" }}>{ho ? "HO" + t.slice(0, 2) : t.slice(0, 2)}</span> : <span style={{ color: "var(--tx3)" }}>—</span>}</td>; })}
+            {DAYS.map(d => { const t = emp.setupDone ? emp.defaultSchedule?.[d] : null; const ho = emp.defaultSchedule?.[`${d}_ho`]; return <td key={d} style={{ padding: "6px", textAlign: "center" }}>{t ? <span style={{ fontFamily: "var(--font-mono)", fontSize: 12, color: ho ? "var(--grn)" : "var(--acc2)", border: `1px solid ${ho ? "var(--grn)" : "var(--brd)"}`, padding: "2px 6px" }}>{ho ? "HO" + t.slice(0, 2) : t.slice(0, 2)}</span> : <span style={{ color: "var(--tx3)" }}>—</span>}</td>; })}
           </tr>)}</tbody>
         </table>
       </div>
@@ -1477,8 +1478,8 @@ export default function App() {
       const CmpChip = ({ en, changed, tag }) => <div className={changed ? "cmp-blink" : ""} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 8px", border: "1px solid var(--brd)", marginBottom: 3, fontSize: 12.5 }}>
         <span style={{ width: 3, height: 14, background: en.ho ? "var(--grn)" : "var(--acc2)", flexShrink: 0 }} />
         <span style={{ fontWeight: 600, color: "var(--w)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ge(en.empId)?.name}</span>
-        {en.ho && <span style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 9.5, color: "var(--grn)", border: "1px solid var(--grn)", padding: "0 4px" }}>HO</span>}
-        {tag && <span style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 9.5, color: "var(--amb)" }}>{tag}</span>}
+        {en.ho && <span style={{ fontFamily: "var(--font-mono)", fontSize: 9.5, color: "var(--grn)", border: "1px solid var(--grn)", padding: "0 4px" }}>HO</span>}
+        {tag && <span style={{ fontFamily: "var(--font-mono)", fontSize: 9.5, color: "var(--amb)" }}>{tag}</span>}
       </div>;
       return <Modal open={true} onClose={() => setShowCompare(false)} title={`Stálý rozvrh vs. tento týden${schedView === "day" ? ` — ${DAYS[selDay]}` : ""}`} wide>
         <style>{`@keyframes cmpPulse { 0%,100% { background: transparent; border-color: var(--brd); } 50% { background: rgba(200,140,40,.22); border-color: var(--amb); } } .cmp-blink { animation: cmpPulse 1.2s ease-in-out infinite; }`}</style>
@@ -1492,21 +1493,21 @@ export default function App() {
           const anyChange = d.changed.size > 0;
           return <div key={day} style={{ marginBottom: 18 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-              <span style={{ fontFamily: "'Barlow Condensed',sans-serif", fontSize: 15, letterSpacing: 1.5, color: "var(--acc2)", textTransform: "uppercase" }}>{day}</span>
+              <span style={{ fontFamily: "var(--font-head)", fontSize: 15, letterSpacing: 1.5, color: "var(--acc2)", textTransform: "uppercase" }}>{day}</span>
               {!anyChange && <span style={{ fontSize: 11, color: "var(--grn)" }}>✓ beze změn</span>}
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
               {["def", "cur"].map(sideKey => <div key={sideKey} style={{ border: "1px solid var(--brd)", padding: 8, background: sideKey === "cur" ? "var(--bg3)" : "transparent" }}>
-                <div style={{ fontFamily: "'Barlow Condensed',sans-serif", fontSize: 11, letterSpacing: 1, color: "var(--tx3)", textTransform: "uppercase", marginBottom: 6 }}>{sideKey === "def" ? "Stálý" : "Tento týden"}</div>
+                <div style={{ fontFamily: "var(--font-head)", fontSize: 11, letterSpacing: 1, color: "var(--tx3)", textTransform: "uppercase", marginBottom: 6 }}>{sideKey === "def" ? "Stálý" : "Tento týden"}</div>
                 {SHIFTS.map(sh => { const list = d[sideKey][sh]; return <div key={sh} style={{ marginBottom: 6 }}>
-                  <div style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 10.5, color: "var(--tx3)", marginBottom: 3 }}>{sh}</div>
+                  <div style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--tx3)", marginBottom: 3 }}>{sh}</div>
                   {list.length ? list.map((en, ci) => <CmpChip key={en.empId + ci} en={en} changed={d.changed.has(en.empId)} tag={sideKey === "cur" && d.changed.has(en.empId) ? d.origin(en.empId) : null} />) : <div style={{ fontSize: 11, color: "var(--tx3)", padding: "3px 0 6px" }}>—</div>}
                 </div>; })}
                 {sideKey === "cur" && d.absent.length > 0 && <div>
-                  <div style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 10.5, color: "var(--tx3)", marginBottom: 3 }}>nepřítomni</div>
+                  <div style={{ fontFamily: "var(--font-mono)", fontSize: 10.5, color: "var(--tx3)", marginBottom: 3 }}>nepřítomni</div>
                   {d.absent.map(a => <div key={a.empId} className="cmp-blink" style={{ display: "flex", justifyContent: "space-between", gap: 6, padding: "5px 8px", border: "1px solid var(--brd)", marginBottom: 3, fontSize: 12.5 }}>
                     <span style={{ textDecoration: "line-through", color: "var(--tx3)" }}>{ge(a.empId)?.name}</span>
-                    <span style={{ fontFamily: "'IBM Plex Mono',monospace", fontSize: 10, color: "var(--amb)" }}>{ABS.find(x => x.id === a.reason)?.label || a.reason}</span>
+                    <span style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--amb)" }}>{ABS.find(x => x.id === a.reason)?.label || a.reason}</span>
                   </div>)}
                 </div>}
               </div>)}
