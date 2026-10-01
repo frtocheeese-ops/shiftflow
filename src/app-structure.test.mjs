@@ -84,3 +84,12 @@ test("vzhledy: tlačítko přepíná dokola přes všechny skiny, neznámý vzhl
 test("Ringbearer CE nepoužívá blok interpunkce (pomlčky a uvozovky má nakreslené jako písmena)", () => {
   assert.match(src, /font-family:'Ringbearer CE';[^}]*unicode-range:U\+0000-1FFF,U\+2070-FFFF/);
 });
+
+test("skin Nebula: písma, barvy, planety u směn, holografický nadpis dne, je ve výběru", async () => {
+  const { SKINS } = await import("./skins.js");
+  const neb = SKINS.find(s => s.id === "nebula"); assert.ok(neb, "Nebula chybí v seznamu vzhledů"); assert.match(neb.fonts, /Exo\+2/);
+  assert.match(src, /\[data-theme="nebula"\]\{[^}]*--font-head:'Exo 2'/);
+  for (const r of ["VIII", "IX", "X"]) assert.match(src, new RegExp(`\\[data-theme="nebula"\\] \\.shift-sec\\[data-roman="${r}"\\]::before\\{background-image:url`));
+  assert.match(src, /\[data-theme="nebula"\] \.day-plaque\{display:block/);
+  assert.match(src, /skinOf\(theme\)\.fonts/);                 // písma se načítají obecně podle skinu
+});

@@ -1069,3 +1069,32 @@ Všechny tři prvky se projeví jen ve skinu Sever; ostatní vzhledy beze změny
   nový záznam v seznamu.
 - Testy: bilance (vyrovnání i plus), přepínání dokola + neznámý vzhled, unicode-range,
   obrázek jen v den Nástupů. 78 testů.
+
+---
+
+## Aktualizace v50 — nový skin Vesmírná nebula
+
+Návrh na plátně schválen, assety dodal Patrik (ChatGPT): pozadí mobil/desktop, hvězdný
+prach, znak (planeta s prstencem), sada tří planet (rozřezána na samostatné obrázky).
+Vše v `public/skins/nebula/` (~244 kB, stahuje se jen při zapnutém skinu).
+
+- **Vzhled:** mlhovina na pevné vrstvě (`body::before`, mobil/desktop varianta), hvězdy
+  přes `mix-blend-mode: screen`; hlavička, menu a karty z tmavého matného skla
+  (`backdrop-filter`); pod hlavičkou zářící linka azurová → fialová → purpurová.
+- **Písma:** Exo 2 (nadpisy), Space Grotesk (text), Space Mono (časy) — volná (OFL).
+- **Znovupoužité háčky ze Severu:** `header.pg::before` (znak místo vlka), `.shift-sec`
+  s `data-roman` → planeta podle směny (VIII hvězda, IX modrá, X s prstencem),
+  `.day-plaque` → holografický panel s přechodovým nadpisem, `.day-pill` → skleněné
+  kapsle, vybraná se zářícím přechodovým okrajem, `.pill-lbl` → textové písmo.
+- **Obecné načítání písem:** skin může mít v `src/skins.js` pole `fonts` (odkaz na
+  Google Fonts); appka ho přidá při prvním zapnutí. Sever převeden na stejný mechanismus.
+- Test: Nebula ve výběru, písma, planety u všech směn, holografický nadpis, obecné
+  načítání písem; existence všech souborů (obecný test). 79 testů.
+
+**Doplnění v50 — kosmická čísla místo planet.** Na žádost Patrika (lepší rozlišení směn)
+nahrazeny planety čísly 8 / 9 / 10 ve vesmírném stylu (asset s černým pozadím →
+převod černá → průhlednost s alfou podle nejjasnějšího kanálu, aby záře neměla tmavé
+lemy; řez podle jádra znaků, protože se záře sousedních čísel překrývá; „10" drženo
+pohromadě). Soubory `cislo-8/9/10.webp` (13–21 kB, výška 120 px), staré `planeta-*`
+odstraněny. Všechna čísla mají stejnou výšku (44 px), „10" je širší → slot 70 px,
+blok směny odsazen 82 px.
