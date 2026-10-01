@@ -1090,3 +1090,11 @@ Vše v `public/skins/nebula/` (~244 kB, stahuje se jen při zapnutém skinu).
   Google Fonts); appka ho přidá při prvním zapnutí. Sever převeden na stejný mechanismus.
 - Test: Nebula ve výběru, písma, planety u všech směn, holografický nadpis, obecné
   načítání písem; existence všech souborů (obecný test). 79 testů.
+
+**Doplnění v50 — kosmická čísla místo planet.** Na žádost Patrika (lepší rozlišení směn)
+nahrazeny planety čísly 8 / 9 / 10 ve vesmírném stylu (asset s černým pozadím →
+převod černá → průhlednost s alfou podle nejjasnějšího kanálu, aby záře neměla tmavé
+lemy; řez podle jádra znaků, protože se záře sousedních čísel překrývá; „10" drženo
+pohromadě). Soubory `cislo-8/9/10.webp` (13–21 kB, výška 120 px), staré `planeta-*`
+odstraněny. Všechna čísla mají stejnou výšku (44 px), „10" je širší → slot 70 px,
+blok směny odsazen 82 px.

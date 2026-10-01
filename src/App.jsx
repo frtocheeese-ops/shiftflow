@@ -318,7 +318,7 @@ html[data-theme="sever"] body{text-shadow:0 1px 2px rgba(0,0,0,.65)}
 [data-theme="sever"] .day-plaque{display:block;position:relative;width:min(280px,80%);margin:2px auto 16px;padding:14px 18px 12px;text-align:center;border:1px solid #7a6440;text-shadow:none;box-shadow:0 3px 8px rgba(0,0,0,.55),inset 0 0 18px rgba(90,60,25,.35);background:radial-gradient(circle,#eef3f6 0,#8c9ba7 2px,#2b333b 3.5px,transparent 4px) 5px 5px/10px 10px no-repeat,radial-gradient(circle,#eef3f6 0,#8c9ba7 2px,#2b333b 3.5px,transparent 4px) calc(100% - 5px) 5px/10px 10px no-repeat,radial-gradient(circle,#eef3f6 0,#8c9ba7 2px,#2b333b 3.5px,transparent 4px) 5px calc(100% - 5px)/10px 10px no-repeat,radial-gradient(circle,#eef3f6 0,#8c9ba7 2px,#2b333b 3.5px,transparent 4px) calc(100% - 5px) calc(100% - 5px)/10px 10px no-repeat,radial-gradient(ellipse at 50% 50%,rgba(255,250,235,.10),rgba(90,60,25,.28)),url(/skins/sever/pergamen.webp) 0 0/260px auto}
 [data-theme="sever"] .dp-title{font-family:var(--font-head);font-size:32px;line-height:1.3;color:#23180e}
 [data-theme="sever"] .dp-date{font-size:14px;color:#5a4533;margin-top:2px}
-/* ═══ SKIN: VESMÍRNÁ NEBULA ═══ mlhovina, hvězdy, tmavé sklo, planety; Exo 2 + Space Grotesk + Space Mono. Soubory v public/skins/nebula/ */
+/* ═══ SKIN: VESMÍRNÁ NEBULA ═══ mlhovina, hvězdy, tmavé sklo, kosmická čísla směn; Exo 2 + Space Grotesk + Space Mono. Soubory v public/skins/nebula/ */
 [data-theme="nebula"]{
   --font-head:'Exo 2','Segoe UI',sans-serif;--font-body:'Space Grotesk','Segoe UI',sans-serif;--font-mono:'Space Mono',ui-monospace,monospace;
   --bg:#060818;--bg2:rgba(14,16,42,.80);--bg3:rgba(20,24,56,.78);--bg4:rgba(28,32,70,.78);
@@ -346,11 +346,11 @@ html[data-theme="nebula"] body::after{content:"";position:fixed;inset:0;backgrou
 [data-theme="nebula"] .day-pills{gap:6px!important}
 [data-theme="nebula"] .day-pill{border-radius:14px;border:1px solid rgba(140,160,255,.22)!important;background:rgba(16,20,48,.55)!important;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);min-height:56px!important}
 [data-theme="nebula"] .day-pill[data-sel="1"]{border:1px solid transparent!important;background:radial-gradient(ellipse at 50% 0%,rgba(224,77,255,.35),transparent 70%) padding-box,linear-gradient(#0c0e24,#0c0e24) padding-box,linear-gradient(90deg,#5ef0ff,#8b6bff 55%,#e04dff) border-box!important;box-shadow:0 0 18px rgba(224,77,255,.45);color:#ffffff!important}
-[data-theme="nebula"] .shift-sec{position:relative;padding-left:62px}
-[data-theme="nebula"] .shift-sec::before{content:"";position:absolute;left:0;top:22px;width:52px;height:52px;background:center/contain no-repeat;filter:drop-shadow(0 0 8px rgba(160,140,255,.35))}
-[data-theme="nebula"] .shift-sec[data-roman="VIII"]::before{background-image:url(/skins/nebula/planeta-hvezda.webp)}
-[data-theme="nebula"] .shift-sec[data-roman="IX"]::before{background-image:url(/skins/nebula/planeta-modra.webp)}
-[data-theme="nebula"] .shift-sec[data-roman="X"]::before{background-image:url(/skins/nebula/planeta-prstenec.webp)}
+[data-theme="nebula"] .shift-sec{position:relative;padding-left:82px}
+[data-theme="nebula"] .shift-sec::before{content:"";position:absolute;left:0;top:26px;width:70px;height:44px;background:center/contain no-repeat}
+[data-theme="nebula"] .shift-sec[data-roman="VIII"]::before{background-image:url(/skins/nebula/cislo-8.webp)}
+[data-theme="nebula"] .shift-sec[data-roman="IX"]::before{background-image:url(/skins/nebula/cislo-9.webp)}
+[data-theme="nebula"] .shift-sec[data-roman="X"]::before{background-image:url(/skins/nebula/cislo-10.webp)}
 [data-theme="nebula"] .day-plaque{display:block;position:relative;width:min(270px,80%);margin:2px auto 16px;padding:12px 16px 10px;text-align:center;border-radius:6px;border:1px solid rgba(94,240,255,.35);text-shadow:none;
   background:linear-gradient(180deg,rgba(94,240,255,.10),rgba(139,107,255,.08)),repeating-linear-gradient(180deg,rgba(255,255,255,.045) 0,rgba(255,255,255,.045) 1px,transparent 1px,transparent 4px);
   box-shadow:0 0 24px rgba(94,240,255,.18),inset 0 0 18px rgba(94,240,255,.10)}
