@@ -102,6 +102,12 @@ export default function ScheduleView(props) {
               </span>
               {isA && <Btn small warm={!intake[DAYS[selDay]]} danger={intake[DAYS[selDay]]} onClick={() => toggleIntake(DAYS[selDay])}>{intake[DAYS[selDay]] ? "Zrušit Nástupy" : "Označit jako Nástupy"}</Btn>}
             </div>}
+
+            {/* Den Nástupů: „Nástup is coming" (fotka se stáhne jen v den Nástupů) */}
+            {!dayHol && intake[DAYS[selDay]] && <figure className="nastup-meme" style={{ position: "relative", margin: "0 auto 16px", maxWidth: 320, border: "1px solid var(--brd2)", boxShadow: "0 3px 10px rgba(0,0,0,.45)", overflow: "hidden", lineHeight: 0 }}>
+              <img src="/img/nastup-is-coming.webp" alt="Muž v kožešinovém plášti s mečem" loading="lazy" width="320" height="320" style={{ width: "100%", height: "auto", display: "block" }} />
+              <figcaption style={{ position: "absolute", left: 0, right: 0, bottom: 10, textAlign: "center", fontFamily: "'Ringbearer CE', 'Cinzel', Georgia, serif", fontSize: 30, lineHeight: 1.2, color: "#fff", textShadow: "0 0 3px #000, 0 0 3px #000, 0 2px 4px #000, 2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000" }}>Nástup is coming</figcaption>
+            </figure>}
     
             {/* Nadpis dne — zobrazuje jen skin Sever (pergamenová deska), jinde display:none */}
             <div className="day-plaque"><div className="dp-title">{DAYS_F[selDay]}</div><div className="dp-date">{longDate(wd[selDay])}</div></div>

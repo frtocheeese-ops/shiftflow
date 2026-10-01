@@ -20,6 +20,7 @@ import PeopleView from "./views/PeopleView";
 import SettingsView from "./views/SettingsView";
 import PendingView from "./views/PendingView";
 import ProposalsView from "./views/ProposalsView";
+import { skinOf, nextSkin } from "./skins";
 import ScheduleView from "./views/ScheduleView";
 import { Badge, Btn, Input, Sel, Toggle, Modal, Card, RANK_TIERS, rankOf, HALF_LBL, HalfTag, RankBadge } from "./ui";
 
@@ -267,7 +268,9 @@ const CSS = `
   --grid:none;--moon:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='800' height='800'%3E%3Crect width='800' height='800' fill='%23060610'/%3E%3Cdefs%3E%3CradialGradient id='n1' cx='.3' cy='.4' r='.5'%3E%3Cstop offset='0' stop-color='rgba(40,50,100,.12)'/%3E%3Cstop offset='1' stop-color='transparent'/%3E%3C/radialGradient%3E%3CradialGradient id='n2' cx='.7' cy='.6' r='.4'%3E%3Cstop offset='0' stop-color='rgba(80,40,60,.08)'/%3E%3Cstop offset='1' stop-color='transparent'/%3E%3C/radialGradient%3E%3C/defs%3E%3Crect width='800' height='800' fill='url(%23n1)'/%3E%3Crect width='800' height='800' fill='url(%23n2)'/%3E%3Ccircle cx='65' cy='90' r='1.2' fill='rgba(255,255,255,.6)'/%3E%3Ccircle cx='180' cy='40' r='.5' fill='rgba(255,255,255,.3)'/%3E%3Ccircle cx='310' cy='120' r='1.4' fill='rgba(255,255,255,.55)'/%3E%3Ccircle cx='450' cy='60' r='.7' fill='rgba(255,255,255,.4)'/%3E%3Ccircle cx='590' cy='130' r='1' fill='rgba(255,255,255,.45)'/%3E%3Ccircle cx='720' cy='50' r='.6' fill='rgba(255,255,255,.35)'/%3E%3Ccircle cx='100' cy='220' r='.8' fill='rgba(255,255,255,.5)'/%3E%3Ccircle cx='240' cy='190' r='1.1' fill='rgba(255,255,255,.4)'/%3E%3Ccircle cx='370' cy='250' r='.6' fill='rgba(255,255,255,.55)'/%3E%3Ccircle cx='520' cy='200' r='1.3' fill='rgba(255,255,255,.35)'/%3E%3Ccircle cx='660' cy='240' r='.9' fill='rgba(255,255,255,.45)'/%3E%3Ccircle cx='780' cy='180' r='.5' fill='rgba(255,255,255,.3)'/%3E%3Ccircle cx='50' cy='350' r='1' fill='rgba(255,255,255,.5)'/%3E%3Ccircle cx='150' cy='380' r='.7' fill='rgba(255,255,255,.35)'/%3E%3Ccircle cx='280' cy='330' r='1.2' fill='rgba(255,255,255,.45)'/%3E%3Ccircle cx='410' cy='370' r='.8' fill='rgba(255,255,255,.5)'/%3E%3Ccircle cx='550' cy='340' r='1.5' fill='rgba(255,255,255,.3)'/%3E%3Ccircle cx='680' cy='390' r='.6' fill='rgba(255,255,255,.4)'/%3E%3Ccircle cx='750' cy='320' r='1.1' fill='rgba(255,255,255,.35)'/%3E%3Ccircle cx='90' cy='480' r='.9' fill='rgba(255,255,255,.45)'/%3E%3Ccircle cx='210' cy='510' r='1.3' fill='rgba(255,255,255,.4)'/%3E%3Ccircle cx='340' cy='460' r='.7' fill='rgba(255,255,255,.5)'/%3E%3Ccircle cx='470' cy='520' r='1' fill='rgba(255,255,255,.35)'/%3E%3Ccircle cx='600' cy='480' r='.8' fill='rgba(255,255,255,.45)'/%3E%3Ccircle cx='730' cy='510' r='1.2' fill='rgba(255,255,255,.3)'/%3E%3Ccircle cx='130' cy='620' r='1.1' fill='rgba(255,255,255,.4)'/%3E%3Ccircle cx='260' cy='650' r='.6' fill='rgba(255,255,255,.5)'/%3E%3Ccircle cx='400' cy='600' r='1.4' fill='rgba(255,255,255,.35)'/%3E%3Ccircle cx='530' cy='660' r='.9' fill='rgba(255,255,255,.45)'/%3E%3Ccircle cx='670' cy='620' r='.7' fill='rgba(255,255,255,.4)'/%3E%3Ccircle cx='770' cy='680' r='1' fill='rgba(255,255,255,.3)'/%3E%3Ccircle cx='40' cy='740' r='.8' fill='rgba(255,255,255,.45)'/%3E%3Ccircle cx='190' cy='770' r='1.2' fill='rgba(255,255,255,.35)'/%3E%3Ccircle cx='350' cy='730' r='.5' fill='rgba(255,255,255,.5)'/%3E%3Ccircle cx='500' cy='760' r='1.1' fill='rgba(255,255,255,.4)'/%3E%3Ccircle cx='640' cy='750' r='.7' fill='rgba(255,255,255,.45)'/%3E%3Ccircle cx='760' cy='780' r='1.3' fill='rgba(255,255,255,.3)'/%3E%3C/svg%3E");
 }
 /* ═══ SKIN: SEVER ═══ kámen, dřevo, kůže, námraza; Ringbearer CE (svolení autora) + Cinzel. Soubory v public/skins/sever/ (načtou se jen při zapnutém skinu) */
-@font-face{font-family:'Ringbearer CE';src:url(/skins/sever/ringbearer-ce.woff2) format('woff2');font-display:swap}
+/* Ringbearer CE má v bloku interpunkce (U+2000–206F: pomlčky, „“, …, •) nakreslená PÍSMENA (pomlčka vypadá jako Ň) →
+   unicode-range ho pro tento blok vypne a znaky se vezmou z dalšího písma v pořadí (Cinzel). */
+@font-face{font-family:'Ringbearer CE';src:url(/skins/sever/ringbearer-ce.woff2) format('woff2');font-display:swap;unicode-range:U+0000-1FFF,U+2070-FFFF}
 [data-theme="sever"]{
   --font-head:'Ringbearer CE','Cinzel',Georgia,serif;--font-body:'Alegreya Sans','Segoe UI',sans-serif;--font-mono:'Cinzel',Georgia,serif;
   --bg:#161d25;--bg2:rgba(20,27,35,.86);--bg3:rgba(26,34,43,.82);--bg4:rgba(32,42,52,.82);
@@ -405,7 +408,7 @@ function SideNav({ view, setView, NAV, theme, setTheme }) {
       </button>)}
     </div>
     <div style={{ padding: "12px 20px", borderTop: "1px solid var(--brd)" }}>
-      <button onClick={() => setTheme(t => t === "light" ? "dark" : "light")} style={{ background: "none", border: "1px solid var(--brd2)", width: "100%", height: 38, cursor: "pointer", fontSize: 14, color: "var(--tx2)", fontFamily: "var(--font-head)", textTransform: "uppercase", letterSpacing: 1 }}>{theme === "light" ? "● Dark" : "○ Light"}</button>
+      <button onClick={() => setTheme(nextSkin)} title={`Vzhled: ${skinOf(theme).name} — klepni pro ${skinOf(nextSkin(theme)).name}`} style={{ background: "none", border: "1px solid var(--brd2)", width: "100%", height: 38, cursor: "pointer", fontSize: 14, color: "var(--tx2)", fontFamily: "var(--font-head)", textTransform: "uppercase", letterSpacing: 1 }}>{skinOf(theme).icon} {skinOf(theme).name}</button>
     </div>
   </aside>;
 }
@@ -1329,7 +1332,7 @@ export default function App() {
         <div style={{ fontSize: 14, color: "var(--tx2)", fontFamily: "var(--font-head)" }}>{profile.name} · <Badge small color={isA ? "var(--amb)" : "var(--acc)"}>{isA ? "ADM" : "CREW"}</Badge></div>
         <div style={{ display: "flex", gap: 6 }}>
           <button onClick={hardSync} title="Sync — načíst čerstvý stav" style={{ background: "none", border: "1px solid var(--brd2)", color: "var(--acc2)", width: 38, height: 38, cursor: "pointer", fontSize: 15, display: "flex", alignItems: "center", justifyContent: "center" }}>⟳</button>
-          {isMobile && <button onClick={() => setTheme(t => t === "light" ? "dark" : "light")} style={{ background: "none", border: "1px solid var(--brd2)", width: 38, height: 38, cursor: "pointer", color: "var(--tx2)", fontSize: 14 }}>{theme === "light" ? "●" : "○"}</button>}
+          {isMobile && <button onClick={() => setTheme(nextSkin)} aria-label={`Vzhled: ${skinOf(theme).name}, přepnout na ${skinOf(nextSkin(theme)).name}`} style={{ background: "none", border: "1px solid var(--brd2)", width: 38, height: 38, cursor: "pointer", color: "var(--tx2)", fontSize: 14 }}>{skinOf(theme).icon}</button>}
           <button onClick={() => signOut(auth)} style={{ background: "none", border: "1px solid var(--brd2)", color: "var(--tx3)", width: 38, height: 38, cursor: "pointer", fontSize: 13 }}>↪</button>
         </div>
       </header>

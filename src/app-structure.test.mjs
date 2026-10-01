@@ -54,7 +54,7 @@ test("skin Sever: každý soubor, na který CSS odkazuje, existuje v public/", a
 test("skin Sever: přepíná písma i barvy a je ve výběru vzhledu", () => {
   assert.match(src, /\[data-theme="sever"\]\{[^}]*--font-head:'Ringbearer CE'/);
   assert.match(src, /\[data-theme="sever"\]\{[^}]*--acc2:/);
-  assert.match(readFileSync(new URL("./views/SettingsView.jsx", import.meta.url), "utf8"), /id: "sever"/);
+  assert.match(readFileSync(new URL("./skins.js", import.meta.url), "utf8"), /id: "sever"/);
 });
 
 test("skin Sever: dny jako praporce a čitelné spodní menu", () => {
@@ -70,4 +70,17 @@ test("skin Sever: vlk v medailonu, štíty s číslicemi, pergamenová deska (ji
   assert.match(src, /\[data-theme="sever"\] \.shift-sec::after\{content:attr\(data-roman\)/);
   assert.match(src, /\n\.day-plaque\{display:none\}/);
   assert.match(src, /\[data-theme="sever"\] \.day-plaque\{display:block[^}]*pergamen/);
+});
+
+test("vzhledy: tlačítko přepíná dokola přes všechny skiny, neznámý vzhled začne od prvního", async () => {
+  const { SKINS, nextSkin, skinOf } = await import("./skins.js");
+  let id = SKINS[0].id; const seen = [];
+  for (let i = 0; i < SKINS.length; i++) { seen.push(id); id = nextSkin(id); }
+  assert.deepEqual(seen, SKINS.map(s => s.id)); assert.equal(id, SKINS[0].id);
+  assert.equal(nextSkin("neexistuje"), SKINS[0].id); assert.equal(skinOf("neexistuje").id, SKINS[0].id);
+  assert.match(src, /setTheme\(nextSkin\)/); assert.doesNotMatch(src, /t === "light" \? "dark" : "light"/);
+});
+
+test("Ringbearer CE nepoužívá blok interpunkce (pomlčky a uvozovky má nakreslené jako písmena)", () => {
+  assert.match(src, /font-family:'Ringbearer CE';[^}]*unicode-range:U\+0000-1FFF,U\+2070-FFFF/);
 });
