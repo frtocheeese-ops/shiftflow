@@ -90,7 +90,8 @@ do `data-theme`. Každý skin se skládá ze čtyř částí:
    (`--font-head`, `--font-body`, `--font-mono`, `--bg`, `--acc2` a další),
 2. volitelně textury přes třídy klíčových prvků (`.pg` hlavička a menu, `.gl` karty, `.ent` řádky),
 3. soubory v `public/skins/<skin>/` - stahují se jen při zapnutém skinu,
-4. záznam v seznamu `SKINS` ve `views/SettingsView.jsx` (výběr v Nastavení, sekce Vzhled).
+4. záznam v seznamu `SKINS` v `src/skins.js` - odtud čte výběr v Nastavení i tlačítko
+   v hlavičce/postranním menu, které přepíná dokola na další vzhled (`nextSkin`).
 Test hlídá, že každý soubor, na který CSS skinu odkazuje, existuje.
 
 **Licence písem:** Ringbearer CE (Pete Klassen) má licenci jen pro soukromé použití; pro

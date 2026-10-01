@@ -285,8 +285,8 @@ export function altLabel(alt, ge) {
 export const fsKey = (...parts) => parts.join("__");
 
 /* ═══ FÉROVOST ═══
-   Počty odpracovaných směn od 8:00, od 10:00, dnů HO a „HO deficitu" (stálý rozvrh říká
-   HO, ale člověk byl v kanceláři) — od FAIRNESS_START. Hlídač hlásí rozdíl > FAIR_SPREAD. */
+   Počty odpracovaných směn od 8:00, od 10:00, dnů HO a „HO bilance" (ztracené HO minus
+   HO navíc oproti stálému rozvrhu; kladné = HO se mu dluží) — od FAIRNESS_START. Hlídač hlásí rozdíl > FAIR_SPREAD. */
 export const FAIRNESS_START = "2026-07-22"; // počítá se jen od tohoto dne (včetně)
 export const FAIR_SPREAD = 3;
 export function computeFairness(allSchedules, employees, rotations, start = FAIRNESS_START, spread = FAIR_SPREAD) {
@@ -310,7 +310,14 @@ export function computeFairness(allSchedules, employees, rotations, start = FAIR
         else if (sh === "10:00") t.ten++;
       }));
       // Deficit: stálý rozvrh říká HO, ale člověk ten den pracuje z kanceláře (absence se nepočítá)
-      active.forEach(e => { if (e.defaultSchedule?.[`${day}_ho`] && present[e.id] && !present[e.id].ho) tally[e.id].deficit++; });
+      // HO bilance: stálý rozvrh říká HO, ale byl v kanceláři → +1 (přišel o HO);
+      // stálý rozvrh HO neříká, ale měl HO → −1 (HO navíc). Absence se nepočítá.
+      active.forEach(e => {
+        const p = present[e.id]; if (!p) return;
+        const shouldHO = !!e.defaultSchedule?.[`${day}_ho`];
+        if (shouldHO && !p.ho) tally[e.id].deficit++;
+        else if (!shouldHO && p.ho) tally[e.id].deficit--;
+      });
     });
     seen.forEach(id => tally[id] && tally[id].weeks++);
   });

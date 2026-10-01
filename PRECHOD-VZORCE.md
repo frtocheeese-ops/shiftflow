@@ -1047,3 +1047,25 @@ Všechny tři prvky se projeví jen ve skinu Sever; ostatní vzhledy beze změny
   („Úterý", „29. září"); globálně `display:none`, v Severu pergamen s nýty v rozích
   (čtyři radiální přechody jako vrstvy pozadí) a inkoustovým písmem.
 - Testy: vykreslení desky (název dne + datum) a číslic u směn; pravidla skinu. 74 testů.
+
+---
+
+## Aktualizace v49 — HO bilance, oprava pomlček v Severu, Nástup is coming, přepínání vzhledů
+
+- **HO bilance ve statistikách:** dřív se počítalo jen „stálý rozvrh říká HO, ale byl
+  v kanceláři" (+1); HO navíc oproti stálému rozvrhu se neodečítalo. Nově bilance:
+  ztracené HO +1, HO navíc −1 (absence se nepočítá). Zobrazení: `−N` červeně (dluží se mu
+  HO), `+N` zeleně (má HO navíc), `0`; sloupec `HO ±` s vysvětlením v tooltipu.
+- **Ringbearer CE — pomlčka jako „Ň":** písmo má v bloku obecné interpunkce
+  (U+2000–206F) nakreslená písmena místo znaků — 11 chybných: – — ‘ ’ ‚ „ • … ‹ › ⁄
+  (ověřeno měřením obrysů). `@font-face` má `unicode-range:U+0000-1FFF,U+2070-FFFF`,
+  takže tyto znaky přebírá Cinzel. Písmena s diakritikou zůstávají v Ringbearer.
+- **„Nástup is coming":** v den označený jako Nástupy se v denním pohledu pod
+  indikátorem zobrazí fotka (dodal Patrik; `public/img/nastup-is-coming.webp`, 17 kB,
+  `loading="lazy"`) s nápisem v Ringbearer CE. Ve všech vzhledech.
+- **Přepínání vzhledů tlačítkem:** seznam `SKINS` přesunut do `src/skins.js`
+  (`skinOf`, `nextSkin`); tlačítko v hlavičce (mobil) i v postranním menu přepíná dokola
+  Světlý → Tmavý → Sever → … a ukazuje ikonu a název aktuálního vzhledu. Nový skin =
+  nový záznam v seznamu.
+- Testy: bilance (vyrovnání i plus), přepínání dokola + neznámý vzhled, unicode-range,
+  obrázek jen v den Nástupů. 78 testů.

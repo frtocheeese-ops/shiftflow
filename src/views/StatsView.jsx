@@ -23,7 +23,7 @@ export default function StatsView({ isA, profile, employees, openSwapsCount, fai
         <div className="gl" style={{ overflow: "auto", padding: 0 }}>
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14, minWidth: 420 }}>
             <thead><tr>
-              {["Člen", "8:00", "10:00", "HO", "HO −", "🛠 Fixy", "Týdnů"].map((h, i) => <th key={h} style={{ padding: "10px 12px", textAlign: i === 0 ? "left" : "center", color: "var(--tx3)", borderBottom: "1px solid var(--brd)", fontFamily: "var(--font-head)", letterSpacing: 1 }} title={h === "HO −" ? "HO deficit: dny, kdy stálý rozvrh říká HO, ale člověk byl v kanceláři" : h === "🛠 Fixy" ? "Kolikrát jeho směna vyřešila problém (Provést úpravu)" : undefined}>{h}</th>)}
+              {["Člen", "8:00", "10:00", "HO", "HO ±", "🛠 Fixy", "Týdnů"].map((h, i) => <th key={h} style={{ padding: "10px 12px", textAlign: i === 0 ? "left" : "center", color: "var(--tx3)", borderBottom: "1px solid var(--brd)", fontFamily: "var(--font-head)", letterSpacing: 1 }} title={h === "HO −" ? "HO deficit: dny, kdy stálý rozvrh říká HO, ale člověk byl v kanceláři" : h === "🛠 Fixy" ? "Kolikrát jeho směna vyřešila problém (Provést úpravu)" : undefined}>{h}</th>)}
             </tr></thead>
             <tbody>{fairness.rows.map(r => {
               const maxV = Math.max(1, ...fairness.rows.map(x => Math.max(x.eight, x.ten, x.ho)));
@@ -33,7 +33,7 @@ export default function StatsView({ isA, profile, employees, openSwapsCount, fai
                 <td style={{ padding: "8px 12px" }}>{bar(r.eight, "var(--acc2)")}</td>
                 <td style={{ padding: "8px 12px" }}>{bar(r.ten, "var(--amb)")}</td>
                 <td style={{ padding: "8px 12px" }}>{bar(r.ho, "var(--grn)")}</td>
-                <td style={{ padding: "8px 12px", textAlign: "center", fontFamily: "var(--font-mono)", fontSize: 13, color: r.deficit > 0 ? "var(--red)" : "var(--tx3)" }}>{r.deficit > 0 ? `−${r.deficit}` : "0"}</td>
+                <td style={{ padding: "8px 12px", textAlign: "center", fontFamily: "var(--font-mono)", fontSize: 13, color: r.deficit > 0 ? "var(--red)" : r.deficit < 0 ? "var(--grn)" : "var(--tx3)" }} title={r.deficit > 0 ? `Přišel o ${r.deficit}× HO oproti stálému rozvrhu` : r.deficit < 0 ? `Má ${-r.deficit}× HO navíc oproti stálému rozvrhu` : "Vyrovnáno"}>{r.deficit > 0 ? `−${r.deficit}` : r.deficit < 0 ? `+${-r.deficit}` : "0"}</td>
                 <td style={{ padding: "8px 12px", textAlign: "center" }}>{r.fixes > 0 ? <span style={{ display: "inline-block", padding: "1px 8px", border: "1px solid var(--amb)", color: "var(--amb)", fontFamily: "var(--font-mono)", fontSize: 13 }}>🛠 {r.fixes}</span> : <span style={{ color: "var(--tx3)", fontFamily: "var(--font-mono)", fontSize: 13 }}>0</span>}</td>
                 <td style={{ padding: "8px 12px", textAlign: "center", fontFamily: "var(--font-mono)", fontSize: 13, color: "var(--tx3)" }}>{r.weeks}</td>
               </tr>; })}</tbody>

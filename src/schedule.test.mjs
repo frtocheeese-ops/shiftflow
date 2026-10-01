@@ -171,7 +171,7 @@ test("férovost: dny před startovním datem se nepočítají", () => {
 });
 
 test("férovost: HO deficit — stálý rozvrh říká HO, ale byl v kanceláři", () => {
-  const emps = fe(); emps[0].defaultSchedule = { Po: "08:00", Po_ho: true };
+  const emps = fe(); emps[0].defaultSchedule = { Po: "08:00", Po_ho: true, "Út": "09:00", "Út_ho": true };   // úterní HO podle plánu → nepočítá se
   assert.equal(computeFairness({ "2026-09-14": wkDoc(pw()) }, emps, []).rows.find(x => x.id === "a").deficit, 1);
 });
 
@@ -213,4 +213,14 @@ test("osobní pravidla: aktuálně vypnutá — žádná upozornění, Andy smí
   assert.equal(r.violations.filter(v => /nemá (otevírat|mít)/.test(v.msg)).length, 0);
   const p = r.problems.find(x => x.key === "08:00:Po");
   assert.ok(p.alts.some(a => a.empId === "andy"), "Andy má být mezi návrhy na 8:00");
+});
+
+test("férovost: HO navíc oproti stálému rozvrhu bilanci snižuje (i do plusu)", () => {
+  const emps = fe(); emps[0].defaultSchedule = { Po: "08:00", Po_ho: true, "Út": "09:00" };   // A: Po HO, Út kancelář
+  // Po v kanceláři (přišel o HO: +1), Út z domova (HO navíc: −1) → vyrovnáno
+  const w = empty(); w.Po["08:00"] = [{ empId: "a" }]; w["Út"]["09:00"] = [{ empId: "a", ho: true }];
+  assert.equal(computeFairness({ "2026-09-14": wkDoc(w) }, emps, []).rows.find(x => x.id === "a").deficit, 0);
+  // dva týdny HO navíc bez ztráty → −2 (zobrazí se jako „+2")
+  const w2 = empty(); w2.Po["08:00"] = [{ empId: "a", ho: true }]; w2["Út"]["09:00"] = [{ empId: "a", ho: true }];
+  assert.equal(computeFairness({ "2026-09-14": wkDoc(w2), "2026-09-21": wkDoc(dc(w2)) }, emps, []).rows.find(x => x.id === "a").deficit, -2);
 });

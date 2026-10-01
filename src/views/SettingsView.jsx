@@ -4,6 +4,7 @@
 import { useState, useEffect } from "react";
 import { DAYS, SHIFTS, wKey, rotIsSwapped, localISO, getMon, fmtDate } from "../schedule";
 import { Badge, Btn, Card, Input, Sel, Toggle } from "../ui";
+import { SKINS } from "../skins";
 
 function RotationForm({ employees, onAdd }) {
   const staff = employees.filter(e => e.role !== "admin");
@@ -33,12 +34,6 @@ function RotationForm({ employees, onAdd }) {
   </div>;
 }
 
-// Dostupné vzhledy. Nový skin = záznam sem + blok [data-theme="…"] v CSS (App.jsx).
-const SKINS = [
-  { id: "light", name: "Světlý", sub: "původní světlý vzhled", swatch: "linear-gradient(135deg, #e3e7ee, #bec4d0)" },
-  { id: "dark", name: "Tmavý", sub: "původní tmavý vzhled", swatch: "linear-gradient(135deg, #0c0c12, #d47820)" },
-  { id: "sever", name: "Sever", sub: "kámen, dřevo, kůže a námraza", swatch: "linear-gradient(135deg, #1e2831, #8fc3e6)" },
-];
 
 export default function SettingsView({
   theme = "light", onThemeChange = () => {}, isA, profile, employees, wk, rules, nahledInfo, installState, showGyro, gyroOn, gcalConfigured,
