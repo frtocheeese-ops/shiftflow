@@ -318,6 +318,45 @@ html[data-theme="sever"] body{text-shadow:0 1px 2px rgba(0,0,0,.65)}
 [data-theme="sever"] .day-plaque{display:block;position:relative;width:min(280px,80%);margin:2px auto 16px;padding:14px 18px 12px;text-align:center;border:1px solid #7a6440;text-shadow:none;box-shadow:0 3px 8px rgba(0,0,0,.55),inset 0 0 18px rgba(90,60,25,.35);background:radial-gradient(circle,#eef3f6 0,#8c9ba7 2px,#2b333b 3.5px,transparent 4px) 5px 5px/10px 10px no-repeat,radial-gradient(circle,#eef3f6 0,#8c9ba7 2px,#2b333b 3.5px,transparent 4px) calc(100% - 5px) 5px/10px 10px no-repeat,radial-gradient(circle,#eef3f6 0,#8c9ba7 2px,#2b333b 3.5px,transparent 4px) 5px calc(100% - 5px)/10px 10px no-repeat,radial-gradient(circle,#eef3f6 0,#8c9ba7 2px,#2b333b 3.5px,transparent 4px) calc(100% - 5px) calc(100% - 5px)/10px 10px no-repeat,radial-gradient(ellipse at 50% 50%,rgba(255,250,235,.10),rgba(90,60,25,.28)),url(/skins/sever/pergamen.webp) 0 0/260px auto}
 [data-theme="sever"] .dp-title{font-family:var(--font-head);font-size:32px;line-height:1.3;color:#23180e}
 [data-theme="sever"] .dp-date{font-size:14px;color:#5a4533;margin-top:2px}
+/* ═══ SKIN: VESMÍRNÁ NEBULA ═══ mlhovina, hvězdy, tmavé sklo, planety; Exo 2 + Space Grotesk + Space Mono. Soubory v public/skins/nebula/ */
+[data-theme="nebula"]{
+  --font-head:'Exo 2','Segoe UI',sans-serif;--font-body:'Space Grotesk','Segoe UI',sans-serif;--font-mono:'Space Mono',ui-monospace,monospace;
+  --bg:#060818;--bg2:rgba(14,16,42,.80);--bg3:rgba(20,24,56,.78);--bg4:rgba(28,32,70,.78);
+  --panel:rgba(12,14,36,.86);--card:rgba(16,20,48,.55);--card-h:rgba(36,40,90,.70);
+  --brd:rgba(140,160,255,.20);--brd2:rgba(140,160,255,.34);--bt:rgba(140,160,255,.40);
+  --tx:#e6ebff;--tx2:#a9b2dd;--tx3:#7d86b8;--w:#ffffff;
+  --acc:#8b6bff;--acc2:#5ef0ff;--acc3:#e04dff;--adim:rgba(94,240,255,.12);--abrd:rgba(94,240,255,.40);
+  --l1:#8b6bff;--sd:#e04dff;--red:#ff5f8a;--grn:#5dffc0;--amb:#ffc46b;
+  --sel:rgba(139,107,255,.22);--stx:#ffffff;--blur:blur(12px);--glass:rgba(12,14,36,.70);
+  --sheen:linear-gradient(135deg,rgba(255,255,255,.06) 0%,transparent 50%,rgba(255,255,255,.03) 100%);
+  --grid:none;--moon:none;
+}
+html[data-theme="nebula"] body{background-color:#060818;text-shadow:0 1px 2px rgba(0,0,0,.55)}
+html[data-theme="nebula"] body::before{content:"";position:fixed;inset:0;background:url(/skins/nebula/nebula-mobil.webp) center/cover no-repeat;pointer-events:none;z-index:0}
+html[data-theme="nebula"] body::after{content:"";position:fixed;inset:0;background:url(/skins/nebula/hvezdy.webp) 0 0/256px auto repeat;mix-blend-mode:screen;opacity:.45;pointer-events:none;z-index:0}
+@media(min-width:900px){html[data-theme="nebula"] body::before{background-image:url(/skins/nebula/nebula-desktop.webp)}}
+[data-theme="nebula"] .pg{background:rgba(14,16,42,.62)!important;-webkit-backdrop-filter:blur(14px)!important;backdrop-filter:blur(14px)!important;border-color:rgba(140,160,255,.25)!important}
+[data-theme="nebula"] header.pg{position:relative;justify-content:flex-start!important;gap:10px}
+[data-theme="nebula"] header.pg>:last-child{margin-left:auto}
+[data-theme="nebula"] header.pg::before{content:"";flex-shrink:0;width:46px;height:46px;background:url(/skins/nebula/znak.webp) center/contain no-repeat;filter:drop-shadow(0 0 10px rgba(139,107,255,.55))}
+[data-theme="nebula"] header.pg::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;background:linear-gradient(90deg,#5ef0ff,#8b6bff 55%,#e04dff);box-shadow:0 0 10px rgba(224,77,255,.6);pointer-events:none}
+[data-theme="nebula"] .gl{background:rgba(16,20,48,.55)!important;border:1px solid rgba(140,160,255,.22)!important;border-radius:12px;-webkit-backdrop-filter:blur(10px)!important;backdrop-filter:blur(10px)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 4px 16px rgba(0,0,0,.35)}
+[data-theme="nebula"] .ent{background-color:transparent}
+[data-theme="nebula"] .pill-lbl{font-family:var(--font-body)!important;letter-spacing:.3px!important;line-height:1.35;max-width:96px}
+[data-theme="nebula"] .day-pills{gap:6px!important}
+[data-theme="nebula"] .day-pill{border-radius:14px;border:1px solid rgba(140,160,255,.22)!important;background:rgba(16,20,48,.55)!important;-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);min-height:56px!important}
+[data-theme="nebula"] .day-pill[data-sel="1"]{border:1px solid transparent!important;background:radial-gradient(ellipse at 50% 0%,rgba(224,77,255,.35),transparent 70%) padding-box,linear-gradient(#0c0e24,#0c0e24) padding-box,linear-gradient(90deg,#5ef0ff,#8b6bff 55%,#e04dff) border-box!important;box-shadow:0 0 18px rgba(224,77,255,.45);color:#ffffff!important}
+[data-theme="nebula"] .shift-sec{position:relative;padding-left:62px}
+[data-theme="nebula"] .shift-sec::before{content:"";position:absolute;left:0;top:22px;width:52px;height:52px;background:center/contain no-repeat;filter:drop-shadow(0 0 8px rgba(160,140,255,.35))}
+[data-theme="nebula"] .shift-sec[data-roman="VIII"]::before{background-image:url(/skins/nebula/planeta-hvezda.webp)}
+[data-theme="nebula"] .shift-sec[data-roman="IX"]::before{background-image:url(/skins/nebula/planeta-modra.webp)}
+[data-theme="nebula"] .shift-sec[data-roman="X"]::before{background-image:url(/skins/nebula/planeta-prstenec.webp)}
+[data-theme="nebula"] .day-plaque{display:block;position:relative;width:min(270px,80%);margin:2px auto 16px;padding:12px 16px 10px;text-align:center;border-radius:6px;border:1px solid rgba(94,240,255,.35);text-shadow:none;
+  background:linear-gradient(180deg,rgba(94,240,255,.10),rgba(139,107,255,.08)),repeating-linear-gradient(180deg,rgba(255,255,255,.045) 0,rgba(255,255,255,.045) 1px,transparent 1px,transparent 4px);
+  box-shadow:0 0 24px rgba(94,240,255,.18),inset 0 0 18px rgba(94,240,255,.10)}
+[data-theme="nebula"] .dp-title{font-family:var(--font-head);font-size:30px;font-weight:800;line-height:1.25;background:linear-gradient(90deg,#5ef0ff,#8b6bff 55%,#e04dff);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 10px rgba(139,107,255,.45))}
+[data-theme="nebula"] .dp-date{font-family:var(--font-mono);font-size:13px;letter-spacing:.06em;color:#a9b2dd;margin-top:2px}
+[data-theme="nebula"] ::-webkit-scrollbar-thumb{background:#5b4bb0}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 body{background:var(--bg)}
 ::-webkit-scrollbar{width:4px;height:4px}::-webkit-scrollbar-thumb{background:var(--brd2)}
@@ -618,12 +657,11 @@ export default function App() {
   const switchV = v => { viewKey.current++; setView(v); };
 
   useEffect(() => { document.documentElement.setAttribute("data-theme", theme); localStorage.setItem("sf_theme", theme); }, [theme]);
-  // Skin Sever potřebuje Cinzel + Alegreya Sans z Google Fonts — přidat až při prvním zapnutí
+  // Skiny s vlastními písmy (pole fonts v src/skins.js) — Google Fonts přidat až při prvním zapnutí skinu
   useEffect(() => {
-    if (theme !== "sever" || document.getElementById("sf-fonts-sever")) return;
-    const l = document.createElement("link"); l.id = "sf-fonts-sever"; l.rel = "stylesheet";
-    l.href = "https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Alegreya+Sans:wght@400;500;700&display=swap";
-    document.head.appendChild(l);
+    const href = skinOf(theme).fonts; const id = `sf-fonts-${theme}`;
+    if (!href || document.getElementById(id)) return;
+    const l = document.createElement("link"); l.id = id; l.rel = "stylesheet"; l.href = href; document.head.appendChild(l);
   }, [theme]);
   useEffect(() => { const fn = () => setIsMobile(window.innerWidth < 900); window.addEventListener('resize', fn); return () => window.removeEventListener('resize', fn); }, []);
 
