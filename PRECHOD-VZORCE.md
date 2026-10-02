@@ -1137,3 +1137,28 @@ natvrdo oranžovou a šla po obdélníku tlačítka — nesedělo k Temnému vě
 Barva pulzu je teď proměnná `--pulse` (výchozí původní oranžová, Nebula azurová).
 Temný věk obdélníkový pulz vypíná a pulzuje rudá záře `filter: drop-shadow` přímo na
 výbuchu (`::before`) — kopíruje tvar bubliny. Sever pulz nevidí (praporce mají clip-path).
+
+---
+
+## Aktualizace v52 — páteční snímek: optimalizace workflow (zůstává jen GitHub)
+
+**Problém:** 2. 10. 2026 plánovač GitHubu nespustil ani jeden pokus (cron `*/15 6-10`);
+dřívější pátky zpoždění 1–4 h. Patrik chce zůstat jen u GitHubu (bez Apps Scriptu).
+
+**Optimalizace:**
+1. **Minuty 7, 27, 47** místo `*/15` — GitHub v dokumentaci uvádí, že na začátku hodiny
+   (a obecně v kulatých časech) je největší vytížení a běhy se zpožďují nebo zahazují.
+2. **Hodiny 7–17 UTC** — pokrývají celé okno skriptu 9:00–19:00 pražského času v létě
+   i v zimě. Dřív cron končil v 10:45 UTC, takže odpolední „záchranný běh" nikdy nenastal.
+3. **Levný první krok** `scripts/nahled-okno.mjs` (bez závislostí): rozhodne o okně ještě
+   před instalací Puppeteeru; drahé kroky mají `if: steps.okno.outputs.run == '1'`.
+   Pokusy mimo okno skončí za pár vteřin → 33 pokusů v pátek nevadí.
+4. Logika okna je na jednom místě (`nahled-okno.mjs`), `nahled.mjs` ji importuje.
+
+Testy (`scripts/nahled-okno.test.mjs`, zařazené do `npm test`): okno v létě i zimě,
+záchrana, ruční spuštění; cron pokrývá okno (≥ 25 pokusů, první do 10 min po 9:00,
+poslední do 20 min před 19:00) a nepoužívá kulaté minuty (ověřeno sabotáží). 86 testů.
+
+**Upřímně:** GitHub plánované běhy negarantuje ani po optimalizaci. Pokud by se výpadek
+opakoval, spolehlivé řešení je časovač Apps Scriptu (připravená větev
+`nahled-spolehlive-spousteni`, nemergnutá).

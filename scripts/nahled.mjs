@@ -5,29 +5,16 @@
 // 4) Puppeteer: login → pohled Týden → další týden → screenshot POUZE mřížky (#week-grid)
 import puppeteer from "puppeteer";
 import { mkdirSync, writeFileSync, readFileSync, existsSync } from "fs";
+import { rozhodni, STAMP } from "./nahled-okno.mjs";
 
 const SITE = "https://smenyjt.netlify.app";
 const { BOT_EMAIL, BOT_PASSWORD, FORCE } = process.env;
 if (!BOT_EMAIL || !BOT_PASSWORD) { console.error("Chybí BOT_EMAIL / BOT_PASSWORD"); process.exit(1); }
 
-// ── Guard: GitHub cron se běžně zpožďuje o desítky minut, proto se pouští často
-// a snímek se PRŮBĚŽNĚ OBNOVUJE. Commit (a tím i nová verze stránky) proběhne jen tehdy,
-// když se obrázek opravdu liší → žádné zbytečné commity.
-//   • 9:00–11:50 pražského času … obnovovací okno (každý běh přepíše snímek čerstvějším)
-//   • 11:50–19:00 ………………………… záchrana, pokud dnes ještě nic neproběhlo
-// E-mail se posílá jen jednou denně, při prvním úspěšném běhu.
-const praha = new Date(new Date().toLocaleString("en-US", { timeZone: "Europe/Prague" }));
-const STAMP = "public/nahled/last.txt";
-const dnes = `${praha.getFullYear()}-${String(praha.getMonth() + 1).padStart(2, "0")}-${String(praha.getDate()).padStart(2, "0")}`;
-const minuty = praha.getHours() * 60 + praha.getMinutes();
-const OKNO_OD = 9 * 60, OKNO_DO = 11 * 60 + 50, POZDE_DO = 19 * 60;
-const buhloDnes = existsSync(STAMP) && readFileSync(STAMP, "utf8").trim().startsWith(dnes);
-if (FORCE !== "1") {
-  if (minuty < OKNO_OD) { console.log(`Pražský čas ${praha.toTimeString().slice(0, 5)} — před oknem, končím.`); process.exit(0); }
-  if (minuty > POZDE_DO) { console.log(`Pražský čas ${praha.toTimeString().slice(0, 5)} — po okně, končím.`); process.exit(0); }
-  if (minuty > OKNO_DO && buhloDnes) { console.log("Po 11:50 a dnes už snímek vznikl — končím."); process.exit(0); }
-  console.log(`Pražský čas ${praha.toTimeString().slice(0, 5)} → ${minuty <= OKNO_DO ? "obnovuji snímek" : "záchranný běh"}.`);
-}
+// ── Okno: rozhodnutí je v nahled-okno.mjs (stejné volá workflow jako první, levný krok) ──
+const { run, duvod, praha, dnes, buhloDnes } = rozhodni({ force: FORCE === "1" });
+console.log(duvod);
+if (!run) process.exit(0);
 
 // ── Config z živého bundlu ──
 const html = await (await fetch(SITE + "/?v=" + Date.now())).text();
