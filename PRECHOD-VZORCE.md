@@ -1121,3 +1121,13 @@ v `public/skins/temny/` (~560 kB, jen při zapnutém skinu).
 - Poznámka: znak dodal Patrik jako vlastní tvorbu; upozorněn na podobnost s ikonickým
   symbolem z Berserka — používat jen v interní appce.
 - Test: Temný věk ve výběru, písmo, tmavý text v kartách, bubliny, čísla, nadpis. 80 testů.
+
+**Doplnění v51 — opravy Temného věku po nasazení:**
+- Bubliny na PC se natahovaly přes celou šířku karty (z oválu placka, jména za okrajem)
+  → `.ent{max-width:440px}`, jméno vycentrované (`justify-content:center`, span bez `flex:1`).
+- Najetí myší: obecné `.ent:hover{background:var(--card-h)!important}` přepsalo bublinu
+  tmavým pozadím → černé jméno zmizelo. Skin má vlastní `:hover` s bublinou (vyšší
+  specificita) a jen rudou záři (`drop-shadow`).
+- Vybraný den se nevešel do výbuchu omezeného velikostí tlačítka → výbuch jako
+  `::before` 100 × 96 px vycentrovaný za textem (`isolation:isolate`, `z-index:-1`),
+  vybrané tlačítko `z-index:1` nad sousedy.

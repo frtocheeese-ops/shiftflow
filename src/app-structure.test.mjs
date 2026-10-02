@@ -105,3 +105,9 @@ test("skin Temný věk: písmo, papírové karty s tmavým textem, bubliny u lid
   assert.match(src, /\[data-theme="temny"\] \.day-plaque\{display:flex/);
   assert.match(readFileSync(new URL("./views/ShiftCard.jsx", import.meta.url), "utf8"), /data-me=\{isMe \? "1" : undefined\}/);
 });
+
+test("Temný věk: bublina při najetí myší nezmizí, má omezenou šířku, vybraný den má výbuch větší než tlačítko", () => {
+  assert.match(src, /\[data-theme="temny"\] \.ent:hover[^{]*\{background:url\(\/skins\/temny\/bublina\.webp\)[^}]*!important/);
+  assert.match(src, /\[data-theme="temny"\] \.ent\{max-width:\d+px/);
+  assert.match(src, /\[data-theme="temny"\] \.day-pill\[data-sel="1"\]::before\{[^}]*vybuch-maly/);
+});
