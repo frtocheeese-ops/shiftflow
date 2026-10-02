@@ -1098,3 +1098,26 @@ lemy; řez podle jádra znaků, protože se záře sousedních čísel překrýv
 pohromadě). Soubory `cislo-8/9/10.webp` (13–21 kB, výška 120 px), staré `planeta-*`
 odstraněny. Všechna čísla mají stejnou výšku (44 px), „10" je širší → slot 70 px,
 blok směny odsazen 82 px.
+
+---
+
+## Aktualizace v51 — nový skin Temný věk (inspirace temnou fantasy mangou)
+
+Návrh C (bubliny) schválen. Assety: pozadí mobil/desktop, papír, rudý tah štětcem, čísla
+8/9/10 a znak (dodal Patrik z ChatGPT), mangové bubliny (Patrik, ChatGPT na zeleném
+pozadí → klíčování zelené, vnitřek vylit od středu a nahrazen papírovou texturou, světlý
+okraj pro tmavé pozadí), roztřesený inkoustový rám (vygenerován v Pythonu). Vše
+v `public/skins/temny/` (~560 kB, jen při zapnutém skinu).
+
+- **Písma:** MedievalSharp (nadpisy, jména), Alegreya Sans (text), Courier Prime (čas).
+- **Papírové karty s tmavým textem:** `.gl` dostane papír + inkoustový rám
+  (`border-image`) a UVNITŘ karty se přepnou barevné proměnné (`--tx`, `--w`, `--acc2`…)
+  na inkoustové → veškerý obsah karet je automaticky tmavý, mimo karty zůstává světlý.
+- **Lidé ve směně jako bubliny:** karta směny bez papíru a rámu, `.ent` na pozadí oválné
+  bubliny; vlastní řádek (`data-me="1"` z ShiftCard) v rudé bublině.
+- **Znovupoužité háčky:** `header.pg::before` (znak na papírovém útržku), `::after`
+  (rudý tah pod hlavičkou), `.shift-sec[data-roman]` (čísla na papírových útržcích),
+  `.day-pill` (malé bubliny, vybraný den výbuch), `.day-plaque` (nadpis dne ve výbuchu).
+- Poznámka: znak dodal Patrik jako vlastní tvorbu; upozorněn na podobnost s ikonickým
+  symbolem z Berserka — používat jen v interní appce.
+- Test: Temný věk ve výběru, písmo, tmavý text v kartách, bubliny, čísla, nadpis. 80 testů.

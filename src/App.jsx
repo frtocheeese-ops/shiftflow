@@ -357,6 +357,53 @@ html[data-theme="nebula"] body::after{content:"";position:fixed;inset:0;backgrou
 [data-theme="nebula"] .dp-title{font-family:var(--font-head);font-size:30px;font-weight:800;line-height:1.25;background:linear-gradient(90deg,#5ef0ff,#8b6bff 55%,#e04dff);-webkit-background-clip:text;background-clip:text;color:transparent;filter:drop-shadow(0 0 10px rgba(139,107,255,.45))}
 [data-theme="nebula"] .dp-date{font-family:var(--font-mono);font-size:13px;letter-spacing:.06em;color:#a9b2dd;margin-top:2px}
 [data-theme="nebula"] ::-webkit-scrollbar-thumb{background:#5b4bb0}
+/* ═══ SKIN: TEMNÝ VĚK ═══ temná fantasy, inkoust a papír, mangové bubliny; MedievalSharp + Alegreya Sans + Courier Prime. Soubory v public/skins/temny/ */
+[data-theme="temny"]{
+  --font-head:'MedievalSharp',Georgia,serif;--font-body:'Alegreya Sans','Segoe UI',sans-serif;--font-mono:'Courier Prime','Courier New',monospace;
+  --bg:#141210;--bg2:rgba(20,18,16,.88);--bg3:rgba(30,27,24,.85);--bg4:rgba(40,36,32,.85);
+  --panel:rgba(16,14,12,.92);--card:rgba(20,18,16,.70);--card-h:rgba(40,34,30,.80);
+  --brd:rgba(239,233,220,.18);--brd2:rgba(239,233,220,.30);--bt:rgba(239,233,220,.35);
+  --tx:#efe9dc;--tx2:#c9bfae;--tx3:#9a9083;--w:#ffffff;
+  --acc:#c22a22;--acc2:#e0574d;--acc3:#9c1b1b;--adim:rgba(194,42,34,.16);--abrd:rgba(224,87,77,.45);
+  --l1:#e0574d;--sd:#9c1b1b;--red:#e0574d;--grn:#8fbf7a;--amb:#d9a441;
+  --sel:rgba(194,42,34,.22);--stx:#ffffff;--blur:none;--glass:rgba(16,14,12,.90);
+  --sheen:none;--grid:none;--moon:none;
+}
+html[data-theme="temny"] body{background-color:#141210;text-shadow:0 1px 2px rgba(0,0,0,.7)}
+html[data-theme="temny"] body::before{content:"";position:fixed;inset:0;background:url(/skins/temny/pozadi-mobil.webp) center/cover no-repeat;pointer-events:none;z-index:0}
+html[data-theme="temny"] body::after{content:"";position:fixed;inset:0;background:radial-gradient(ellipse 85% 60% at 50% 50%,rgba(10,8,6,.10) 0%,rgba(10,8,6,.55) 100%);pointer-events:none;z-index:0}
+@media(min-width:900px){html[data-theme="temny"] body::before{background-image:url(/skins/temny/pozadi-desktop.webp)}}
+[data-theme="temny"] .pg{background:#141210!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;border-color:#141210!important}
+[data-theme="temny"] header.pg{position:relative;justify-content:flex-start!important;gap:10px}
+[data-theme="temny"] header.pg>:last-child{margin-left:auto}
+[data-theme="temny"] header.pg::before{content:"";flex-shrink:0;width:44px;height:52px;background:url(/skins/temny/znak.webp) center/auto 42px no-repeat,url(/skins/temny/papir.webp) 0 0/300px auto;clip-path:polygon(3% 6%,18% 0,46% 4%,72% 1%,97% 5%,100% 32%,96% 61%,100% 94%,74% 100%,41% 96%,15% 100%,0 93%,4% 62%,0 30%)}
+[data-theme="temny"] header.pg::after{content:"";position:absolute;left:-16px;right:-16px;bottom:-11px;height:18px;background:url(/skins/temny/tah.webp) center/100% 100% no-repeat;pointer-events:none;z-index:2}
+/* Papírové karty: inkoustový rám + uvnitř tmavý text (proměnné se přepnou jen pro obsah karty) */
+[data-theme="temny"] .gl{--tx:#141210;--tx2:#4a4038;--tx3:#6b6158;--w:#141210;--brd:rgba(20,18,16,.25);--brd2:rgba(20,18,16,.40);--bt:rgba(20,18,16,.45);
+  --bg3:rgba(20,18,16,.06);--bg4:rgba(20,18,16,.10);--card:rgba(20,18,16,.05);--card-h:rgba(20,18,16,.09);--acc2:#9c1b1b;--adim:rgba(156,27,27,.10);--abrd:rgba(156,27,27,.45);--red:#9c1b1b;--grn:#3f7a2e;
+  background:url(/skins/temny/papir.webp) 0 0/300px auto!important;border:10px solid transparent!important;border-image:url(/skins/temny/ram.webp) 48 round!important;background-clip:padding-box!important;
+  border-radius:0;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;box-shadow:none;text-shadow:none;color:#141210}
+/* Rozvrh: lidé ve směně jako mangové bubliny (karta směny bez papíru a rámu) */
+[data-theme="temny"] .shift-sec .gl{background:none!important;border:0!important;border-image:none!important}
+[data-theme="temny"] .ent{background:url(/skins/temny/bublina.webp) center/100% 100% no-repeat;min-height:64px;padding:10px 34px!important;border-bottom:none!important;margin-bottom:6px}
+[data-theme="temny"] .ent[data-me="1"]{background-image:url(/skins/temny/bublina-rudy.webp)}
+[data-theme="temny"] .ent>div:first-child{display:none}
+[data-theme="temny"] .ent span{font-family:var(--font-head);font-size:17px}
+[data-theme="temny"] .shift-sec{position:relative;padding-left:80px}
+[data-theme="temny"] .shift-sec::before{content:"";position:absolute;left:4px;top:30px;width:62px;height:58px;background:center/auto 42px no-repeat,url(/skins/temny/papir.webp) 0 0/300px auto;clip-path:polygon(3% 6%,18% 0,46% 4%,72% 1%,97% 5%,100% 32%,96% 61%,100% 94%,74% 100%,41% 96%,15% 100%,0 93%,4% 62%,0 30%);transform:rotate(-3deg)}
+[data-theme="temny"] .shift-sec[data-roman="VIII"]::before{background-image:url(/skins/temny/cislo-8.webp),url(/skins/temny/papir.webp)}
+[data-theme="temny"] .shift-sec[data-roman="IX"]::before{background-image:url(/skins/temny/cislo-9.webp),url(/skins/temny/papir.webp)}
+[data-theme="temny"] .shift-sec[data-roman="X"]::before{background-image:url(/skins/temny/cislo-10.webp),url(/skins/temny/papir.webp)}
+/* Dny jako malé bubliny, vybraný den výbuch */
+[data-theme="temny"] .day-pills{gap:4px!important}
+[data-theme="temny"] .day-pill{background:url(/skins/temny/bublina-mala.webp) center/contain no-repeat!important;border:none!important;outline:none!important;color:#141210!important;text-shadow:none;min-height:66px!important}
+[data-theme="temny"] .day-pill[data-sel="1"]{background-image:url(/skins/temny/vybuch-maly.webp)!important;color:#9c1b1b!important}
+/* Nadpis dne ve výbuchové bublině */
+[data-theme="temny"] .day-plaque{display:flex;flex-direction:column;align-items:center;justify-content:center;width:min(320px,92%);height:138px;margin:4px auto 16px;text-align:center;text-shadow:none;background:url(/skins/temny/vybuch.webp) center/100% 100% no-repeat}
+[data-theme="temny"] .dp-title{font-family:var(--font-head);font-size:34px;line-height:1.15;color:#141210}
+[data-theme="temny"] .dp-date{font-family:var(--font-mono);font-size:13px;letter-spacing:.04em;color:#4a4038}
+[data-theme="temny"] .pill-lbl{font-family:var(--font-body)!important;letter-spacing:.3px!important;line-height:1.35;max-width:96px}
+[data-theme="temny"] ::-webkit-scrollbar-thumb{background:#5a2a24}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 body{background:var(--bg)}
 ::-webkit-scrollbar{width:4px;height:4px}::-webkit-scrollbar-thumb{background:var(--brd2)}

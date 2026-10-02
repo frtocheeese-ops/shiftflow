@@ -11,7 +11,7 @@ export default function ShiftCard({ day, shift, entries, ge, notes, meId, isA, c
     onDragLeave={e => e.currentTarget.classList.remove("over")}
     onDrop={e => onDrop(day, shift, e)}>
     {entries.map((en, idx) => { const emp = ge(en.empId); if (!emp) return null; const nk = fsKey(en.empId, day, shift.replace(":", "")); const note = notes[nk]; const isMe = en.empId === meId;
-      return <div key={en.empId} className="ent" draggable={canDrag(en.empId)}
+      return <div key={en.empId} className="ent" data-me={isMe ? "1" : undefined} draggable={canDrag(en.empId)}
         onDragStart={e => e.dataTransfer.setData("text/plain", JSON.stringify({ empId: en.empId, day, shift }))}
         onClick={() => isA ? onAdminClick({ day, shift, empId: en.empId }) : isMe && onMyShift({ type: "myshift", day, shift })}
         style={{ gap: 10, padding: "12px 14px", borderBottom: idx < entries.length - 1 ? "1px solid var(--brd)" : "none" }}>
