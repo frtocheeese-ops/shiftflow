@@ -1131,3 +1131,9 @@ v `public/skins/temny/` (~560 kB, jen při zapnutém skinu).
 - Vybraný den se nevešel do výbuchu omezeného velikostí tlačítka → výbuch jako
   `::before` 100 × 96 px vycentrovaný za textem (`isolation:isolate`, `z-index:-1`),
   vybrané tlačítko `z-index:1` nad sousedy.
+
+**Doplnění v51 — pulz dnešního dne:** animace `.atp` (vybraný dnešek) měla barvu
+natvrdo oranžovou a šla po obdélníku tlačítka — nesedělo k Temnému věku ani k Nebule.
+Barva pulzu je teď proměnná `--pulse` (výchozí původní oranžová, Nebula azurová).
+Temný věk obdélníkový pulz vypíná a pulzuje rudá záře `filter: drop-shadow` přímo na
+výbuchu (`::before`) — kopíruje tvar bubliny. Sever pulz nevidí (praporce mají clip-path).

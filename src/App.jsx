@@ -243,7 +243,7 @@ async function _syncRangeCore(userId, employees, db, weeksAhead = 52, onProgress
 /* ═══ CSS ═══ */
 const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@300;400;500;600;700&family=Barlow:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
-:root{--font-body:'Barlow',sans-serif;--font-head:'Barlow Condensed',sans-serif;--font-mono:'IBM Plex Mono',monospace}
+:root{--pulse:rgba(212,120,32,.4);--font-body:'Barlow',sans-serif;--font-head:'Barlow Condensed',sans-serif;--font-mono:'IBM Plex Mono',monospace}
 :root,[data-theme="light"]{
   --bg:#bec4d0;--bg2:rgba(210,215,225,.45);--bg3:rgba(200,208,222,.35);--bg4:rgba(190,198,215,.48);
   --panel:rgba(215,220,230,.65);--card:rgba(220,225,235,.42);--card-h:rgba(210,218,230,.6);
@@ -329,7 +329,7 @@ html[data-theme="sever"] body{text-shadow:0 1px 2px rgba(0,0,0,.65)}
   --l1:#8b6bff;--sd:#e04dff;--red:#ff5f8a;--grn:#5dffc0;--amb:#ffc46b;
   --sel:rgba(139,107,255,.22);--stx:#ffffff;--blur:blur(12px);--glass:rgba(12,14,36,.70);
   --sheen:linear-gradient(135deg,rgba(255,255,255,.06) 0%,transparent 50%,rgba(255,255,255,.03) 100%);
-  --grid:none;--moon:none;
+  --grid:none;--moon:none;--pulse:rgba(94,240,255,.45);
 }
 html[data-theme="nebula"] body{background-color:#060818;text-shadow:0 1px 2px rgba(0,0,0,.55)}
 html[data-theme="nebula"] body::before{content:"";position:fixed;inset:0;background:url(/skins/nebula/nebula-mobil.webp) center/cover no-repeat;pointer-events:none;z-index:0}
@@ -407,6 +407,10 @@ html[data-theme="temny"] body::after{content:"";position:fixed;inset:0;backgroun
 [data-theme="temny"] .day-pill{position:relative;isolation:isolate}
 [data-theme="temny"] .day-pill[data-sel="1"]{background:none!important;color:#9c1b1b!important;z-index:1}
 [data-theme="temny"] .day-pill[data-sel="1"]::before{content:"";position:absolute;left:50%;top:50%;width:100px;height:96px;transform:translate(-50%,-50%);background:url(/skins/temny/vybuch-maly.webp) center/contain no-repeat;z-index:-1;pointer-events:none}
+/* Dnešní den: obdélníkový pulz (.atp) vypnout, pulzuje záře přímo kolem výbuchu */
+[data-theme="temny"] .day-pill.atp{animation:none!important}
+[data-theme="temny"] .day-pill.atp[data-sel="1"]::before{animation:tvPulse 2.5s ease-in-out infinite}
+@keyframes tvPulse{0%,100%{filter:drop-shadow(0 0 1px rgba(224,87,77,.45))}50%{filter:drop-shadow(0 0 9px rgba(224,87,77,.95))}}
 /* Nadpis dne ve výbuchové bublině */
 [data-theme="temny"] .day-plaque{display:flex;flex-direction:column;align-items:center;justify-content:center;width:min(320px,92%);height:138px;margin:4px auto 16px;text-align:center;text-shadow:none;background:url(/skins/temny/vybuch.webp) center/100% 100% no-repeat}
 [data-theme="temny"] .dp-title{font-family:var(--font-head);font-size:34px;line-height:1.15;color:#141210}
@@ -422,7 +426,7 @@ body{background:var(--bg)}
 @keyframes mu{from{opacity:0;transform:translateY(40px)}to{opacity:1;transform:translateY(0)}}
 @keyframes sr{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:translateX(0)}}
 @keyframes sl2{from{opacity:0;transform:translateX(-24px)}to{opacity:1;transform:translateX(0)}}
-@keyframes tp{0%,100%{box-shadow:0 0 0 0 rgba(212,120,32,.4)}50%{box-shadow:0 0 0 4px rgba(212,120,32,0)}}
+@keyframes tp{0%,100%{box-shadow:0 0 0 0 var(--pulse,rgba(212,120,32,.4))}50%{box-shadow:0 0 0 4px transparent}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 @keyframes st{from{transform:translateY(-30px);opacity:0}to{transform:translateY(0);opacity:1}}
 .avi{animation:vi .35s cubic-bezier(.22,.68,.36,1)}.asr{animation:sr .26s both}.asl{animation:sl2 .26s both}

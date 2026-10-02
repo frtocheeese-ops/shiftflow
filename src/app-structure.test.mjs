@@ -111,3 +111,9 @@ test("Temný věk: bublina při najetí myší nezmizí, má omezenou šířku, 
   assert.match(src, /\[data-theme="temny"\] \.ent\{max-width:\d+px/);
   assert.match(src, /\[data-theme="temny"\] \.day-pill\[data-sel="1"\]::before\{[^}]*vybuch-maly/);
 });
+
+test("pulz dnešního dne: barva z proměnné; Temný věk pulzuje tvarem výbuchu", () => {
+  assert.match(src, /@keyframes tp\{[^}]*var\(--pulse/); assert.doesNotMatch(src, /@keyframes tp\{0%,100%\{box-shadow:0 0 0 0 rgba\(212/);
+  assert.match(src, /\[data-theme="temny"\] \.day-pill\.atp\{animation:none!important\}/);
+  assert.match(src, /\[data-theme="temny"\] \.day-pill\.atp\[data-sel="1"\]::before\{animation:tvPulse/);
+});
