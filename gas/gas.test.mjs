@@ -84,3 +84,44 @@ test("odstraněné funkce už nejdou volat", () => {
   const { post } = env();
   for (const action of ["aiOptimize", "sendPush", "exportToSheets"]) assert.equal(post({ action, data: {}, idToken: T.adm }).error, "Unknown action");
 });
+
+// ── Páteční snímek: spouštění workflow z časovače Apps Scriptu ──
+function setupDispatch({ token, status = 204 }) {
+  const calls = [], triggers = [], logs = [];
+  const ctx = {
+    PropertiesService: { getScriptProperties: () => ({ getProperty: k => (k === "GH_DISPATCH_TOKEN" ? token : null) }) },
+    UrlFetchApp: { fetch: (url, opt) => { calls.push({ url, opt }); return { getResponseCode: () => status, getContentText: () => "x" }; } },
+    ScriptApp: {
+      WeekDay: { FRIDAY: "FRIDAY" },
+      getProjectTriggers: () => triggers.slice(),
+      deleteTrigger: t => triggers.splice(triggers.indexOf(t), 1),
+      newTrigger: fn => { const t = { fn, getHandlerFunction: () => fn }; const b = { timeBased: () => b, onWeekDay: d => (t.day = d, b), atHour: h => (t.hour = h, b), everyWeeks: () => b, create: () => (triggers.push(t), t) }; return b; },
+    },
+    console: { warn: m => logs.push(m), error: m => logs.push(m), log: () => {} },
+    Utilities: {}, GmailApp: {}, ContentService: {},
+  };
+  vm.createContext(ctx); vm.runInContext(code, ctx);
+  return { ctx, calls, triggers, logs };
+}
+
+test("páteční snímek: spuštění workflow s příznakem plánovaný a tokenem z vlastností skriptu", () => {
+  const { ctx, calls } = setupDispatch({ token: "gh_tajny" });
+  assert.equal(ctx.spustitPatecniNahled(), true);
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].url, /\/repos\/frtocheeese-ops\/shiftflow\/actions\/workflows\/nahled\.yml\/dispatches$/);
+  assert.equal(calls[0].opt.headers.Authorization, "Bearer gh_tajny");
+  assert.deepEqual(JSON.parse(calls[0].opt.payload), { ref: "main", inputs: { planovany: "true" } });
+});
+
+test("páteční snímek: bez tokenu nic neodejde, odmítnutí GitHubem se zaloguje", () => {
+  const a = setupDispatch({ token: null });
+  assert.equal(a.ctx.spustitPatecniNahled(), false); assert.equal(a.calls.length, 0);
+  const b = setupDispatch({ token: "t", status: 403 });
+  assert.equal(b.ctx.spustitPatecniNahled(), false); assert.match(b.logs.join(" "), /403/);
+});
+
+test("páteční snímek: časovač pátek 9:00 a 11:00, opakované nastavení nevytvoří duplicity", () => {
+  const { ctx, triggers } = setupDispatch({ token: "t" });
+  ctx.nastavitCasovacNahledu(); ctx.nastavitCasovacNahledu();
+  assert.deepEqual(triggers.map(t => [t.fn, t.day, t.hour]), [["spustitPatecniNahled", "FRIDAY", 9], ["spustitPatecniNahled", "FRIDAY", 11]]);
+});

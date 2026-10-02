@@ -129,3 +129,38 @@ function sendEmail(data, idToken) {
 // Funkce nic nedělá. Pokud je na ni ve skriptu nastavený časovač (Triggers), její
 // odstranění by způsobilo denní chybové e-maily od Googlu. Časovač lze bezpečně smazat.
 function checkYearlyReset() {}
+
+// ═══ Páteční snímek: spolehlivé spuštění ═══
+// Plánovač GitHubu běhy zpožďuje o hodiny nebo je úplně zahazuje (2. 10. 2026 nespustil
+// ani jeden ze 17 pokusů). Časovač Apps Scriptu je spolehlivý → v pátek spustí workflow
+// přes GitHub API s příznakem „plánovaný" (chová se jako pravidelný běh včetně e-mailu).
+// Nastavení (jednou):
+//   1. Script Properties → GH_DISPATCH_TOKEN = fine-grained token jen pro repo shiftflow,
+//      oprávnění „Actions: Read and write" (nic jiného).
+//   2. Ručně spustit nastavitCasovacNahledu() a povolit přístup.
+// Časové pásmo projektu musí být Europe/Prague (Nastavení projektu).
+var GH_REPO = 'frtocheeese-ops/shiftflow';
+
+function spustitPatecniNahled() {
+  var token = PropertiesService.getScriptProperties().getProperty('GH_DISPATCH_TOKEN');
+  if (!token) { console.warn('GH_DISPATCH_TOKEN chybí — páteční snímek nespuštěn'); return false; }
+  var r = UrlFetchApp.fetch('https://api.github.com/repos/' + GH_REPO + '/actions/workflows/nahled.yml/dispatches', {
+    method: 'post', contentType: 'application/json', muteHttpExceptions: true,
+    headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
+    payload: JSON.stringify({ ref: 'main', inputs: { planovany: 'true' } })
+  });
+  var ok = r.getResponseCode() === 204;
+  if (!ok) console.error('GitHub spuštění odmítl: ' + r.getResponseCode() + ' ' + r.getContentText());
+  return ok;
+}
+
+// Pátek 9:00 + pojistka 11:00 (skript sám pozná, jestli už dnes snímek vznikl, a e-mail pošle jen jednou)
+function nastavitCasovacNahledu() {
+  ScriptApp.getProjectTriggers().forEach(function (t) {
+    if (t.getHandlerFunction() === 'spustitPatecniNahled') ScriptApp.deleteTrigger(t);
+  });
+  [9, 11].forEach(function (h) {
+    ScriptApp.newTrigger('spustitPatecniNahled').timeBased().onWeekDay(ScriptApp.WeekDay.FRIDAY).atHour(h).everyWeeks(1).create();
+  });
+  return 'Časovač nastaven: pátek 9:00 a 11:00';
+}

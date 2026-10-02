@@ -1137,3 +1137,25 @@ natvrdo oranžovou a šla po obdélníku tlačítka — nesedělo k Temnému vě
 Barva pulzu je teď proměnná `--pulse` (výchozí původní oranžová, Nebula azurová).
 Temný věk obdélníkový pulz vypíná a pulzuje rudá záře `filter: drop-shadow` přímo na
 výbuchu (`::before`) — kopíruje tvar bubliny. Sever pulz nevidí (praporce mají clip-path).
+
+---
+
+## Aktualizace v52 — páteční snímek: spolehlivé spouštění přes Apps Script
+
+**Problém:** 2. 10. 2026 plánovač GitHubu nespustil ani jeden ze 17 pokusů (6:00–10:00 UTC);
+předchozí pátky běhy zpožďoval o 1–4 h. Známé chování plánovače u bezplatných repozitářů.
+
+**Řešení:** hlavním spouštěčem je časovač Google Apps Scriptu.
+- `gas/Code.gs`: `spustitPatecniNahled()` zavolá GitHub API (`workflow_dispatch` s
+  `inputs.planovany = "true"`), token z Script Properties `GH_DISPATCH_TOKEN`
+  (fine-grained, jen repo shiftflow, „Actions: Read and write"). `nastavitCasovacNahledu()`
+  vytvoří časovače pátek 9:00 a 11:00 (opakované spuštění nevytvoří duplicity).
+- `nahled.yml`: vstup `planovany`; plánované spuštění se chová jako pravidelný běh
+  (časové okno skriptu platí, e-mail se posílá), ruční test dál nic nemailuje.
+  Cron GitHubu zůstává jako záloha. Dvojí e-mail nehrozí — skript posílá jen z prvního
+  snímku dne (`send_mail.txt` podle razítka `last.txt`).
+- Testy: dispatch (URL, token, příznak), bez tokenu nic, odmítnutí se zaloguje, časovač
+  bez duplicit, pravidla workflow pro e-mail. 86 testů.
+
+**Nastavení (Patrik, jednou):** token → Script Properties → vložit nový Code.gs →
+časové pásmo projektu Europe/Prague → spustit `nastavitCasovacNahledu` a povolit přístup.

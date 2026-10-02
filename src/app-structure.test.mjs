@@ -117,3 +117,10 @@ test("pulz dnešního dne: barva z proměnné; Temný věk pulzuje tvarem výbuc
   assert.match(src, /\[data-theme="temny"\] \.day-pill\.atp\{animation:none!important\}/);
   assert.match(src, /\[data-theme="temny"\] \.day-pill\.atp\[data-sel="1"\]::before\{animation:tvPulse/);
 });
+
+test("páteční snímek: ruční test nemailuje, plánované spuštění (cron nebo Apps Script) ano", () => {
+  const wf = readFileSync(new URL("../.github/workflows/nahled.yml", import.meta.url), "utf8");
+  assert.match(wf, /planovany:\s*\n\s*description:[^\n]*\n\s*type: boolean/);
+  assert.match(wf, /FORCE: \$\{\{ github\.event_name == 'workflow_dispatch' && github\.event\.inputs\.planovany != 'true' && '1' \|\| '' \}\}/);
+  assert.match(wf, /if: [^\n]*\(github\.event_name == 'schedule' \|\| github\.event\.inputs\.planovany == 'true'\)/);
+});

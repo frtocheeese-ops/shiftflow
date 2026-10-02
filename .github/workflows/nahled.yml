@@ -6,8 +6,15 @@ on:
     #   9:00-11:50 prazskeho casu = prubezna obnova (commit jen pri zmene snimku)
     #   po 11:50 = zachranny beh, jen kdyz dnes jeste nic nevzniklo
     # Rozsah 6-10 UTC pokryva letni (8:00-12:45) i zimni cas (7:00-11:45).
+    # POZOR: GitHub plánované běhy i zahazuje (2. 10. 2026 nespustil žádný) → hlavní spouštěč
+    # je časovač Apps Scriptu (gas/Code.gs, spustitPatecniNahled), tenhle cron je jen záloha.
     - cron: "*/15 6-10 * * 5"
-  workflow_dispatch: {}     # ruční test kdykoliv
+  workflow_dispatch:        # ruční test kdykoliv; Apps Script posílá planovany=true
+    inputs:
+      planovany:
+        description: "Plánované spuštění z Apps Scriptu (chová se jako pravidelný běh a posílá e-mail)"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -30,7 +37,7 @@ jobs:
         env:
           BOT_EMAIL: ${{ secrets.NAHLED_BOT_EMAIL }}
           BOT_PASSWORD: ${{ secrets.NAHLED_BOT_PASSWORD }}
-          FORCE: ${{ github.event_name == 'workflow_dispatch' && '1' || '' }}
+          FORCE: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.planovany != 'true' && '1' || '' }}
         run: node scripts/nahled.mjs
       - name: Commit screenshotu (stálá adresa /nahled/rozvrh.png)
         id: commit
@@ -53,8 +60,8 @@ jobs:
         if: steps.commit.outputs.made == '1'
         run: sleep 120
       - name: E-mail s odkazem přes GAS relay
-        # E-mail jen z pravidelného pátečního běhu — ruční spuštění (testy, ladění) nikdy nemailuje
-        if: steps.commit.outputs.made == '1' && steps.commit.outputs.mail == '1' && github.event_name == 'schedule'
+        # E-mail jen z pravidelného pátečního běhu (cron GitHubu nebo časovač Apps Scriptu) — ruční test nikdy nemailuje
+        if: steps.commit.outputs.made == '1' && steps.commit.outputs.mail == '1' && (github.event_name == 'schedule' || github.event.inputs.planovany == 'true')
         env:
           NAHLED_EMAIL: ${{ secrets.NAHLED_EMAIL }}
         run: |
