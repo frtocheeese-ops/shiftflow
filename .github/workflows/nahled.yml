@@ -1,12 +1,12 @@
 name: Patecni nahled rozvrhu
 on:
   schedule:
-    # GitHub cron se bezne zpozduje o desitky minut (namereno 50-80 min na 11. a 18. 9.),
-    # proto pokus kazdych 15 minut. Kdy se opravdu pracuje, rozhoduje skript:
-    #   9:00-11:50 prazskeho casu = prubezna obnova (commit jen pri zmene snimku)
-    #   po 11:50 = zachranny beh, jen kdyz dnes jeste nic nevzniklo
-    # Rozsah 6-10 UTC pokryva letni (8:00-12:45) i zimni cas (7:00-11:45).
-    - cron: "*/15 6-10 * * 5"
+    # Plánovač GitHubu běhy zpožďuje a při vytížení i ZAHAZUJE (2. 10. 2026 nespustil žádný
+    # z pokusů v */15). Nejvíc vytížené jsou celé hodiny a čtvrthodiny → minuty 7, 27, 47.
+    # Hodiny 7–17 UTC pokrývají celé okno skriptu 9:00–19:00 pražského času v létě i v zimě
+    # (obnova 9:00–11:50, pak záchrana, pokud dnes snímek nevznikl). Pokusy mimo okno
+    # skončí v prvním kroku za pár vteřin (bez instalace Puppeteeru), takže jich může být hodně.
+    - cron: "7,27,47 7-17 * * 5"
   workflow_dispatch: {}     # ruční test kdykoliv
 
 permissions:
@@ -21,18 +21,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Časové okno (levné rozhodnutí bez instalace)
+        id: okno
+        env:
+          FORCE: ${{ github.event_name == 'workflow_dispatch' && '1' || '' }}
+        run: node scripts/nahled-okno.mjs
       - uses: actions/setup-node@v4
+        if: steps.okno.outputs.run == '1'
         with:
           node-version: 20
       - name: Instalace Puppeteeru
+        if: steps.okno.outputs.run == '1'
         run: npm install puppeteer@23 --no-save
       - name: Screenshot rozvrhu na příští týden
+        if: steps.okno.outputs.run == '1'
         env:
           BOT_EMAIL: ${{ secrets.NAHLED_BOT_EMAIL }}
           BOT_PASSWORD: ${{ secrets.NAHLED_BOT_PASSWORD }}
           FORCE: ${{ github.event_name == 'workflow_dispatch' && '1' || '' }}
         run: node scripts/nahled.mjs
       - name: Commit screenshotu (stálá adresa /nahled/rozvrh.png)
+        if: steps.okno.outputs.run == '1'
         id: commit
         run: |
           if [ ! -f send_mail.txt ]; then echo "Skript nepracoval (mimo okno) — konec."; echo "made=0" >> $GITHUB_OUTPUT; exit 0; fi
