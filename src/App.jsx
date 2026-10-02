@@ -389,6 +389,12 @@ html[data-theme="temny"] body::after{content:"";position:fixed;inset:0;backgroun
 [data-theme="temny"] .ent[data-me="1"]{background-image:url(/skins/temny/bublina-rudy.webp)}
 [data-theme="temny"] .ent>div:first-child{display:none}
 [data-theme="temny"] .ent span{font-family:var(--font-head);font-size:17px}
+/* Bublina má rozumnou šířku (na PC se nenatahuje přes celou kartu) a jméno je uprostřed */
+[data-theme="temny"] .ent{max-width:440px;justify-content:center}
+[data-theme="temny"] .ent>span{flex:0 1 auto!important}
+/* Najetí myší: obecné pravidlo .ent:hover by bublinu přepsalo tmavým pozadím → zachovat bublinu, jen rozzářit */
+[data-theme="temny"] .ent:hover,[data-theme="temny"] .ent:active{background:url(/skins/temny/bublina.webp) center/100% 100% no-repeat!important;filter:drop-shadow(0 0 6px rgba(224,87,77,.6))}
+[data-theme="temny"] .ent[data-me="1"]:hover,[data-theme="temny"] .ent[data-me="1"]:active{background-image:url(/skins/temny/bublina-rudy.webp)!important}
 [data-theme="temny"] .shift-sec{position:relative;padding-left:80px}
 [data-theme="temny"] .shift-sec::before{content:"";position:absolute;left:4px;top:30px;width:62px;height:58px;background:center/auto 42px no-repeat,url(/skins/temny/papir.webp) 0 0/300px auto;clip-path:polygon(3% 6%,18% 0,46% 4%,72% 1%,97% 5%,100% 32%,96% 61%,100% 94%,74% 100%,41% 96%,15% 100%,0 93%,4% 62%,0 30%);transform:rotate(-3deg)}
 [data-theme="temny"] .shift-sec[data-roman="VIII"]::before{background-image:url(/skins/temny/cislo-8.webp),url(/skins/temny/papir.webp)}
@@ -397,7 +403,10 @@ html[data-theme="temny"] body::after{content:"";position:fixed;inset:0;backgroun
 /* Dny jako malé bubliny, vybraný den výbuch */
 [data-theme="temny"] .day-pills{gap:4px!important}
 [data-theme="temny"] .day-pill{background:url(/skins/temny/bublina-mala.webp) center/contain no-repeat!important;border:none!important;outline:none!important;color:#141210!important;text-shadow:none;min-height:66px!important}
-[data-theme="temny"] .day-pill[data-sel="1"]{background-image:url(/skins/temny/vybuch-maly.webp)!important;color:#9c1b1b!important}
+/* Vybraný den: výbuch VĚTŠÍ než tlačítko (text se do něj vejde), vycentrovaný za textem a nad sousedními dny */
+[data-theme="temny"] .day-pill{position:relative;isolation:isolate}
+[data-theme="temny"] .day-pill[data-sel="1"]{background:none!important;color:#9c1b1b!important;z-index:1}
+[data-theme="temny"] .day-pill[data-sel="1"]::before{content:"";position:absolute;left:50%;top:50%;width:100px;height:96px;transform:translate(-50%,-50%);background:url(/skins/temny/vybuch-maly.webp) center/contain no-repeat;z-index:-1;pointer-events:none}
 /* Nadpis dne ve výbuchové bublině */
 [data-theme="temny"] .day-plaque{display:flex;flex-direction:column;align-items:center;justify-content:center;width:min(320px,92%);height:138px;margin:4px auto 16px;text-align:center;text-shadow:none;background:url(/skins/temny/vybuch.webp) center/100% 100% no-repeat}
 [data-theme="temny"] .dp-title{font-family:var(--font-head);font-size:34px;line-height:1.15;color:#141210}
