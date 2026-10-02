@@ -93,3 +93,15 @@ test("skin Nebula: písma, barvy, planety u směn, holografický nadpis dne, je 
   assert.match(src, /\[data-theme="nebula"\] \.day-plaque\{display:block/);
   assert.match(src, /skinOf\(theme\)\.fonts/);                 // písma se načítají obecně podle skinu
 });
+
+test("skin Temný věk: písmo, papírové karty s tmavým textem, bubliny u lidí, čísla směn, nadpis ve výbuchu", async () => {
+  const { SKINS } = await import("./skins.js");
+  const tv = SKINS.find(s => s.id === "temny"); assert.ok(tv, "Temný věk chybí v seznamu vzhledů"); assert.match(tv.fonts, /MedievalSharp/);
+  assert.match(src, /\[data-theme="temny"\]\{[^}]*--font-head:'MedievalSharp'/);
+  assert.match(src, /\[data-theme="temny"\] \.gl\{--tx:#141210/);            // uvnitř papíru tmavý text
+  assert.match(src, /\[data-theme="temny"\] \.ent\{background:url\(\/skins\/temny\/bublina\.webp\)/);
+  assert.match(src, /\[data-theme="temny"\] \.ent\[data-me="1"\]/);
+  for (const r of ["VIII", "IX", "X"]) assert.match(src, new RegExp(`\\[data-theme="temny"\\] \\.shift-sec\\[data-roman="${r}"\\]::before`));
+  assert.match(src, /\[data-theme="temny"\] \.day-plaque\{display:flex/);
+  assert.match(readFileSync(new URL("./views/ShiftCard.jsx", import.meta.url), "utf8"), /data-me=\{isMe \? "1" : undefined\}/);
+});
