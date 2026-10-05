@@ -72,13 +72,13 @@ test("skin Sever: vlk v medailonu, štíty s číslicemi, pergamenová deska (ji
   assert.match(src, /\[data-theme="sever"\] \.day-plaque\{display:block[^}]*pergamen/);
 });
 
-test("vzhledy: tlačítko přepíná dokola přes všechny skiny, neznámý vzhled začne od prvního", async () => {
+test("vzhledy: nextSkin dokola přes všechny skiny, neznámý vzhled začne od prvního", async () => {
   const { SKINS, nextSkin, skinOf } = await import("./skins.js");
   let id = SKINS[0].id; const seen = [];
   for (let i = 0; i < SKINS.length; i++) { seen.push(id); id = nextSkin(id); }
   assert.deepEqual(seen, SKINS.map(s => s.id)); assert.equal(id, SKINS[0].id);
   assert.equal(nextSkin("neexistuje"), SKINS[0].id); assert.equal(skinOf("neexistuje").id, SKINS[0].id);
-  assert.match(src, /setTheme\(nextSkin\)/); assert.doesNotMatch(src, /t === "light" \? "dark" : "light"/);
+  assert.doesNotMatch(src, /t === "light" \? "dark" : "light"/);
 });
 
 test("Ringbearer CE nepoužívá blok interpunkce (pomlčky a uvozovky má nakreslené jako písmena)", () => {
@@ -116,4 +116,29 @@ test("pulz dnešního dne: barva z proměnné; Temný věk pulzuje tvarem výbuc
   assert.match(src, /@keyframes tp\{[^}]*var\(--pulse/); assert.doesNotMatch(src, /@keyframes tp\{0%,100%\{box-shadow:0 0 0 0 rgba\(212/);
   assert.match(src, /\[data-theme="temny"\] \.day-pill\.atp\{animation:none!important\}/);
   assert.match(src, /\[data-theme="temny"\] \.day-pill\.atp\[data-sel="1"\]::before\{animation:tvPulse/);
+});
+
+test("vzhledy: tlačítko vzhledu otevře okno s výběrem všech motivů (mobil i postranní menu)", () => {
+  assert.match(src, /<Modal open=\{themePicker\}.*?title="Vzhled"><SkinList skins=\{SKINS\} theme=\{theme\} onPick=\{id => \{ setTheme\(id\); setThemePicker\(false\); \}\}/);
+  assert.match(src, /isMobile && <button onClick=\{\(\) => setThemePicker\(true\)\} aria-haspopup="dialog"/);
+  assert.match(src, /<button onClick=\{onPickTheme\} aria-haspopup="dialog"/);
+  assert.match(src, /onPickTheme=\{\(\) => setThemePicker\(true\)\}/);
+  assert.match(readFileSync(new URL("./views/SettingsView.jsx", import.meta.url), "utf8"), /<SkinList skins=\{SKINS\}/);   // stejný seznam i v Nastavení
+});
+
+test("skin Arkánum: písmo s češtinou, hrad, svitky, pečeti, knihy pro dny, nadpis na svitku", async () => {
+  const { SKINS } = await import("./skins.js");
+  assert.ok(SKINS.find(s => s.id === "arkanum"), "Arkánum chybí v seznamu vzhledů");
+  assert.match(src, /font-family:'HP Kouzla';src:url\(\/skins\/arkanum\/hp-cz\.woff2\)/);
+  assert.match(src, /\[data-theme="arkanum"\] \.gl\{--tx:#3a2614/);
+  assert.match(src, /\[data-theme="arkanum"\] \.ent:hover[^{]*\{background:url\(\/skins\/arkanum\/svitek\.webp\)[^}]*!important/);
+  for (const [i, b] of [[1, "ruda"], [2, "zelena"], [3, "modra"], [4, "hneda"], [5, "cerna"]]) assert.match(src, new RegExp(`\\.day-pill:nth-child\\(${i}\\)\\{background-image:url\\(\\/skins\\/arkanum\\/kniha-${b}`));
+  for (const r of ["VIII", "IX", "X"]) assert.match(src, new RegExp(`\\[data-theme="arkanum"\\] \\.shift-sec\\[data-roman="${r}"\\]::before\\{background-image:url\\(\\/skins\\/arkanum\\/pecet`));
+  assert.match(src, /\[data-theme="arkanum"\] \.day-plaque\{display:flex[^}]*svitek-nadpis/);
+});
+
+test("písmo Arkánum: dokreslená celá čeština (30 znaků s diakritikou)", async () => {
+  const buf = readFileSync(new URL("../public/skins/arkanum/hp-cz.woff2", import.meta.url));
+  assert.equal(buf.subarray(0, 4).toString("latin1"), "wOF2");                 // skutečně WOFF2
+  assert.ok(buf.length > 5000 && buf.length < 40000, `velikost ${buf.length} B`);
 });

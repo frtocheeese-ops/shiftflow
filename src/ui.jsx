@@ -30,3 +30,14 @@ export const RankBadge = ({ fixes, size = 20 }) => {
   return <img src={`/badges/rank${r}.png`} alt={`Rank ${r}`} title={`Rank ${r} · ${fixes} vyřešených problémů${next}`} loading="lazy"
     style={{ width: size, height: size, flexShrink: 0, verticalAlign: "middle", objectFit: "contain" }} />;
 };
+
+// Seznam vzhledů (výběr v okně z tlačítka i v Nastavení) — zdroj dat je src/skins.js
+export const SkinList = ({ skins, theme, onPick }) => <div role="radiogroup" aria-label="Vzhled aplikace" style={{ display: "grid", gap: 6 }}>
+  {skins.map(k => <button key={k.id} type="button" role="radio" aria-checked={theme === k.id} onClick={() => onPick(k.id)}
+    style={{ display: "flex", alignItems: "center", gap: 12, minHeight: 52, padding: "6px 12px", textAlign: "left", cursor: "pointer", background: theme === k.id ? "var(--adim)" : "transparent", border: `1px solid ${theme === k.id ? "var(--abrd)" : "var(--brd)"}`, color: "var(--tx)" }}>
+    <span aria-hidden="true" style={{ width: 32, height: 32, flexShrink: 0, background: k.swatch, border: "1px solid var(--brd2)" }} />
+    <span style={{ flex: 1 }}><span style={{ display: "block", fontSize: 15, fontWeight: 600 }}>{k.icon} {k.name}</span><span style={{ fontSize: 12, color: "var(--tx3)" }}>{k.sub}</span></span>
+    {theme === k.id && <span style={{ fontSize: 12, color: "var(--acc2)", fontWeight: 600 }}>zvoleno</span>}
+  </button>)}
+</div>;
+
