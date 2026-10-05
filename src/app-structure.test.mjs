@@ -142,3 +142,9 @@ test("písmo Arkánum: dokreslená celá čeština (30 znaků s diakritikou)", a
   assert.equal(buf.subarray(0, 4).toString("latin1"), "wOF2");                 // skutečně WOFF2
   assert.ok(buf.length > 5000 && buf.length < 40000, `velikost ${buf.length} B`);
 });
+
+test("Arkánum: vybraný den nemá pod otevřenou knihou zavřenou, písmo HP všude, text knih mimo hřbet", () => {
+  assert.match(src, /\[data-theme="arkanum"\] \.day-pills>\.day-pill\[data-sel="1"\]:nth-child\(n\)\{background:none!important/);
+  assert.match(src, /\[data-theme="arkanum"\]\{[^}]*--font-head:'HP Kouzla'/);
+  assert.match(src, /\[data-theme="arkanum"\] \.day-pill\{[^}]*padding:0 0 0 7px!important[^}]*text-transform:none!important/);
+});
