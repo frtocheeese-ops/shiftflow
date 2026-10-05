@@ -1190,3 +1190,13 @@ název, popis); klepnutí vybere a zavře. Seznam je sdílená komponenta `SkinL
 - Testy: okno výběru (mobil, postranní menu, Nastavení sdílí seznam), skin Arkánum
   (písmo, karty, svitky s hover, knihy pro všech 5 dní, pečeti, nadpis), písmo je WOFF2.
   89 testů.
+
+**Doplnění v53 — opravy Arkána po nasazení:**
+- Pod otevřenou knihou vybraného dne zůstávala zavřená: pravidla barev knih podle pořadí
+  (`.day-pills>.day-pill:nth-child(k)`) měla vyšší specificitu než `.day-pill[data-sel="1"]`.
+  Vybraný den teď `.day-pills>.day-pill[data-sel="1"]:nth-child(n)` (vyšší váha).
+  Otevřená kniha zmenšena na 108 × 72 px.
+- Písmo „HP Kouzla" všude: `--font-head` (nadpisy, menu, tlačítka, štítky), jména na
+  svitcích a spodní menu; drobný text a data zůstávají v EB Garamond kvůli čitelnosti.
+- Text na zavřených knihách: bez převodu na velká písmena, menší (16/10 px), posunutý
+  o 7 px od hřbetu; tlačítka dnů vyšší (86 px) → větší knihy.

@@ -421,7 +421,7 @@ html[data-theme="temny"] body::after{content:"";position:fixed;inset:0;backgroun
    česká diakritika dokreslena (tools/hp-pismo-cestina.py). Soubory v public/skins/arkanum/ */
 @font-face{font-family:'HP Kouzla';src:url(/skins/arkanum/hp-cz.woff2) format('woff2');font-display:swap}
 [data-theme="arkanum"]{
-  --font-head:'Eagle Lake',Georgia,serif;--font-body:'EB Garamond',Georgia,serif;--font-mono:'EB Garamond',Georgia,serif;
+  --font-head:'HP Kouzla','Eagle Lake',Georgia,serif;--font-body:'EB Garamond',Georgia,serif;--font-mono:'EB Garamond',Georgia,serif;
   --bg:#0b0f1f;--bg2:rgba(12,14,30,.88);--bg3:rgba(20,22,40,.85);--bg4:rgba(30,30,50,.85);
   --panel:rgba(10,12,26,.92);--card:rgba(14,16,32,.72);--card-h:rgba(34,32,56,.80);
   --brd:rgba(227,194,106,.20);--brd2:rgba(227,194,106,.34);--bt:rgba(227,194,106,.40);
@@ -449,7 +449,7 @@ html[data-theme="arkanum"] body::after{content:"";position:fixed;inset:0;backgro
 [data-theme="arkanum"] .ent{background:url(/skins/arkanum/svitek.webp) center/100% 100% no-repeat;min-height:66px;max-width:460px;justify-content:center;padding:8px 42px!important;border-bottom:none!important;margin-bottom:8px}
 [data-theme="arkanum"] .ent>span{flex:0 1 auto!important}
 [data-theme="arkanum"] .ent>div:first-child{display:none}
-[data-theme="arkanum"] .ent span{font-family:var(--font-body);font-weight:600;font-size:17px}
+[data-theme="arkanum"] .ent span{font-family:var(--font-head);font-weight:400;font-size:19px}
 [data-theme="arkanum"] .ent[data-me="1"]{filter:drop-shadow(0 0 6px rgba(227,194,106,.85))}
 [data-theme="arkanum"] .ent:hover,[data-theme="arkanum"] .ent:active{background:url(/skins/arkanum/svitek.webp) center/100% 100% no-repeat!important;filter:drop-shadow(0 0 6px rgba(143,211,255,.7))}
 [data-theme="arkanum"] .shift-sec{position:relative;padding-left:76px}
@@ -459,15 +459,17 @@ html[data-theme="arkanum"] body::after{content:"";position:fixed;inset:0;backgro
 [data-theme="arkanum"] .shift-sec[data-roman="X"]::before{background-image:url(/skins/arkanum/pecet-10.webp)}
 /* Dny jako zavřené knihy (každý den jiná barva kůže), vybraný den otevřená kniha se září */
 [data-theme="arkanum"] .day-pills{gap:4px!important}
-[data-theme="arkanum"] .day-pill{position:relative;isolation:isolate;background:center/contain no-repeat!important;border:none!important;outline:none!important;color:#f3dc93!important;min-height:76px!important;text-shadow:0 1px 1px #000}
+[data-theme="arkanum"] .day-pill{position:relative;isolation:isolate;background:center/contain no-repeat!important;border:none!important;outline:none!important;color:#f3dc93!important;min-height:86px!important;padding:0 0 0 7px!important;text-transform:none!important;text-shadow:0 1px 1px #000}
+[data-theme="arkanum"] .day-pill>div:nth-child(2){font-size:10px!important}
 [data-theme="arkanum"] .day-pills>.day-pill:nth-child(1){background-image:url(/skins/arkanum/kniha-ruda.webp)!important}
 [data-theme="arkanum"] .day-pills>.day-pill:nth-child(2){background-image:url(/skins/arkanum/kniha-zelena.webp)!important}
 [data-theme="arkanum"] .day-pills>.day-pill:nth-child(3){background-image:url(/skins/arkanum/kniha-modra.webp)!important}
 [data-theme="arkanum"] .day-pills>.day-pill:nth-child(4){background-image:url(/skins/arkanum/kniha-hneda.webp)!important}
 [data-theme="arkanum"] .day-pills>.day-pill:nth-child(5){background-image:url(/skins/arkanum/kniha-cerna.webp)!important}
-[data-theme="arkanum"] .day-pill>div:first-child{font-family:'HP Kouzla','Eagle Lake',Georgia,serif;font-size:19px}
-[data-theme="arkanum"] .day-pill[data-sel="1"]{background:none!important;color:#7a1f2b!important;text-shadow:none;z-index:1}
-[data-theme="arkanum"] .day-pill[data-sel="1"]::before{content:"";position:absolute;left:50%;top:50%;width:120px;height:80px;transform:translate(-50%,-46%);background:url(/skins/arkanum/kniha-otevrena.webp) center/contain no-repeat;z-index:-1;pointer-events:none;filter:drop-shadow(0 0 8px rgba(143,211,255,.55))}
+[data-theme="arkanum"] .day-pill>div:first-child{font-family:'HP Kouzla','Eagle Lake',Georgia,serif;font-size:16px!important;text-transform:none!important}
+/* :nth-child(n) zvyšuje váhu nad pravidla barev knih podle pořadí — jinak zůstala zavřená kniha pod otevřenou */
+[data-theme="arkanum"] .day-pills>.day-pill[data-sel="1"]:nth-child(n){background:none!important;color:#7a1f2b!important;text-shadow:none;z-index:1;padding:0!important}
+[data-theme="arkanum"] .day-pill[data-sel="1"]::before{content:"";position:absolute;left:50%;top:50%;width:108px;height:72px;transform:translate(-50%,-46%);background:url(/skins/arkanum/kniha-otevrena.webp) center/contain no-repeat;z-index:-1;pointer-events:none;filter:drop-shadow(0 0 8px rgba(143,211,255,.55))}
 [data-theme="arkanum"] .day-pill.atp{animation:none!important}
 [data-theme="arkanum"] .day-pill.atp[data-sel="1"]::before{animation:arPulse 2.5s ease-in-out infinite}
 @keyframes arPulse{0%,100%{filter:drop-shadow(0 0 4px rgba(143,211,255,.4))}50%{filter:drop-shadow(0 0 14px rgba(143,211,255,.95))}}
@@ -475,7 +477,7 @@ html[data-theme="arkanum"] body::after{content:"";position:fixed;inset:0;backgro
 [data-theme="arkanum"] .day-plaque{display:flex;flex-direction:column;align-items:center;justify-content:center;width:min(320px,92%);height:104px;margin:4px auto 16px;text-align:center;text-shadow:none;background:url(/skins/arkanum/svitek-nadpis.webp) center/100% 100% no-repeat}
 [data-theme="arkanum"] .dp-title{font-family:'HP Kouzla','Eagle Lake',Georgia,serif;font-size:34px;line-height:1.15;color:#3a2614}
 [data-theme="arkanum"] .dp-date{font-family:var(--font-body);font-style:italic;font-size:15px;color:#6b4f33}
-[data-theme="arkanum"] .pill-lbl{font-family:var(--font-body)!important;letter-spacing:.3px!important;line-height:1.35;max-width:96px}
+[data-theme="arkanum"] .pill-lbl{font-family:var(--font-head)!important;letter-spacing:.3px!important;text-transform:none!important;font-size:14px!important;line-height:1.6;padding:1px 0 3px;max-width:110px}
 [data-theme="arkanum"] ::-webkit-scrollbar-thumb{background:#8a6c42}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 body{background:var(--bg)}
