@@ -20,9 +20,9 @@ import PeopleView from "./views/PeopleView";
 import SettingsView from "./views/SettingsView";
 import PendingView from "./views/PendingView";
 import ProposalsView from "./views/ProposalsView";
-import { skinOf, nextSkin } from "./skins";
+import { SKINS, skinOf } from "./skins";
 import ScheduleView from "./views/ScheduleView";
-import { Badge, Btn, Input, Sel, Toggle, Modal, Card, RANK_TIERS, rankOf, HALF_LBL, HalfTag, RankBadge } from "./ui";
+import { Badge, Btn, Input, Sel, Toggle, Modal, Card, RANK_TIERS, rankOf, HALF_LBL, HalfTag, RankBadge, SkinList } from "./ui";
 
 // Diagnostika listenerů: stav každého naslouchání do window.__sfListen (čte ho páteční bot).
 // Dřív se chyba listeneru (např. chybějící oprávnění) potichu ztratila a data prostě chyběla.
@@ -417,6 +417,66 @@ html[data-theme="temny"] body::after{content:"";position:fixed;inset:0;backgroun
 [data-theme="temny"] .dp-date{font-family:var(--font-mono);font-size:13px;letter-spacing:.04em;color:#4a4038}
 [data-theme="temny"] .pill-lbl{font-family:var(--font-body)!important;letter-spacing:.3px!important;line-height:1.35;max-width:96px}
 [data-theme="temny"] ::-webkit-scrollbar-thumb{background:#5a2a24}
+/* ═══ SKIN: ARKÁNUM ═══ kouzelná škola: hrad v noci, pergamen, svitky, voskové pečeti, knihy. Písmo „Harry Potter" (Jenny Barck) se svolením autorky,
+   česká diakritika dokreslena (tools/hp-pismo-cestina.py). Soubory v public/skins/arkanum/ */
+@font-face{font-family:'HP Kouzla';src:url(/skins/arkanum/hp-cz.woff2) format('woff2');font-display:swap}
+[data-theme="arkanum"]{
+  --font-head:'Eagle Lake',Georgia,serif;--font-body:'EB Garamond',Georgia,serif;--font-mono:'EB Garamond',Georgia,serif;
+  --bg:#0b0f1f;--bg2:rgba(12,14,30,.88);--bg3:rgba(20,22,40,.85);--bg4:rgba(30,30,50,.85);
+  --panel:rgba(10,12,26,.92);--card:rgba(14,16,32,.72);--card-h:rgba(34,32,56,.80);
+  --brd:rgba(227,194,106,.20);--brd2:rgba(227,194,106,.34);--bt:rgba(227,194,106,.40);
+  --tx:#f1e6c8;--tx2:#c8b78f;--tx3:#9a8a6a;--w:#fff6dc;
+  --acc:#e3c26a;--acc2:#e3c26a;--acc3:#7a1f2b;--adim:rgba(227,194,106,.14);--abrd:rgba(227,194,106,.45);
+  --l1:#e3c26a;--sd:#8fd3ff;--red:#e06a5a;--grn:#8fbf7a;--amb:#e3c26a;
+  --sel:rgba(143,211,255,.18);--stx:#ffffff;--blur:none;--glass:rgba(10,12,26,.90);--sheen:none;--grid:none;--moon:none;--pulse:rgba(143,211,255,.5);
+}
+html[data-theme="arkanum"] body{background-color:#0b0f1f;text-shadow:0 1px 2px rgba(0,0,0,.65)}
+html[data-theme="arkanum"] body::before{content:"";position:fixed;inset:0;background:url(/skins/arkanum/hrad-mobil.webp) center/cover no-repeat;pointer-events:none;z-index:0}
+html[data-theme="arkanum"] body::after{content:"";position:fixed;inset:0;background:linear-gradient(180deg,rgba(6,8,18,.20),rgba(6,8,18,.40));pointer-events:none;z-index:0}
+@media(min-width:900px){html[data-theme="arkanum"] body::before{background-image:url(/skins/arkanum/hrad-desktop.webp)}}
+[data-theme="arkanum"] .pg{background:linear-gradient(180deg,rgba(12,14,30,.94),rgba(20,14,10,.94))!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;border-color:rgba(227,194,106,.6)!important}
+[data-theme="arkanum"] header.pg{position:relative;justify-content:flex-start!important;gap:10px}
+[data-theme="arkanum"] header.pg>:last-child{margin-left:auto}
+[data-theme="arkanum"] header.pg::before{content:"";flex-shrink:0;width:42px;height:55px;background:url(/skins/arkanum/znak.webp) center/contain no-repeat;filter:drop-shadow(0 0 8px rgba(227,194,106,.55))}
+[data-theme="arkanum"] header.pg::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:linear-gradient(90deg,transparent,#e3c26a 20%,#f3dc93 50%,#e3c26a 80%,transparent);box-shadow:0 0 10px rgba(227,194,106,.6);pointer-events:none}
+/* Pergamenové karty s tmavým inkoustem uvnitř (proměnné se přepnou jen pro obsah karty) */
+[data-theme="arkanum"] .gl{--tx:#3a2614;--tx2:#5a4330;--tx3:#7a6248;--w:#2a1a0c;--brd:rgba(58,38,20,.25);--brd2:rgba(58,38,20,.40);--bt:rgba(58,38,20,.45);
+  --bg3:rgba(58,38,20,.06);--bg4:rgba(58,38,20,.10);--card:rgba(58,38,20,.05);--card-h:rgba(58,38,20,.09);--acc2:#7a1f2b;--adim:rgba(122,31,43,.10);--abrd:rgba(122,31,43,.45);--red:#9c1b1b;--grn:#3f7a2e;
+  background:url(/skins/arkanum/pergamen.webp) 0 0/300px auto!important;border:1px solid #8a6c42!important;border-radius:4px;box-shadow:0 3px 8px rgba(0,0,0,.5),inset 0 0 18px rgba(90,60,25,.25);
+  -webkit-backdrop-filter:none!important;backdrop-filter:none!important;text-shadow:none;color:#3a2614}
+/* Rozvrh: lidé na pergamenových svitcích, čísla směn ve voskových pečetích */
+[data-theme="arkanum"] .shift-sec .gl{background:none!important;border:0!important;box-shadow:none!important}
+[data-theme="arkanum"] .ent{background:url(/skins/arkanum/svitek.webp) center/100% 100% no-repeat;min-height:66px;max-width:460px;justify-content:center;padding:8px 42px!important;border-bottom:none!important;margin-bottom:8px}
+[data-theme="arkanum"] .ent>span{flex:0 1 auto!important}
+[data-theme="arkanum"] .ent>div:first-child{display:none}
+[data-theme="arkanum"] .ent span{font-family:var(--font-body);font-weight:600;font-size:17px}
+[data-theme="arkanum"] .ent[data-me="1"]{filter:drop-shadow(0 0 6px rgba(227,194,106,.85))}
+[data-theme="arkanum"] .ent:hover,[data-theme="arkanum"] .ent:active{background:url(/skins/arkanum/svitek.webp) center/100% 100% no-repeat!important;filter:drop-shadow(0 0 6px rgba(143,211,255,.7))}
+[data-theme="arkanum"] .shift-sec{position:relative;padding-left:76px}
+[data-theme="arkanum"] .shift-sec::before{content:"";position:absolute;left:2px;top:30px;width:60px;height:60px;background:center/contain no-repeat;filter:drop-shadow(0 3px 4px rgba(0,0,0,.6))}
+[data-theme="arkanum"] .shift-sec[data-roman="VIII"]::before{background-image:url(/skins/arkanum/pecet-8.webp)}
+[data-theme="arkanum"] .shift-sec[data-roman="IX"]::before{background-image:url(/skins/arkanum/pecet-9.webp)}
+[data-theme="arkanum"] .shift-sec[data-roman="X"]::before{background-image:url(/skins/arkanum/pecet-10.webp)}
+/* Dny jako zavřené knihy (každý den jiná barva kůže), vybraný den otevřená kniha se září */
+[data-theme="arkanum"] .day-pills{gap:4px!important}
+[data-theme="arkanum"] .day-pill{position:relative;isolation:isolate;background:center/contain no-repeat!important;border:none!important;outline:none!important;color:#f3dc93!important;min-height:76px!important;text-shadow:0 1px 1px #000}
+[data-theme="arkanum"] .day-pills>.day-pill:nth-child(1){background-image:url(/skins/arkanum/kniha-ruda.webp)!important}
+[data-theme="arkanum"] .day-pills>.day-pill:nth-child(2){background-image:url(/skins/arkanum/kniha-zelena.webp)!important}
+[data-theme="arkanum"] .day-pills>.day-pill:nth-child(3){background-image:url(/skins/arkanum/kniha-modra.webp)!important}
+[data-theme="arkanum"] .day-pills>.day-pill:nth-child(4){background-image:url(/skins/arkanum/kniha-hneda.webp)!important}
+[data-theme="arkanum"] .day-pills>.day-pill:nth-child(5){background-image:url(/skins/arkanum/kniha-cerna.webp)!important}
+[data-theme="arkanum"] .day-pill>div:first-child{font-family:'HP Kouzla','Eagle Lake',Georgia,serif;font-size:19px}
+[data-theme="arkanum"] .day-pill[data-sel="1"]{background:none!important;color:#7a1f2b!important;text-shadow:none;z-index:1}
+[data-theme="arkanum"] .day-pill[data-sel="1"]::before{content:"";position:absolute;left:50%;top:50%;width:120px;height:80px;transform:translate(-50%,-46%);background:url(/skins/arkanum/kniha-otevrena.webp) center/contain no-repeat;z-index:-1;pointer-events:none;filter:drop-shadow(0 0 8px rgba(143,211,255,.55))}
+[data-theme="arkanum"] .day-pill.atp{animation:none!important}
+[data-theme="arkanum"] .day-pill.atp[data-sel="1"]::before{animation:arPulse 2.5s ease-in-out infinite}
+@keyframes arPulse{0%,100%{filter:drop-shadow(0 0 4px rgba(143,211,255,.4))}50%{filter:drop-shadow(0 0 14px rgba(143,211,255,.95))}}
+/* Nadpis dne na rozvinutém svitku */
+[data-theme="arkanum"] .day-plaque{display:flex;flex-direction:column;align-items:center;justify-content:center;width:min(320px,92%);height:104px;margin:4px auto 16px;text-align:center;text-shadow:none;background:url(/skins/arkanum/svitek-nadpis.webp) center/100% 100% no-repeat}
+[data-theme="arkanum"] .dp-title{font-family:'HP Kouzla','Eagle Lake',Georgia,serif;font-size:34px;line-height:1.15;color:#3a2614}
+[data-theme="arkanum"] .dp-date{font-family:var(--font-body);font-style:italic;font-size:15px;color:#6b4f33}
+[data-theme="arkanum"] .pill-lbl{font-family:var(--font-body)!important;letter-spacing:.3px!important;line-height:1.35;max-width:96px}
+[data-theme="arkanum"] ::-webkit-scrollbar-thumb{background:#8a6c42}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 body{background:var(--bg)}
 ::-webkit-scrollbar{width:4px;height:4px}::-webkit-scrollbar-thumb{background:var(--brd2)}
@@ -497,7 +557,7 @@ function ParallaxBg() {
 }
 
 /* ═══ NAV ═══ */
-function SideNav({ view, setView, NAV, theme, setTheme }) {
+function SideNav({ view, setView, NAV, theme, onPickTheme }) {
   return <aside className="pg" style={{ width: 200, height: "100vh", position: "fixed", left: 0, top: 0, zIndex: 50, display: "flex", flexDirection: "column", borderRight: "1px solid var(--bt)" }}>
     <div style={{ padding: "20px 20px 16px", fontSize: 20, fontWeight: 700, color: "var(--w)", letterSpacing: 4, fontFamily: "var(--font-head)", borderBottom: "1px solid var(--brd)" }}>SHIFTFLOW</div>
     <div style={{ flex: 1, padding: "12px 0", overflowY: "auto" }}>
@@ -507,7 +567,7 @@ function SideNav({ view, setView, NAV, theme, setTheme }) {
       </button>)}
     </div>
     <div style={{ padding: "12px 20px", borderTop: "1px solid var(--brd)" }}>
-      <button onClick={() => setTheme(nextSkin)} title={`Vzhled: ${skinOf(theme).name} — klepni pro ${skinOf(nextSkin(theme)).name}`} style={{ background: "none", border: "1px solid var(--brd2)", width: "100%", height: 38, cursor: "pointer", fontSize: 14, color: "var(--tx2)", fontFamily: "var(--font-head)", textTransform: "uppercase", letterSpacing: 1 }}>{skinOf(theme).icon} {skinOf(theme).name}</button>
+      <button onClick={onPickTheme} aria-haspopup="dialog" title={`Vzhled: ${skinOf(theme).name} — vybrat jiný`} style={{ background: "none", border: "1px solid var(--brd2)", width: "100%", height: 38, cursor: "pointer", fontSize: 14, color: "var(--tx2)", fontFamily: "var(--font-head)", textTransform: "uppercase", letterSpacing: 1 }}>{skinOf(theme).icon} {skinOf(theme).name}</button>
     </div>
   </aside>;
 }
@@ -705,6 +765,7 @@ export default function App() {
   const [logs, setLogs] = useState([]); const [notes, setNotes] = useState({});
   const [rules, setRules] = useState({ ...RULE_DEFAULTS, allowAllDnD: false });
   const [theme, setTheme] = useState(() => localStorage.getItem("sf_theme") || "light");
+  const [themePicker, setThemePicker] = useState(false);
   const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' && window.innerWidth < 900);
   const [gyroOn, setGyroOn] = useState(gyroPref());
   const [installable, setInstallable] = useState(() => !!deferredInstall);
@@ -1422,7 +1483,7 @@ export default function App() {
     <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 9999, padding: "8px 12px" }}>{notifs.map(n => <div key={n.id} className="gl" style={{ padding: "14px 16px", fontSize: 15, color: "var(--acc2)", display: "flex", gap: 10, alignItems: "center", marginBottom: 6, animation: "st .3s" }}><span style={{ flex: 1 }}>{n.msg}</span></div>)}</div>
 
     {/* SIDEBAR (desktop) */}
-    {!isMobile && <SideNav view={view} setView={switchV} NAV={NAV} theme={theme} setTheme={setTheme} />}
+    {!isMobile && <SideNav view={view} setView={switchV} NAV={NAV} theme={theme} onPickTheme={() => setThemePicker(true)} />}
 
     {/* MAIN */}
     <div style={{ flex: 1, marginLeft: isMobile ? 0 : 200, paddingBottom: isMobile ? 80 : 20, position: "relative", zIndex: 1 }}>
@@ -1430,7 +1491,7 @@ export default function App() {
         <div style={{ fontSize: 14, color: "var(--tx2)", fontFamily: "var(--font-head)" }}>{profile.name} · <Badge small color={isA ? "var(--amb)" : "var(--acc)"}>{isA ? "ADM" : "CREW"}</Badge></div>
         <div style={{ display: "flex", gap: 6 }}>
           <button onClick={hardSync} title="Sync — načíst čerstvý stav" style={{ background: "none", border: "1px solid var(--brd2)", color: "var(--acc2)", width: 38, height: 38, cursor: "pointer", fontSize: 15, display: "flex", alignItems: "center", justifyContent: "center" }}>⟳</button>
-          {isMobile && <button onClick={() => setTheme(nextSkin)} aria-label={`Vzhled: ${skinOf(theme).name}, přepnout na ${skinOf(nextSkin(theme)).name}`} style={{ background: "none", border: "1px solid var(--brd2)", width: 38, height: 38, cursor: "pointer", color: "var(--tx2)", fontSize: 14 }}>{skinOf(theme).icon}</button>}
+          {isMobile && <button onClick={() => setThemePicker(true)} aria-haspopup="dialog" aria-label={`Vzhled: ${skinOf(theme).name}, vybrat jiný`} style={{ background: "none", border: "1px solid var(--brd2)", width: 38, height: 38, cursor: "pointer", color: "var(--tx2)", fontSize: 14 }}>{skinOf(theme).icon}</button>}
           <button onClick={() => signOut(auth)} style={{ background: "none", border: "1px solid var(--brd2)", color: "var(--tx3)", width: 38, height: 38, cursor: "pointer", fontSize: 13 }}>↪</button>
         </div>
       </header>
@@ -1530,6 +1591,7 @@ export default function App() {
     {isMobile && <PillNav view={view} setView={switchV} NAV={NAV} />}
 
     {/* MODALS */}
+    <Modal open={themePicker} onClose={() => setThemePicker(false)} title="Vzhled"><SkinList skins={SKINS} theme={theme} onPick={id => { setTheme(id); setThemePicker(false); }} /></Modal>
     <Modal open={!!noteView} onClose={() => setNoteView(null)} title="Poznámka">{noteView && <div>
       <div style={{ fontSize: 13, color: "var(--tx3)", marginBottom: 8 }}>{noteView.name} · {noteView.day} · {noteView.shift}</div>
       <div style={{ padding: "14px 16px", background: "var(--bg3)", border: "1px solid var(--brd)", fontSize: 15, color: "var(--w)", lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{noteView.text}</div>

@@ -97,6 +97,8 @@ Test hlídá, že každý soubor, na který CSS skinu odkazuje, existuje.
 **Licence písem:** Ringbearer CE (Pete Klassen) má licenci jen pro soukromé použití; pro
 tuto appku udělil autor výslovné svolení e-mailem (září 2026, uloženo u Patrika).
 Písmo Game of Thrones se NEPOUŽÍVÁ (bez licence) - římské číslice jsou v Cinzel (OFL).
+Písmo „Harry Potter" (Jenny Barck, 2001) pro skin Arkánum - svolení autorky e-mailem
+(archivuje Patrik), česká diakritika dokreslena skriptem `tools/hp-pismo-cestina.py`.
 
 ## Stálý rozvrh žije jen v databázi
 

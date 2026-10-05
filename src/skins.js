@@ -13,6 +13,8 @@ export const SKINS = [
     fonts: "https://fonts.googleapis.com/css2?family=Exo+2:wght@600;700;800&family=Space+Grotesk:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap" },
   { id: "temny", name: "Temný věk", icon: "✠", sub: "inkoust, papír a mangové bubliny", swatch: "linear-gradient(135deg, #141210, #9c1b1b 60%, #e9e3d4)",
     fonts: "https://fonts.googleapis.com/css2?family=MedievalSharp&family=Alegreya+Sans:wght@400;500;700&family=Courier+Prime:wght@400;700&display=swap" },
+  { id: "arkanum", name: "Arkánum", icon: "☾", sub: "kouzelná škola: hrad, svitky, pečeti a knihy", swatch: "linear-gradient(135deg, #0b0f1f, #e3c26a 60%, #7a1f2b)",
+    fonts: "https://fonts.googleapis.com/css2?family=Eagle+Lake&family=EB+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" },
 ];
 export const skinOf = id => SKINS.find(s => s.id === id) || SKINS[0];
 export const nextSkin = id => SKINS[(SKINS.findIndex(s => s.id === id) + 1) % SKINS.length].id;

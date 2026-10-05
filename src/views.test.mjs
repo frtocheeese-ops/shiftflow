@@ -306,11 +306,11 @@ test("PeopleView: čekající účty se schválením nahoře, bez nich sekce chy
   assert.doesNotMatch(await render(V, { ...base, pendingUsers: [] }), /Čekají na schválení/);
 });
 
-test("SettingsView: výběr vzhledu — tři možnosti, zvolená je označená", async () => {
+test("SettingsView: výběr vzhledu — všechny motivy s ikonou, zvolený je označený", async () => {
   const SettingsView = await loadView("SettingsView");
   const html = await render(SettingsView, setProps({ theme: "sever", onThemeChange() {} }));
   assert.match(html, /Vzhled aplikace/);
-  for (const n of ["Světlý", "Tmavý", "Sever"]) assert.match(html, new RegExp(`>${n}<`));
+  for (const n of ["○ Světlý", "● Tmavý", "❄ Sever", "☾ Arkánum"]) assert.match(html, new RegExp(`>${n}<`));
   assert.equal((html.match(/aria-checked="true"/g) || []).length, 1);
   assert.match(html, /aria-checked="true"[^>]*>(?:(?!<\/button>).)*Sever/s);
 });

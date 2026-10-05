@@ -1162,3 +1162,31 @@ poslední do 20 min před 19:00) a nepoužívá kulaté minuty (ověřeno sabot�
 **Upřímně:** GitHub plánované běhy negarantuje ani po optimalizaci. Pokud by se výpadek
 opakoval, spolehlivé řešení je časovač Apps Scriptu (připravená větev
 `nahled-spolehlive-spousteni`, nemergnutá).
+
+---
+
+## Aktualizace v53 — výběr motivu z tlačítka + nový skin Arkánum
+
+**Výběr motivu:** tlačítko vzhledu (mobilní hlavička i postranní menu) už nepřepíná
+dokola, ale otevře okno `Modal` „Vzhled" se seznamem všech motivů (náhled barev, ikona,
+název, popis); klepnutí vybere a zavře. Seznam je sdílená komponenta `SkinList` (ui.jsx)
+— stejná v okně i v Nastavení. Nový skin se v obou objeví automaticky.
+
+**Skin Arkánum** (kouzelná škola, inspirace Harrym Potterem; assety Patrik z ChatGPT):
+- pozadí noční hrad nad jezerem (mobil/desktop), erb v hlavičce, zlatá linka pod ní,
+- pergamenové karty s inkoustovými proměnnými uvnitř (jako Temný věk),
+- lidé na pergamenových svitcích (`.ent`, max. 460 px, jméno uprostřed, vlastní řádek
+  se zlatou září; vlastní `:hover`, aby obecné pravidlo svitek nepřepsalo),
+- čísla směn ve voskových pečetích (`.shift-sec[data-roman]::before`),
+- dny jako zavřené knihy v pěti barvách kůže (`.day-pill:nth-child(1–5)`), vybraný den
+  otevřená kniha jako `::before` (větší než tlačítko) s pulzující modrou září,
+- nadpis dne na rozvinutém svitku, písmo „HP Kouzla".
+- **Písmo:** „Harry Potter" (Jenny Barck, 2001) se svolením autorky (e-mail archivuje
+  Patrik). Neobsahovalo diakritiku ani akcenty → dokresleno všech 30 českých znaků
+  (`tools/hp-pismo-cestina.py`: čárka, háček, kroužek, apostrof pro ď/ť; akcent nad
+  nejvyšším tahem každého písmene zvlášť; „i" bez tečky pro í). Číslice písmo nemá —
+  doplní Eagle Lake. Erb je chráněný symbol (Warner Bros.) — jen interní appka.
+- Soubory `public/skins/arkanum/` (~390 kB, jen při zapnutém skinu).
+- Testy: okno výběru (mobil, postranní menu, Nastavení sdílí seznam), skin Arkánum
+  (písmo, karty, svitky s hover, knihy pro všech 5 dní, pečeti, nadpis), písmo je WOFF2.
+  89 testů.
