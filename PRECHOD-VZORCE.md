@@ -1200,3 +1200,16 @@ název, popis); klepnutí vybere a zavře. Seznam je sdílená komponenta `SkinL
   svitcích a spodní menu; drobný text a data zůstávají v EB Garamond kvůli čitelnosti.
 - Text na zavřených knihách: bez převodu na velká písmena, menší (16/10 px), posunutý
   o 7 px od hřbetu; tlačítka dnů vyšší (86 px) → větší knihy.
+
+---
+
+## Aktualizace v54 — papírové karty: světlé podklady (Temný věk, Arkánum)
+
+**Chyba:** uvnitř papírových karet se přepínaly barvy textu na tmavé, ale ne podklady
+`--bg` (políčka formulářů — přihlášení, nastavení), `--panel` (pevný sloupec se jmény
+v tabulce Dovolená), `--sel`/`--stx` (výběr). Ty zůstaly tmavé ze skinu → tmavý text na
+tmavém poli (hlášeno: přihlašovací obrazovka, Dovolená).
+**Oprava:** karta (`.gl`) v obou skinech přepíná i tyto podklady na světlé papírové tóny.
+**Test:** pro každý podklad, který komponenty skutečně používají (`var(--…)` v kódu), musí
+pravidlo karty v obou skinech obsahovat jeho přepnutí — nový podklad v budoucnu test
+odhalí (ověřeno sabotáží: bez `--panel` test selže).

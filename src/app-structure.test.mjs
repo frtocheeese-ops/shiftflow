@@ -98,7 +98,7 @@ test("skin Temný věk: písmo, papírové karty s tmavým textem, bubliny u lid
   const { SKINS } = await import("./skins.js");
   const tv = SKINS.find(s => s.id === "temny"); assert.ok(tv, "Temný věk chybí v seznamu vzhledů"); assert.match(tv.fonts, /MedievalSharp/);
   assert.match(src, /\[data-theme="temny"\]\{[^}]*--font-head:'MedievalSharp'/);
-  assert.match(src, /\[data-theme="temny"\] \.gl\{--tx:#141210/);            // uvnitř papíru tmavý text
+  assert.match(src, /\[data-theme="temny"\] \.gl\{[^}]*--tx:#141210/);            // uvnitř papíru tmavý text
   assert.match(src, /\[data-theme="temny"\] \.ent\{background:url\(\/skins\/temny\/bublina\.webp\)/);
   assert.match(src, /\[data-theme="temny"\] \.ent\[data-me="1"\]/);
   for (const r of ["VIII", "IX", "X"]) assert.match(src, new RegExp(`\\[data-theme="temny"\\] \\.shift-sec\\[data-roman="${r}"\\]::before`));
@@ -130,7 +130,7 @@ test("skin Arkánum: písmo s češtinou, hrad, svitky, pečeti, knihy pro dny, 
   const { SKINS } = await import("./skins.js");
   assert.ok(SKINS.find(s => s.id === "arkanum"), "Arkánum chybí v seznamu vzhledů");
   assert.match(src, /font-family:'HP Kouzla';src:url\(\/skins\/arkanum\/hp-cz\.woff2\)/);
-  assert.match(src, /\[data-theme="arkanum"\] \.gl\{--tx:#3a2614/);
+  assert.match(src, /\[data-theme="arkanum"\] \.gl\{[^}]*--tx:#3a2614/);
   assert.match(src, /\[data-theme="arkanum"\] \.ent:hover[^{]*\{background:url\(\/skins\/arkanum\/svitek\.webp\)[^}]*!important/);
   for (const [i, b] of [[1, "ruda"], [2, "zelena"], [3, "modra"], [4, "hneda"], [5, "cerna"]]) assert.match(src, new RegExp(`\\.day-pill:nth-child\\(${i}\\)\\{background-image:url\\(\\/skins\\/arkanum\\/kniha-${b}`));
   for (const r of ["VIII", "IX", "X"]) assert.match(src, new RegExp(`\\[data-theme="arkanum"\\] \\.shift-sec\\[data-roman="${r}"\\]::before\\{background-image:url\\(\\/skins\\/arkanum\\/pecet`));
@@ -147,4 +147,14 @@ test("Arkánum: vybraný den nemá pod otevřenou knihou zavřenou, písmo HP v�
   assert.match(src, /\[data-theme="arkanum"\] \.day-pills>\.day-pill\[data-sel="1"\]:nth-child\(n\)\{background:none!important/);
   assert.match(src, /\[data-theme="arkanum"\]\{[^}]*--font-head:'HP Kouzla'/);
   assert.match(src, /\[data-theme="arkanum"\] \.day-pill\{[^}]*padding:0 0 0 7px!important[^}]*text-transform:none!important/);
+});
+
+test("papírové karty (Temný věk, Arkánum): uvnitř světlé podklady — políčka a pevný sloupec nejsou tmavé pod tmavým textem", () => {
+  // Komponenty uvnitř karet používají tyto podkladové proměnné; každá musí být v kartě přepnutá na světlou
+  const used = new Set([...src.matchAll(/var\(--(bg|bg2|bg3|bg4|panel|glass|sel|stx|card|card-h)\)/g)].map(m => m[1]));
+  for (const skin of ["temny", "arkanum"]) {
+    const rule = src.match(new RegExp(`\\[data-theme="${skin}"\\] \\.gl\\{([^}]*)\\}`));
+    assert.ok(rule, `${skin}: pravidlo karty nenalezeno`);
+    for (const v of used) if (v !== "sel") assert.match(rule[1], new RegExp(`--${v}:`), `${skin}: karta nepřepíná --${v}`);
+  }
 });

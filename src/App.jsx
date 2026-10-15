@@ -379,7 +379,7 @@ html[data-theme="temny"] body::after{content:"";position:fixed;inset:0;backgroun
 [data-theme="temny"] header.pg::before{content:"";flex-shrink:0;width:44px;height:52px;background:url(/skins/temny/znak.webp) center/auto 42px no-repeat,url(/skins/temny/papir.webp) 0 0/300px auto;clip-path:polygon(3% 6%,18% 0,46% 4%,72% 1%,97% 5%,100% 32%,96% 61%,100% 94%,74% 100%,41% 96%,15% 100%,0 93%,4% 62%,0 30%)}
 [data-theme="temny"] header.pg::after{content:"";position:absolute;left:-16px;right:-16px;bottom:-11px;height:18px;background:url(/skins/temny/tah.webp) center/100% 100% no-repeat;pointer-events:none;z-index:2}
 /* Papírové karty: inkoustový rám + uvnitř tmavý text (proměnné se přepnou jen pro obsah karty) */
-[data-theme="temny"] .gl{--tx:#141210;--tx2:#4a4038;--tx3:#6b6158;--w:#141210;--brd:rgba(20,18,16,.25);--brd2:rgba(20,18,16,.40);--bt:rgba(20,18,16,.45);
+[data-theme="temny"] .gl{--bg:#f6f1e6;--panel:#ebe4d3;--sel:rgba(156,27,27,.16);--stx:#141210;--tx:#141210;--tx2:#4a4038;--tx3:#6b6158;--w:#141210;--brd:rgba(20,18,16,.25);--brd2:rgba(20,18,16,.40);--bt:rgba(20,18,16,.45);
   --bg3:rgba(20,18,16,.06);--bg4:rgba(20,18,16,.10);--card:rgba(20,18,16,.05);--card-h:rgba(20,18,16,.09);--acc2:#9c1b1b;--adim:rgba(156,27,27,.10);--abrd:rgba(156,27,27,.45);--red:#9c1b1b;--grn:#3f7a2e;
   background:url(/skins/temny/papir.webp) 0 0/300px auto!important;border:10px solid transparent!important;border-image:url(/skins/temny/ram.webp) 48 round!important;background-clip:padding-box!important;
   border-radius:0;-webkit-backdrop-filter:none!important;backdrop-filter:none!important;box-shadow:none;text-shadow:none;color:#141210}
@@ -440,7 +440,7 @@ html[data-theme="arkanum"] body::after{content:"";position:fixed;inset:0;backgro
 [data-theme="arkanum"] header.pg::before{content:"";flex-shrink:0;width:42px;height:55px;background:url(/skins/arkanum/znak.webp) center/contain no-repeat;filter:drop-shadow(0 0 8px rgba(227,194,106,.55))}
 [data-theme="arkanum"] header.pg::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:linear-gradient(90deg,transparent,#e3c26a 20%,#f3dc93 50%,#e3c26a 80%,transparent);box-shadow:0 0 10px rgba(227,194,106,.6);pointer-events:none}
 /* Pergamenové karty s tmavým inkoustem uvnitř (proměnné se přepnou jen pro obsah karty) */
-[data-theme="arkanum"] .gl{--tx:#3a2614;--tx2:#5a4330;--tx3:#7a6248;--w:#2a1a0c;--brd:rgba(58,38,20,.25);--brd2:rgba(58,38,20,.40);--bt:rgba(58,38,20,.45);
+[data-theme="arkanum"] .gl{--bg:#f7edd4;--panel:#ecdfbf;--sel:rgba(122,31,43,.14);--stx:#2a1a0c;--tx:#3a2614;--tx2:#5a4330;--tx3:#7a6248;--w:#2a1a0c;--brd:rgba(58,38,20,.25);--brd2:rgba(58,38,20,.40);--bt:rgba(58,38,20,.45);
   --bg3:rgba(58,38,20,.06);--bg4:rgba(58,38,20,.10);--card:rgba(58,38,20,.05);--card-h:rgba(58,38,20,.09);--acc2:#7a1f2b;--adim:rgba(122,31,43,.10);--abrd:rgba(122,31,43,.45);--red:#9c1b1b;--grn:#3f7a2e;
   background:url(/skins/arkanum/pergamen.webp) 0 0/300px auto!important;border:1px solid #8a6c42!important;border-radius:4px;box-shadow:0 3px 8px rgba(0,0,0,.5),inset 0 0 18px rgba(90,60,25,.25);
   -webkit-backdrop-filter:none!important;backdrop-filter:none!important;text-shadow:none;color:#3a2614}
