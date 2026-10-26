@@ -761,7 +761,7 @@ export default function App() {
   const [absences, setAbsences] = useState({}); const [events, setEvents] = useState({});
   const [swaps, setSwaps] = useState([]); const [selCell, setSelCell] = useState(null); const [noteView, setNoteView] = useState(null);
   const [proposals, setProposals] = useState([]);
-  const [allSchedules, setAllSchedules] = useState({}); const [pendingUsers, setPendingUsers] = useState([]); const [resolveTarget, setResolveTarget] = useState(null);
+  const [allSchedules, setAllSchedules] = useState({}); const [pendingUsers, setPendingUsers] = useState([]); const [observers, setObservers] = useState([]); const [resolveTarget, setResolveTarget] = useState(null);
   const [showPerma, setShowPerma] = useState(false); const [showCompare, setShowCompare] = useState(false);
   const [modal, setModal] = useState(null); const [notifs, setNotifs] = useState([]);
   const [logs, setLogs] = useState([]); const [notes, setNotes] = useState({});
@@ -882,7 +882,7 @@ export default function App() {
   const fairness = useMemo(() => computeFairness(allSchedules, employees, rules.rotations), [allSchedules, employees, rules.rotations]);
 
   useEffect(() => { const u = onAuthStateChanged(auth, async u => { if (u) { setAuthUser(u); const s = await getDoc(doc(db, "users", u.uid)); if (s.exists()) setProfile({ id: u.uid, ...s.data() }); else setProfile({ id: u.uid, name: u.displayName || u.email, email: u.email, role: "pending", noDoc: true, setupDone: false }); initPush(u.uid); } else { setAuthUser(null); setProfile(null); } }); return u; }, []);
-  useEffect(() => { if (!authUser || !isMember) return; const u = onSnapshot(collection(db, "users"), s => { noteListen("users", null); const e = s.docs.map(d => ({ id: d.id, ...d.data() })); setEmployees(e.filter(x => x.role !== "pending" && !x.bot)); setPendingUsers(e.filter(x => x.role === "pending")); /* bot (páteční snímek) do týmu nepatří; čekající bot se ale ukáže ke schválení */ if (profile) { const m = e.find(x => x.id === profile.id); if (m) setProfile(p => ({ ...p, ...m })); } }, e => noteListen("users", e)); return u; }, [authUser?.uid, profile?.id, isMember]);
+  useEffect(() => { if (!authUser || !isMember) return; const u = onSnapshot(collection(db, "users"), s => { noteListen("users", null); const e = s.docs.map(d => ({ id: d.id, ...d.data() })); setEmployees(e.filter(x => x.role !== "pending" && !x.bot && !x.observer)); setObservers(e.filter(x => x.role !== "pending" && !x.bot && x.observer)); setPendingUsers(e.filter(x => x.role === "pending")); /* bot (páteční snímek) do týmu nepatří; čekající bot se ale ukáže ke schválení. „Jen náhled" (observer): rozvrh vidí, ale do směn ani pravidel se nepočítá — employees = jen plánovaní členové */ if (profile) { const m = e.find(x => x.id === profile.id); if (m) setProfile(p => ({ ...p, ...m })); } }, e => noteListen("users", e)); return u; }, [authUser?.uid, profile?.id, isMember]);
   useEffect(() => { if (!authUser || !isMember) return; const u = onSnapshot(doc(db, "schedules", wk), s => { noteListen("schedule", null); if (s.exists()) { const d = s.data(); setSchedule(d.entries || null); setAbsences(d.absences || {}); setEvents(d.events || {}); setNotes(d.notes || {}); setIntake(d.intake || {}); setIntakeAllow(d.intakeAllow || {}); setSchedMeta({ at: d.modifiedAt, by: d.modifiedBy }); } else { setSchedule(null); setAbsences({}); setEvents({}); setNotes({}); setIntake({}); setIntakeAllow({}); setSchedMeta({}); } }, e => noteListen("schedule", e)); return u; }, [wk, authUser?.uid, isMember]);
 
   // Auto-sync GCal when ANY week's schedule changes affecting current user
@@ -1221,6 +1221,12 @@ export default function App() {
     }
   };
   // ═══ SCHVALOVÁNÍ NOVÝCH ÚČTŮ (admin) ═══
+  // Jen náhled: člen vidí rozvrh, ale není ve směnách a nepočítá se do pravidel, férovosti ani statistik (smí měnit jen admin — viz firestore.rules)
+  const setObserver = async (emp, on) => {
+    if (on && !confirm(`${emp.name}: přepnout na „jen náhled"?\n\nRozvrh dál uvidí, ale nebude ve směnách a nezapočítá se do pravidel ani statistik.`)) return;
+    try { await updateDoc(doc(db, "users", emp.id), { observer: on }); notify(on ? `${emp.name}: jen náhled ✓` : `${emp.name}: zpět ve směnách ✓`); log(on ? `Jen náhled (bez směn): ${emp.name}` : `Zpět ve směnách: ${emp.name}`); }
+    catch (err) { notify("Chyba: " + err.message); }
+  };
   const approveUser = async u => {
     try { await updateDoc(doc(db, "users", u.id), { role: "employee", approvedAt: new Date().toISOString(), approvedBy: profile?.id }); notify(`${u.name} schválen ✓`); log(`Schválen nový člen: ${u.name}`); }
     catch (err) { notify("Chyba: " + err.message); }
@@ -1514,7 +1520,7 @@ export default function App() {
             onAccept={sw => doSwap(sw.id, profile.id)} onCancel={cancelSwap} onDelete={deleteSwap}
             onNewRequest={() => setModal({ type: "swap", day: DAYS[selDay], shift: SHIFTS[0] })} />}
 
-          {view === "people" && isA && <PeopleView employees={employees} pendingUsers={pendingUsers} onApprove={approveUser} onReject={rejectUser} onAdd={() => setModal("addMember")}
+          {view === "people" && isA && <PeopleView employees={employees} observers={observers} onSetObserver={setObserver} pendingUsers={pendingUsers} onApprove={approveUser} onReject={rejectUser} onAdd={() => setModal("addMember")}
             onEditDays={emp => setModal({ type: "editDays", emp })} onDelete={delUser} onAdjustFixes={adjustFixCount} />}
 
           {view === "vacation" && <div>

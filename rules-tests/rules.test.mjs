@@ -38,6 +38,13 @@ const as = uid => uid === "anonym" ? env.unauthenticatedContext().firestore() : 
 test("člen si NEMŮŽE sám nastavit roli admin", async () => {
   await assertFails(updateDoc(doc(as("clen"), "users/clen"), { role: "admin" }));
 });
+test("člen si NEMŮŽE sám zapnout ani vypnout režim jen náhled (vyřazení ze směn)", async () => {
+  await assertFails(updateDoc(doc(as("clen"), "users/clen"), { observer: true }));
+});
+test("admin smí člena přepnout do režimu jen náhled a zpět", async () => {
+  await assertSucceeds(updateDoc(doc(as("admin"), "users/clen"), { observer: true }));
+  await assertSucceeds(updateDoc(doc(as("admin"), "users/clen"), { observer: false }));
+});
 test("čekající si NEMŮŽE sám schválit roli", async () => {
   await assertFails(updateDoc(doc(as("pending"), "users/pending"), { role: "employee" }));
 });

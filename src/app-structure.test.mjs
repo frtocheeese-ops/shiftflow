@@ -41,7 +41,7 @@ test("registrace a přihlášení bez profilu nevytvoří člena", () => {
 });
 
 test("bot (páteční snímek) se nepočítá mezi členy týmu", () => {
-  assert.match(src, /setEmployees\(e\.filter\(x => [^)]*!x\.bot\)\)/);
+  assert.match(src, /setEmployees\(e\.filter\(x => [^)]*!x\.bot[^)]*\)\)/);
 });
 
 test("skin Sever: každý soubor, na který CSS odkazuje, existuje v public/", async () => {
@@ -157,4 +157,12 @@ test("papírové karty (Temný věk, Arkánum): uvnitř světlé podklady — po
     assert.ok(rule, `${skin}: pravidlo karty nenalezeno`);
     for (const v of used) if (v !== "sel") assert.match(rule[1], new RegExp(`--${v}:`), `${skin}: karta nepřepíná --${v}`);
   }
+});
+
+test("jen náhled: plánovaný tým bez pozorovatelů, pozorovatelé zvlášť pro Tým, zápis jen admin (pravidla)", () => {
+  assert.match(src, /setEmployees\(e\.filter\(x => x\.role !== "pending" && !x\.bot && !x\.observer\)\)/);
+  assert.match(src, /setObservers\(e\.filter\(x => x\.role !== "pending" && !x\.bot && x\.observer\)\)/);
+  assert.match(src, /<PeopleView employees=\{employees\} observers=\{observers\} onSetObserver=\{setObserver\}/);
+  const rules = readFileSync(new URL("../firestore.rules", import.meta.url), "utf8");
+  assert.match(rules, /allow update: if \(isSelf\(userId\) && roleUnchanged\(\) && observerUnchanged\(\)\) \|\| isAdmin\(\);/);
 });
