@@ -1213,3 +1213,24 @@ tmavém poli (hlášeno: přihlašovací obrazovka, Dovolená).
 **Test:** pro každý podklad, který komponenty skutečně používají (`var(--…)` v kódu), musí
 pravidlo karty v obou skinech obsahovat jeho přepnutí — nový podklad v budoucnu test
 odhalí (ověřeno sabotáží: bez `--panel` test selže).
+
+---
+
+## Aktualizace v55 — režim „jen náhled" (člen bez směn, např. manažer)
+
+**Požadavek:** manažer má rozvrh vidět, ale nesmí být ve směnách ani se počítat do pravidel.
+**Řešení:** příznak `observer: true` v `users/{id}`.
+- `employees` = jen PLÁNOVANÍ členové (`!x.observer`) → pozorovatel automaticky mizí z
+  rozvrhu, stálého rozvrhu, pravidel, návrhů, férovosti i statistik (všech ~49 použití).
+  I jeho dříve uložené směny se ignorují: `dayStats` počítá jen členy z `employees`,
+  `ShiftCard` neznámého člověka nevykreslí (pokryto testem).
+- Přihlášení a čtení dat beze změny (role zůstává) → rozvrh vidí. Páteční e-mail
+  dostává dál (bot bere příjemce přímo z `users`).
+- Tým: na kartě člena „👁 Jen náhled — nepočítat do směn" (s potvrzením), sekce
+  „Jen náhled" s „Vrátit do směn", pruh „Správci" s přepínačem i pro adminy (ti kartu
+  člena nemají). Akce se zapisují do logu.
+- **Pravidla DB:** `observerUnchanged()` — příznak smí měnit jen admin (jinak by se
+  kdokoli mohl sám vyřadit ze směn). **Nutno nasadit firestore.rules v konzoli Firebase.**
+- Testy: rozvrh (uložená směna pozorovatele se nepočítá do kanceláře), Tým (sekce,
+  přepínač, admin bez karty), struktura (filtry, napojení), pravidla (člen nesmí, admin
+  smí — běží na emulátoru v CI). 94 testů.

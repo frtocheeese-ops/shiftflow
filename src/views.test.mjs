@@ -113,7 +113,9 @@ test("PeopleView: členové se zbývajícími dny a fixy, bez admina", async () 
     { id: "adm", name: "Admin", role: "admin" },
   ];
   const html = await render(PeopleView, { employees: emps, onAdd() {}, onEditDays() {}, onDelete() {}, onAdjustFixes() {} });
-  assert.match(html, /Jiří Slavíček/); assert.match(html, /Andy/); assert.doesNotMatch(html, />Admin</);
+  assert.match(html, /Jiří Slavíček/); assert.match(html, /Andy/);
+  assert.equal((html.match(/Vyřešené problémy/g) || []).length, 2);          // karty jen pro 2 členy, admin kartu nemá
+  assert.match(html, /Správci:[\s\S]*Admin/);                                // admin jen v pruhu správců (kvůli přepínači „jen náhled")
   assert.match(html, />15</);                        // dovolená 20 − 5
   assert.match(html, /Vyřešené problémy/);
 });
@@ -329,6 +331,18 @@ test("ScheduleView: v den Nástupů obrázek Nástup is coming, jinak ne", async
   const V = await loadView("ScheduleView");
   assert.match(await render(V, await scheduleFixture({ intake: { "Út": true } })), /Nástup is coming/);
   assert.doesNotMatch(await render(V, await scheduleFixture({ intake: {} })), /Nástup is coming/);
+});
+
+test("PeopleView: režim jen náhled — sekce s návratem do směn, na kartě člena přepínač", async () => {
+  const PeopleView = await loadView("PeopleView");
+  const emps = [{ id: "a", name: "Jiří Slavíček", role: "employee" }];
+  const observers = [{ id: "m", name: "Manažer Novák", role: "employee", observer: true }];
+  const html = await render(PeopleView, { employees: emps, observers, onSetObserver() {}, onAdd() {}, onEditDays() {}, onDelete() {}, onAdjustFixes() {} });
+  assert.match(html, /👁 Jen náhled<\/div>/);
+  assert.match(html, /Manažer Novák[\s\S]*Vrátit do směn/);
+  assert.match(html, /Jen náhled — nepočítat do směn/);
+  const bez = await render(PeopleView, { employees: emps, onAdd() {}, onEditDays() {}, onDelete() {}, onAdjustFixes() {} });
+  assert.doesNotMatch(bez, /Vrátit do směn/);                                 // bez pozorovatelů sekce chybí
 });
 
 test.after(() => rmSync(OUT, { recursive: true, force: true }));

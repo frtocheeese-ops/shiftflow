@@ -22,14 +22,18 @@ service cloud.firestore {
     function roleUnchanged() {
       return request.resource.data.get('role', null) == resource.data.get('role', null);
     }
+    // „Jen náhled" (vyřazení ze směn a pravidel) smí měnit jen admin — jinak by se kdokoli mohl sám vyřadit ze směn
+    function observerUnchanged() {
+      return request.resource.data.get('observer', false) == resource.data.get('observer', false);
+    }
 
     match /users/{userId} {
       // člen vidí tým; čekající vidí jen sám sebe (aby appka věděla, že čeká)
       allow read:   if isMember() || isSelf(userId);
       // registrace: jen vlastní profil a jen jako „pending"; admin zakládá kohokoli (Přidat člena)
       allow create: if (isSelf(userId) && request.resource.data.role == 'pending') || isAdmin();
-      // sám sobě cokoli kromě role; admin komukoli
-      allow update: if (isSelf(userId) && roleUnchanged()) || isAdmin();
+      // sám sobě cokoli kromě role a „jen náhled"; admin komukoli
+      allow update: if (isSelf(userId) && roleUnchanged() && observerUnchanged()) || isAdmin();
       allow delete: if isAdmin();
     }
 

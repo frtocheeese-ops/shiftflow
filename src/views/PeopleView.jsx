@@ -2,7 +2,7 @@
    Nic nezapisuje: přidání, úprava, smazání i změna počtu fixů volá funkce z App.jsx. */
 import { Btn, Card, RankBadge } from "../ui";
 
-export default function PeopleView({ employees, pendingUsers = [], onApprove, onReject, onAdd, onEditDays, onDelete, onAdjustFixes }) {
+export default function PeopleView({ employees, observers = [], onSetObserver = () => {}, pendingUsers = [], onApprove, onReject, onAdd, onEditDays, onDelete, onAdjustFixes }) {
   return (
     <div>
       {pendingUsers.length > 0 && <Card style={{ marginBottom: 16, borderLeft: "3px solid var(--amb)" }}>
@@ -18,6 +18,19 @@ export default function PeopleView({ employees, pendingUsers = [], onApprove, on
       </Card>}
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20, borderBottom: "1px solid var(--brd)", paddingBottom: 12 }}><div style={{ fontSize: 20, fontWeight: 600, color: "var(--w)", fontFamily: "var(--font-head)", textTransform: "uppercase", letterSpacing: 2 }}>Tým</div><Btn warm onClick={onAdd}>+ Přidat</Btn></div>
           <div style={{ marginBottom: 24 }}>
+            {observers.length > 0 && <Card style={{ marginBottom: 16, borderLeft: "3px solid var(--sd)" }}>
+              <div style={{ fontWeight: 600, fontSize: 16, color: "var(--w)", marginBottom: 4 }}>👁 Jen náhled</div>
+              <div style={{ fontSize: 13, color: "var(--tx3)", marginBottom: 10 }}>Vidí rozvrh, ale nejsou ve směnách a nepočítají se do pravidel, férovosti ani statistik.</div>
+              {observers.map(o => <div key={o.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: "1px solid var(--brd)" }}>
+                <span style={{ flex: 1, color: "var(--tx)", fontSize: 15 }}>{o.name}{o.role === "admin" ? " (admin)" : ""}</span>
+                <Btn small onClick={() => onSetObserver(o, false)}>Vrátit do směn</Btn>
+              </div>)}
+            </Card>}
+            {employees.some(e => e.role === "admin") && <div style={{ marginBottom: 14, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8, fontSize: 13, color: "var(--tx3)" }}>
+              <span>Správci:</span>
+              {employees.filter(e => e.role === "admin").map(a => <span key={a.id} style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "2px 4px 2px 10px", border: "1px solid var(--brd)" }}>{a.name}
+                <button onClick={() => onSetObserver(a, true)} title="Jen náhled — nepočítat do směn" aria-label={`${a.name}: jen náhled`} style={{ background: "none", border: "none", color: "var(--tx3)", cursor: "pointer", minWidth: 32, minHeight: 32 }}>👁</button></span>)}
+            </div>}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(280px,1fr))", gap: 12 }}>{employees.filter(e => e.role !== "admin").map(emp => <Card key={emp.id}>
               <div style={{ display: "flex", justifyContent: "space-between" }}>
                 <div style={{ fontWeight: 600, fontSize: 17, color: "var(--w)", display: "flex", alignItems: "center", gap: 8 }}>{emp.name}<RankBadge fixes={emp.fixCount} size={26} /></div>
@@ -30,6 +43,7 @@ export default function PeopleView({ employees, pendingUsers = [], onApprove, on
                 <span style={{ fontFamily: "var(--font-mono)", fontSize: 16, fontWeight: 600, color: "var(--amb)", minWidth: 24, textAlign: "center" }}>{emp.fixCount || 0}</span>
                 <button onClick={() => onAdjustFixes(emp, 1)} style={{ background: "none", border: "1px solid var(--brd2)", color: "var(--tx3)", cursor: "pointer", width: 28, height: 28 }}>+</button>
               </div>
+              <button onClick={() => onSetObserver(emp, true)} title="Rozvrh uvidí, ale nebude ve směnách a nezapočítá se do pravidel" style={{ marginTop: 8, width: "100%", minHeight: 36, background: "none", border: "1px dashed var(--brd2)", color: "var(--tx3)", cursor: "pointer", fontSize: 13 }}>👁 Jen náhled — nepočítat do směn</button>
             </Card>)}</div>
           </div>
     </div>

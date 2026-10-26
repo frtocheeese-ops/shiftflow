@@ -224,3 +224,13 @@ test("férovost: HO navíc oproti stálému rozvrhu bilanci snižuje (i do plusu
   const w2 = empty(); w2.Po["08:00"] = [{ empId: "a", ho: true }]; w2["Út"]["09:00"] = [{ empId: "a", ho: true }];
   assert.equal(computeFairness({ "2026-09-14": wkDoc(w2), "2026-09-21": wkDoc(dc(w2)) }, emps, []).rows.find(x => x.id === "a").deficit, -2);
 });
+
+test("jen náhled: uložené směny člověka mimo plánovaný tým se do pravidel nepočítají", () => {
+  // 3 plánovaní v kanceláři + manažer (jen náhled) se starou uloženou směnou → kancelář musí hlásit jen 3
+  const team = ["a", "b", "c"].map(id => ({ id, name: id, role: "employee", setupDone: true }));
+  const w = {}; for (const d of DAYS) { w[d] = { "08:00": [], "09:00": [], "10:00": [] }; }
+  for (const d of DAYS) { w[d]["08:00"] = [{ empId: "a" }, { empId: "b" }, { empId: "m" }]; w[d]["10:00"] = [{ empId: "c" }]; }
+  const r = analyzeWeek(w, {}, team, {});
+  assert.ok(r.violations.some(v => v.day === "Po" && /v kanceláři jen 3/.test(v.msg)), "manažer se nesmí počítat do kanceláře");
+  assert.equal(dayStats(w, {}, "Po", team).office.length, 3);
+});
