@@ -166,3 +166,12 @@ test("jen náhled: plánovaný tým bez pozorovatelů, pozorovatelé zvlášť p
   const rules = readFileSync(new URL("../firestore.rules", import.meta.url), "utf8");
   assert.match(rules, /allow update: if \(isSelf\(userId\) && roleUnchanged\(\) && observerUnchanged\(\)\) \|\| isAdmin\(\);/);
 });
+
+test("Lékař: okno celý den / část dne; Dovolená ukazuje všechny nepřítomnosti, počet dní jen dovolenou", () => {
+  assert.match(src, /type === "doctor" \? setDocSel\(\{ run \}\)/);
+  assert.match(src, /<DoctorF onPick=\{time => \{[^}]*d\.run\("time", "half_doctor", time\)/);
+  assert.equal((src.match(/\(p, tt, tm\) => addAbs/g) || []).length, 5);          // všech 5 míst zadání předává typ i čas
+  assert.match(src, /if \(type === "half_ho" \|\| !ABS\.some\(a => a\.id === type\)\) return;/);
+  assert.match(src, /\["vacation", "half_vacation"\]\.includes\(vacMap\[e\.id\]/);
+  assert.doesNotMatch(src, /options=\{ABS\.map\(/);                               // skryté typy v nabídkách nejsou
+});

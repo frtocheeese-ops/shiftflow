@@ -19,6 +19,8 @@ export const HalfTag = ({ en, compact }) => {
   if (!en?.halfAbs) return null;
   const a = ABS.find(x => x.id === en.halfAbs);
   const second = en.halfPart === "second";
+  if (en.halfAbs === "half_doctor") return <span title={`Lékař ${en.halfTime || "(část dne)"}`}
+    style={{ flexShrink: 0, fontSize: compact ? 9 : 10, padding: compact ? "0 3px" : "1px 5px", border: `1px solid ${a?.color || "var(--brd2)"}`, color: a?.color || "var(--tx2)", fontFamily: "var(--font-mono)", whiteSpace: "nowrap", lineHeight: 1.6 }}>{a?.icon} {en.halfTime || "lékař"}</span>;
   return <span title={`${a?.label || "Půlden"} — chybí ${second ? "odpoledne (2. polovina směny)" : "dopoledne (1. polovina směny)"}`}
     style={{ flexShrink: 0, fontSize: compact ? 9 : 10, padding: compact ? "0 3px" : "1px 5px", border: `1px solid ${a?.color || "var(--brd2)"}`, color: a?.color || "var(--tx2)", fontFamily: "var(--font-mono)", whiteSpace: "nowrap", lineHeight: 1.6 }}>{a?.icon} {compact ? (second ? "odp." : "dop.") : `chybí ${HALF_LBL[second ? "second" : "first"]}`}</span>;
 };

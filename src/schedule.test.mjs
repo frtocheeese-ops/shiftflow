@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   SHIFTS, DAYS, buildDef, personalOf, withDefaults, applyRotations, rotIsSwapped,
-  dayStats, analyzeWeek, applyAlt, getMon, localISO, computeFairness,
+  dayStats, analyzeWeek, applyAlt, getMon, localISO, computeFairness, ABS,
 } from "./schedule.js";
 import { TEAM_WEEK } from "./test-fixtures.mjs";
 
@@ -233,4 +233,24 @@ test("jen náhled: uložené směny člověka mimo plánovaný tým se do pravid
   const r = analyzeWeek(w, {}, team, {});
   assert.ok(r.violations.some(v => v.day === "Po" && /v kanceláři jen 3/.test(v.msg)), "manažer se nesmí počítat do kanceláře");
   assert.equal(dayStats(w, {}, "Po", team).office.length, 3);
+});
+
+test("lékař jen část dne: člověk zůstává ve směně a počítá se do pokrytí; čas se při přepočtu neztratí", () => {
+  const emps = fe(); emps[0].defaultSchedule = { Po: "08:00" }; emps[1].defaultSchedule = { Po: "08:00" };
+  const stored = empty();
+  stored.Po["08:00"] = [{ empId: "a", isDefault: true, halfAbs: "half_doctor", halfPart: "time", halfTime: "09:00–11:00" }, { empId: "b", isDefault: true }];
+  const abs = { "a__Po": "half_doctor" };
+  const w = withDefaults(stored, abs, emps, FUTURE, []);
+  const a = w.Po["08:00"].find(e => e.empId === "a");
+  assert.ok(a, "A musí zůstat ve směně");
+  assert.equal(a.halfTime, "09:00–11:00");
+  assert.equal(dayStats(w, abs, "Po", emps).office.length, 2);                // krátká návštěva pokrytí neohrozí
+  // pro srovnání: celodenní lékař z kanceláře vyřadí
+  assert.equal(dayStats(withDefaults(null, { "a__Po": "doctor" }, emps, FUTURE, []), { "a__Po": "doctor" }, "Po", emps).office.length, 1);
+});
+
+test("typ Lékař (část dne) je v nabídkách skrytý — vybírá se přes Lékař", () => {
+  const h = ABS.find(a => a.id === "half_doctor");
+  assert.ok(h && h.hidden === true);
+  assert.ok(ABS.filter(a => !a.hidden).some(a => a.id === "doctor"));
 });
