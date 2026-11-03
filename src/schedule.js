@@ -24,6 +24,8 @@ export const ABS = [
   { id: "business_trip", label: "Služební cesta", icon: "🚗", color: "#3c90a8" },
   { id: "half_vacation", label: "½ Dovolená", icon: "½🏖", color: "#4080b0" },
   { id: "half_ho", label: "½ HO", icon: "½🏠", color: "#50a060" },
+  // Lékař jen část dne (od–do): člověk zůstává ve směně s časem; v nabídkách skrytý (vybírá se přes „Lékař")
+  { id: "half_doctor", label: "Lékař (část dne)", icon: "🏥", color: "#d48020", hidden: true },
 ];
 export const EVTS = [{ id: "training", label: "Školení", icon: "📚" }, { id: "dinner", label: "Večeře", icon: "🍽️" }, { id: "teambuilding", label: "Teambuilding", icon: "🎯" }, { id: "meeting", label: "Porada", icon: "💬" }, { id: "other", label: "Jiné", icon: "📌" }];
 export const HMAP = {
@@ -80,7 +82,7 @@ export function applyRotations(entries, weekKey, rotations, absences, intake, in
     entries[day][B.sh] = entries[day][B.sh].filter(e => e.empId !== bId);
     if (!entries[day][targetA]) entries[day][targetA] = [];
     if (!entries[day][targetB]) entries[day][targetB] = [];
-    const half = en => en.halfAbs ? { halfAbs: en.halfAbs, halfPart: en.halfPart || "first" } : {};
+    const half = en => en.halfAbs ? { halfAbs: en.halfAbs, halfPart: en.halfPart || "first", ...(en.halfTime ? { halfTime: en.halfTime } : {}) } : {};
     entries[day][targetA].push({ empId: aId, ho: hoA, isDefault: true, rot: true, ...half(A.en) });
     entries[day][targetB].push({ empId: bId, ho: hoB, isDefault: true, rot: true, ...half(B.en) });
   });
@@ -122,7 +124,7 @@ export function withDefaults(entries, absences, emps, weekKey, rotations, intake
       const shift = emp.defaultSchedule[day];
       if (!shift || !SHIFTS.includes(shift)) return;           // stálý rozvrh říká volno
       const en = { empId: emp.id, ho: emp.defaultSchedule[`${day}_ho`] || false, isDefault: true };
-      if (absT) { en.halfAbs = absT; en.halfPart = cur?.en.halfPart || "first"; } // půlden: zůstává a nese označení
+      if (absT) { en.halfAbs = absT; en.halfPart = cur?.en.halfPart || "first"; if (cur?.en.halfTime) en.halfTime = cur.en.halfTime; } // půlden: zůstává a nese označení
       merged[day][shift].push(en);
     });
   });
@@ -150,7 +152,8 @@ export function dayStats(cs, absences, day, employees) {
   const office = [], ho = [];
   SHIFTS.forEach(sh => (cs[day]?.[sh] || []).forEach(en => {
     // Výjimka: půlden na 1. polovinu u směny od 10:00 pokrytí neohrozí → nevyžaduje návrh řešení.
-    const halfCovers = !!en.halfAbs && en.halfPart === "first" && sh === "10:00";
+    // Krátká návštěva lékaře (část dne) pokrytí neohrozí → počítá se jako přítomný.
+    const halfCovers = (!!en.halfAbs && en.halfPart === "first" && sh === "10:00") || en.halfAbs === "half_doctor";
     if (absSet.has(en.empId) && !halfCovers) return;
     if (!employees.some(e => e.id === en.empId)) return;
     (en.ho ? ho : office).push({ empId: en.empId, shift: sh, half: !!en.halfAbs });

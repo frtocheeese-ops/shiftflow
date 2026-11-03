@@ -345,4 +345,10 @@ test("PeopleView: režim jen náhled — sekce s návratem do směn, na kartě �
   assert.doesNotMatch(bez, /Vrátit do směn/);                                 // bez pozorovatelů sekce chybí
 });
 
+test("ShiftCard: lékař jen část dne ukáže čas návštěvy", async () => {
+  const V = await loadView("ShiftCard");
+  const html = await render(V, scProps({ entries: [{ empId: "andy", halfAbs: "half_doctor", halfPart: "time", halfTime: "09:00–11:00" }] }));
+  assert.match(html, /Andy/); assert.match(html, /🏥 (<!-- -->)?09:00–11:00/);
+});
+
 test.after(() => rmSync(OUT, { recursive: true, force: true }));

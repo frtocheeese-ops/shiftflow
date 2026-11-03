@@ -642,7 +642,19 @@ function AuthScreen() {
 }
 
 
-function AbsF({ emps, wd, onSubmit }) { const [eid, setEid] = useState(emps[0]?.id || ""); const [dayIdx, setDayIdx] = useState(0); const [t, setT] = useState(ABS[0].id); return <div><Sel label="Zaměstnanec" value={eid} onChange={e => setEid(e.target.value)} options={emps.map(e => ({ value: e.id, label: e.name }))} /><Sel label="Den" value={dayIdx} onChange={e => setDayIdx(+e.target.value)} options={DAYS.map((d, i) => ({ value: i, label: `${DAYS_F[i]} ${fmtDate(wd[i])}` }))} /><Sel label="Typ" value={t} onChange={e => setT(e.target.value)} options={ABS.map(a => ({ value: a.id, label: `${a.icon} ${a.label}` }))} /><Btn warm onClick={() => onSubmit(eid, DAYS[dayIdx], t)} style={{ width: "100%", marginTop: 8 }}>Přidat</Btn></div>; }
+function AbsF({ emps, wd, onSubmit }) { const [eid, setEid] = useState(emps[0]?.id || ""); const [dayIdx, setDayIdx] = useState(0); const [t, setT] = useState(ABS[0].id); return <div><Sel label="Zaměstnanec" value={eid} onChange={e => setEid(e.target.value)} options={emps.map(e => ({ value: e.id, label: e.name }))} /><Sel label="Den" value={dayIdx} onChange={e => setDayIdx(+e.target.value)} options={DAYS.map((d, i) => ({ value: i, label: `${DAYS_F[i]} ${fmtDate(wd[i])}` }))} /><Sel label="Typ" value={t} onChange={e => setT(e.target.value)} options={ABS.filter(a => !a.hidden).map(a => ({ value: a.id, label: `${a.icon} ${a.label}` }))} /><Btn warm onClick={() => onSubmit(eid, DAYS[dayIdx], t)} style={{ width: "100%", marginTop: 8 }}>Přidat</Btn></div>; }
+function DoctorF({ onPick }) {
+  const [od, setOd] = useState("08:00"); const [doo, setDoo] = useState("10:00"); const ok = !!od && !!doo && od < doo;
+  return <div style={{ display: "grid", gap: 12 }}>
+    <Btn warm onClick={() => onPick(null)} style={{ width: "100%" }}>🏥 Celý den</Btn>
+    <div style={{ borderTop: "1px solid var(--brd)", paddingTop: 12 }}>
+      <div style={{ fontSize: 13, color: "var(--tx2)", marginBottom: 8 }}>Jen část dne — zůstává ve směně s označením času</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}><Input label="Od" type="time" value={od} onChange={e => setOd(e.target.value)} /><Input label="Do" type="time" value={doo} onChange={e => setDoo(e.target.value)} /></div>
+      {!ok && <p style={{ fontSize: 13, color: "var(--red)", margin: "0 0 8px" }}>Konec musí být později než začátek.</p>}
+      <Btn disabled={!ok} onClick={() => onPick(`${od}–${doo}`)} style={{ width: "100%" }}>⏱ Uložit část dne</Btn>
+    </div>
+  </div>;
+}
 function EvF({ onSubmit }) { const [day, setDay] = useState(DAYS[0]); const [t, setT] = useState(EVTS[0].id); const [n, setN] = useState(""); return <div><Sel label="Den" value={day} onChange={e => setDay(e.target.value)} options={DAYS.map((d, i) => ({ value: d, label: DAYS_F[i] }))} /><Sel label="Typ" value={t} onChange={e => setT(e.target.value)} options={EVTS.map(e => ({ value: e.id, label: `${e.icon} ${e.label}` }))} /><Input label="Poznámka" value={n} onChange={e => setN(e.target.value)} /><Btn warm onClick={() => onSubmit(day, t, n)} style={{ width: "100%", marginTop: 8 }}>Přidat</Btn></div>; }
 function SwF({ dDay, dShift, wd, onSubmit }) {
   const [dateISO, setDateISO] = useState(() => { const idx = dDay ? DAYS.indexOf(dDay) : 0; return wd?.[idx >= 0 ? idx : 0] || ""; });
@@ -663,7 +675,7 @@ function SwF({ dDay, dShift, wd, onSubmit }) {
     <Btn warm disabled={!dateISO || isWeekend || isPast} onClick={() => onSubmit(dateISO, sh, comment)} style={{ width: "100%", marginTop: 8 }}>Odeslat</Btn>
   </div>;
 }
-function MyAbsF({ profile, wd, onSubmit }) { const [dayIdx, setDayIdx] = useState(Math.max(0, todayIdx)); const [t, setT] = useState(ABS[0].id); const r = { sick: (profile.sickTotal || 5) - (profile.sickUsed || 0), vacation: (profile.vacationTotal || 20) - (profile.vacationUsed || 0), whatever: (profile.whateverTotal || 3) - (profile.whateverUsed || 0) }; return <div><div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 20 }}>{[{ l: "Dovol.", v: r.vacation, c: "var(--sd)" }, { l: "Sick", v: r.sick, c: "var(--red)" }, { l: "What.", v: r.whatever, c: "var(--amb)" }].map(b => <div key={b.l} style={{ textAlign: "center", padding: 12, border: "1px solid var(--brd)", background: "var(--bg3)" }}><div style={{ fontSize: 28, fontWeight: 600, color: b.c, fontFamily: "var(--font-mono)" }}>{b.v}</div><div style={{ fontSize: 11, color: "var(--tx3)", textTransform: "uppercase" }}>{b.l}</div></div>)}</div><Sel label="Den" value={dayIdx} onChange={e => setDayIdx(+e.target.value)} options={DAYS.map((d, i) => ({ value: i, label: `${DAYS_F[i]} ${fmtDate(wd[i])}` }))} /><Sel label="Typ" value={t} onChange={e => setT(e.target.value)} options={ABS.map(a => ({ value: a.id, label: `${a.icon} ${a.label}` }))} /><Btn warm onClick={() => onSubmit(DAYS[dayIdx], t)} style={{ width: "100%", marginTop: 8 }}>Zadat</Btn></div>; }
+function MyAbsF({ profile, wd, onSubmit }) { const [dayIdx, setDayIdx] = useState(Math.max(0, todayIdx)); const [t, setT] = useState(ABS[0].id); const r = { sick: (profile.sickTotal || 5) - (profile.sickUsed || 0), vacation: (profile.vacationTotal || 20) - (profile.vacationUsed || 0), whatever: (profile.whateverTotal || 3) - (profile.whateverUsed || 0) }; return <div><div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 20 }}>{[{ l: "Dovol.", v: r.vacation, c: "var(--sd)" }, { l: "Sick", v: r.sick, c: "var(--red)" }, { l: "What.", v: r.whatever, c: "var(--amb)" }].map(b => <div key={b.l} style={{ textAlign: "center", padding: 12, border: "1px solid var(--brd)", background: "var(--bg3)" }}><div style={{ fontSize: 28, fontWeight: 600, color: b.c, fontFamily: "var(--font-mono)" }}>{b.v}</div><div style={{ fontSize: 11, color: "var(--tx3)", textTransform: "uppercase" }}>{b.l}</div></div>)}</div><Sel label="Den" value={dayIdx} onChange={e => setDayIdx(+e.target.value)} options={DAYS.map((d, i) => ({ value: i, label: `${DAYS_F[i]} ${fmtDate(wd[i])}` }))} /><Sel label="Typ" value={t} onChange={e => setT(e.target.value)} options={ABS.filter(a => !a.hidden).map(a => ({ value: a.id, label: `${a.icon} ${a.label}` }))} /><Btn warm onClick={() => onSubmit(DAYS[dayIdx], t)} style={{ width: "100%", marginTop: 8 }}>Zadat</Btn></div>; }
 function EditDF({ emp, onDone }) { const [vac, setVac] = useState(emp?.vacationTotal || 20); const [sick, setSick] = useState(emp?.sickTotal || 5); const [what, setWhat] = useState(emp?.whateverTotal || 3); const [l, setL] = useState(false); if (!emp) return null; return <div><Input label="Dovolená" type="number" value={vac} onChange={e => setVac(+e.target.value)} /><Input label="Sick Days" type="number" value={sick} onChange={e => setSick(+e.target.value)} /><Input label="Whatever Days" type="number" value={what} onChange={e => setWhat(+e.target.value)} /><Btn warm disabled={l} onClick={async () => { setL(true); await updateDoc(doc(db, "users", emp.id), { vacationTotal: vac, sickTotal: sick, whateverTotal: what }); setL(false); onDone(); }} style={{ width: "100%", marginTop: 8 }}>Uložit</Btn></div>; }
 function AddF({ onDone }) { const [name, setName] = useState(""); const [email, setEmail] = useState(""); const [pass, setPass] = useState(""); const [l, setL] = useState(false); const [err, setErr] = useState(""); return <div><Input label="Jméno" value={name} onChange={e => setName(e.target.value)} /><Input label="Email" value={email} onChange={e => setEmail(e.target.value)} /><Input label="Heslo (min. 6)" type="password" value={pass} onChange={e => setPass(e.target.value)} />{err && <p style={{ color: "var(--red)", fontSize: 14, marginBottom: 8, padding: 10, border: "1px solid var(--red)" }}>{err}</p>}<Btn warm disabled={l} onClick={async () => { setErr(""); if (!name.trim() || !email || !pass) return setErr("Vyplňte vše"); if (pass.length < 6) return setErr("Min. 6 znaků"); setL(true); try { const r = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${import.meta.env.VITE_FIREBASE_API_KEY}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, password: pass, displayName: name.trim(), returnSecureToken: false }) }); const d = await r.json(); if (d.error) { setErr(d.error.message); setL(false); return; } await setDoc(doc(db, "users", d.localId), { name: name.trim(), email, role: "employee", notify: false, notifyEmail: "", fcmToken: null, defaultSchedule: null, setupDone: false, vacationTotal: 20, sickTotal: 5, whateverTotal: 3, vacationUsed: 0, sickUsed: 0, whateverUsed: 0, createdAt: new Date().toISOString() }); onDone(`Přidán: ${name.trim()}`); } catch (e) { setErr(e.message); } setL(false); }} style={{ width: "100%" }}>Přidat</Btn></div>; }
 function MoveForm({ curDay, curShift, onMove }) {
@@ -799,7 +811,9 @@ export default function App() {
   const log = async msg => { try { await addDoc(collection(db, "auditLog"), { msg, time: new Date().toISOString(), week: wk, userId: profile?.id }); } catch { } };
   const eN = (emp, msg) => { if (emp?.notify) callGAS("sendEmail", { to: emp.notifyEmail || emp.email, employeeName: emp.name, changeDescription: msg, weekLabel: fmtW(cw) }); };
   const [halfSel, setHalfSel] = useState(null); // výběr poloviny směny u půldne
-  const withHalf = (type, run) => String(type).startsWith("half_") ? setHalfSel({ type, run }) : run(null);
+  const [docSel, setDocSel] = useState(null); // Lékař: celý den, nebo část dne (od–do)
+  // run(část, náhradníTyp, čas): u lékaře po části dne → typ half_doctor s časem
+  const withHalf = (type, run) => type === "doctor" ? setDocSel({ run }) : String(type).startsWith("half_") ? setHalfSel({ type, run }) : run(null);
   // Merge saved schedule with default schedule for any new employees not yet in saved data
   const cs = useMemo(() => withDefaults(schedule, absences, employees, wk, rules.rotations, intake, intakeAllow), [schedule, employees, absences, wk, rules.rotations, intake, intakeAllow]);
   const wd = useMemo(() => getWeekDates(wo), [wo]);
@@ -1007,7 +1021,7 @@ export default function App() {
   }, "HO přepnuto");
 
   // ABSENCE: transakční zápis (řeší souběh) + increment počítadla
-  const addAbs = async (eid, day, type, part) => {
+  const addAbs = async (eid, day, type, part, time) => {
     if (!isA && eid !== profile.id) return;
     const absKey = fsKey(eid, day);
     const emp = ge(eid);
@@ -1017,11 +1031,11 @@ export default function App() {
         if (half) {
           // půlden = člověk zůstává ve směně, jen se označí která polovina chybí
           let found = false;
-          SHIFTS.forEach(sh => (s[day]?.[sh] || []).forEach(e => { if (e.empId === eid) { e.halfAbs = type; e.halfPart = part || "first"; found = true; } }));
+          SHIFTS.forEach(sh => (s[day]?.[sh] || []).forEach(e => { if (e.empId === eid) { e.halfAbs = type; e.halfPart = part || "first"; if (time) e.halfTime = time; else delete e.halfTime; found = true; } }));
           const dsh = emp?.defaultSchedule?.[day];
           if (!found && SHIFTS.includes(dsh)) {
             if (!s[day]) s[day] = {}; if (!s[day][dsh]) s[day][dsh] = [];
-            s[day][dsh].push({ empId: eid, ho: emp.defaultSchedule[`${day}_ho`] || false, isDefault: true, halfAbs: type, halfPart: part || "first" });
+            s[day][dsh].push({ empId: eid, ho: emp.defaultSchedule[`${day}_ho`] || false, isDefault: true, halfAbs: type, halfPart: part || "first", ...(time ? { halfTime: time } : {}) });
           }
         } else {
           SHIFTS.forEach(sh => { if (s[day]?.[sh]) s[day][sh] = s[day][sh].filter(e => e.empId !== eid); });
@@ -1030,11 +1044,11 @@ export default function App() {
       });
       // optimistické lokální sladění
       setAbsences(prev => ({ ...prev, [absKey]: type }));
-      if (emp && !["doctor", "training", "half_ho", "business_trip"].includes(type)) {
+      if (emp && !["doctor", "half_doctor", "training", "half_ho", "business_trip"].includes(type)) {
         const f = type === "sick" ? "sickUsed" : type === "vacation" || type === "half_vacation" ? "vacationUsed" : type === "whatever" ? "whateverUsed" : null;
         if (f) await updateDoc(doc(db, "users", eid), { [f]: increment(type.startsWith("half_") ? 0.5 : 1) });
       }
-      const al = ABS.find(a => a.id === type)?.label;
+      const al = (ABS.find(a => a.id === type)?.label || type) + (time ? ` ${time}` : "");
       notify(`${emp?.name}: ${al}`); log(`${emp?.name}: ${al} ${day}`);
       if (profile?.gcalEnabled && getGcalToken() && eid === profile.id) {
         setTimeout(() => syncWeekToGCal(profile.id, wd, cs, employees, { ...absences, [absKey]: type }, wk, rules.rotations, intake, intakeAllow).catch(() => {}), 1500);
@@ -1043,7 +1057,7 @@ export default function App() {
   };
 
   // Absence for a date range (vacation etc)
-  const addAbsRange = async (fromISO, toISO, type, forId, part) => {
+  const addAbsRange = async (fromISO, toISO, type, forId, part, time) => {
     const eid = forId || profile.id;
     const half = String(type).startsWith("half_");
     const emp0 = ge(eid);
@@ -1059,11 +1073,11 @@ export default function App() {
         await txSchedule(({ entries: s, absences: a }) => {
           if (half) {
             let found = false;
-            SHIFTS.forEach(sh => (s[dayName]?.[sh] || []).forEach(e => { if (e.empId === eid) { e.halfAbs = type; e.halfPart = part || "first"; found = true; } }));
+            SHIFTS.forEach(sh => (s[dayName]?.[sh] || []).forEach(e => { if (e.empId === eid) { e.halfAbs = type; e.halfPart = part || "first"; if (time) e.halfTime = time; else delete e.halfTime; found = true; } }));
             const dsh = emp0?.defaultSchedule?.[dayName];
             if (!found && SHIFTS.includes(dsh)) {
               if (!s[dayName]) s[dayName] = {}; if (!s[dayName][dsh]) s[dayName][dsh] = [];
-              s[dayName][dsh].push({ empId: eid, ho: emp0.defaultSchedule[`${dayName}_ho`] || false, isDefault: true, halfAbs: type, halfPart: part || "first" });
+              s[dayName][dsh].push({ empId: eid, ho: emp0.defaultSchedule[`${dayName}_ho`] || false, isDefault: true, halfAbs: type, halfPart: part || "first", ...(time ? { halfTime: time } : {}) });
             }
           } else {
             SHIFTS.forEach(sh => { if (s[dayName]?.[sh]) s[dayName][sh] = s[dayName][sh].filter(e => e.empId !== eid); });
@@ -1077,7 +1091,7 @@ export default function App() {
     }
     // Update day counter
     const emp = ge(eid);
-    if (emp && !["doctor", "training", "half_ho", "business_trip"].includes(type)) {
+    if (emp && !["doctor", "half_doctor", "training", "half_ho", "business_trip"].includes(type)) {
       const f = type === "sick" ? "sickUsed" : (type === "vacation" || type === "half_vacation") ? "vacationUsed" : type === "whatever" ? "whateverUsed" : null;
       if (f) await updateDoc(doc(db, "users", eid), { [f]: increment(half ? count * 0.5 : count) });
     }
@@ -1448,18 +1462,18 @@ export default function App() {
       const monday = new Date(mon + "T00:00:00");
       if (isNaN(monday)) return;
       Object.entries(data.absences).forEach(([k, type]) => {
-        if (type !== "vacation" && type !== "half_vacation") return;
+        if (type === "half_ho" || !ABS.some(a => a.id === type)) return;   // všechny nepřítomnosti kromě ½ HO (to není nepřítomnost)
         const idx = k.lastIndexOf("__"); if (idx < 0) return;
         const empId = k.slice(0, idx), day = k.slice(idx + 2);
         const di = DAYS.indexOf(day); if (di < 0) return;
         const d = new Date(monday); d.setDate(monday.getDate() + di);
         if (d.getFullYear() !== vacYear) return;
-        let part = null;
-        if (type === "half_vacation") {
+        let part = null, time = null;
+        if (String(type).startsWith("half_")) {
           const dd = data.entries?.[day] || {};
-          Object.values(dd).forEach(arr => (arr || []).forEach(en => { if (en.empId === empId && en.halfPart) part = en.halfPart; }));
+          Object.values(dd).forEach(arr => (arr || []).forEach(en => { if (en.empId === empId) { if (en.halfPart) part = en.halfPart; if (en.halfTime) time = en.halfTime; } }));
         }
-        (m[empId] || (m[empId] = {}))[localISO(d)] = { type, part };
+        (m[empId] || (m[empId] = {}))[localISO(d)] = { type, part, time };
       });
     });
     return m;
@@ -1535,6 +1549,7 @@ export default function App() {
             <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center", marginBottom: 16, fontSize: 12, color: "var(--tx3)" }}>
               <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 14, height: 14, background: "var(--sd)", display: "inline-block" }} /> Dovolená</span>
               <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 14, height: 14, background: "linear-gradient(135deg,var(--sd) 50%,transparent 50%)", border: "1px solid var(--brd2)", display: "inline-block" }} /> ½ Dovolená (◤ 1. půle / ◢ 2. půle)</span>
+              {ABS.filter(a => !["vacation", "half_vacation", "half_ho", "half_doctor"].includes(a.id)).map(a => <span key={a.id} style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 14, height: 14, background: a.color, display: "inline-block" }} /> {a.label}</span>)}
               <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}><span style={{ width: 14, height: 14, background: "var(--brd)", display: "inline-block" }} /> Víkend / svátek</span>
             </div>
             {(() => {
@@ -1544,7 +1559,7 @@ export default function App() {
               return <div style={{ display: "grid", gap: 16 }}>{MES.map((mName, mi) => {
                 const dim = new Date(vacYear, mi + 1, 0).getDate();
                 const days = Array.from({ length: dim }, (_, i) => i + 1);
-                const total = team.reduce((n, e) => n + days.filter(d => vacMap[e.id]?.[`${vacYear}-${String(mi + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`]).length, 0);
+                const total = team.reduce((n, e) => n + days.filter(d => ["vacation", "half_vacation"].includes(vacMap[e.id]?.[`${vacYear}-${String(mi + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`]?.type)).length, 0);   // počet dní = jen dovolená
                 return <Card key={mi} style={{ padding: 0, overflow: "hidden" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 14px", borderBottom: "1px solid var(--brd)" }}>
                     <span style={{ fontFamily: "var(--font-head)", textTransform: "uppercase", letterSpacing: 1, color: "var(--w)", fontWeight: 600 }}>{mName}</span>
@@ -1566,12 +1581,11 @@ export default function App() {
                           const dt = new Date(vacYear, mi, d); const wd = dt.getDay(); const iso = localISO(dt);
                           const off = wd === 0 || wd === 6 || HMAP[iso];
                           const t = vacMap[e.id]?.[iso];
-                          const bg = t?.type === "vacation" ? "var(--sd)"
-                            : t?.type === "half_vacation" ? `linear-gradient(${t.part === "second" ? 315 : 135}deg,var(--sd) 50%,transparent 50%)`
-                            : off ? "var(--brd)" : "transparent";
+                          const ac = !t ? null : t.type === "vacation" || t.type === "half_vacation" ? "var(--sd)" : (ABS.find(a => a.id === t.type)?.color || "var(--tx3)");
+                          const bg = !t ? (off ? "var(--brd)" : "transparent") : String(t.type).startsWith("half_") ? `linear-gradient(${t.part === "second" ? 315 : 135}deg,${ac} 50%,transparent 50%)` : ac;
                           const can = !off && (isA || e.id === profile.id);
                           return <td key={d} onClick={can ? () => setVacSel({ empId: e.id, name: e.name, iso, type: t?.type, part: t?.part, label: `${d}.${mi + 1}.${vacYear}` }) : undefined}
-                            title={t ? `${e.name} — ${t.type === "vacation" ? "Dovolená" : `½ Dovolená (${t.part === "second" ? "2." : "1."} půle směny)`} ${d}.${mi + 1}.${vacYear}` : can ? `Zadat nepřítomnost — ${d}.${mi + 1}.` : undefined}
+                            title={t ? `${e.name} — ${ABS.find(a => a.id === t.type)?.label || t.type}${t.time ? ` ${t.time}` : String(t.type).startsWith("half_") ? ` (${t.part === "second" ? "2." : "1."} půle směny)` : ""} ${d}.${mi + 1}.${vacYear}` : can ? `Zadat nepřítomnost — ${d}.${mi + 1}.` : undefined}
                             style={{ width: 22, minWidth: 22, height: 22, background: bg, borderBottom: "1px solid var(--brd)", borderRight: "1px solid var(--brd)", cursor: can ? "pointer" : "default" }} />;
                         })}
                       </tr>)}</tbody>
@@ -1613,12 +1627,12 @@ export default function App() {
       <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>{SHIFTS.filter(s => s !== selCell.shift).map(s => <Btn key={s} small style={{ flex: 1 }} onClick={() => { moveE(selCell.empId, selCell.day, selCell.shift, selCell.day, s); setSelCell(null); }}>→ {s}</Btn>)}</div>
       <MoveForm curDay={selCell.day} curShift={selCell.shift} onMove={(d, sh) => { moveE(selCell.empId, selCell.day, selCell.shift, d, sh); setSelCell(null); }} />
       <div style={{ fontSize: 12, color: "var(--tx3)", margin: "14px 0 6px", textTransform: "uppercase", letterSpacing: 1 }}>Nepřítomnost</div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>{ABS.map(a => <Btn key={a.id} small onClick={() => { const c = selCell; setSelCell(null); withHalf(a.id, p => addAbs(c.empId, c.day, a.id, p)); }}>{a.icon} {a.label}</Btn>)}</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>{ABS.filter(a => !a.hidden).map(a => <Btn key={a.id} small onClick={() => { const c = selCell; setSelCell(null); withHalf(a.id, (p, tt, tm) => addAbs(c.empId, c.day, tt || a.id, p, tm)); }}>{a.icon} {a.label}</Btn>)}</div>
       <div style={{ fontSize: 12, color: "var(--tx3)", margin: "14px 0 6px", textTransform: "uppercase", letterSpacing: 1 }}>Poznámka</div>
       <NoteInput onSubmit={n => { saveNote(selCell.empId, selCell.day, selCell.shift, n); setSelCell(null); }} />
     </div>; })()}</Modal>
 
-    <Modal open={modal === "absence"} onClose={() => setModal(null)} title="Nepřítomnost"><AbsF emps={employees.filter(e => e.role !== "admin")} wd={wd} onSubmit={(e, d, t) => { setModal(null); withHalf(t, p => addAbs(e, d, t, p)); }} /></Modal>
+    <Modal open={modal === "absence"} onClose={() => setModal(null)} title="Nepřítomnost"><AbsF emps={employees.filter(e => e.role !== "admin")} wd={wd} onSubmit={(e, d, t) => { setModal(null); withHalf(t, (p, tt, tm) => addAbs(e, d, tt || t, p, tm)); }} /></Modal>
     <Modal open={modal === "event"} onClose={() => setModal(null)} title="Událost"><EvF onSubmit={(d, t, n) => { addEv(d, t, n); setModal(null); }} /></Modal>
     <Modal open={modal?.type === "swap"} onClose={() => setModal(null)} title="Výměna"><SwF dDay={modal?.day} dShift={modal?.shift} wd={wd} onSubmit={(d, s, c) => { mkSwap(profile.id, d, s, c); setModal(null); }} /></Modal>
     <Modal open={modal?.type === "myshift"} onClose={() => setModal(null)} title="Moje směna"><div>
@@ -1628,7 +1642,7 @@ export default function App() {
         if (pendingHO) return <div style={{ padding: "12px 14px", border: "1px solid var(--amb)", color: "var(--amb)", fontSize: 14, marginBottom: 12 }}>⚑ Žádost o HO na tento den čeká na schválení.</div>;
         return <Btn warm={!isHO} primary={isHO} onClick={() => { requestHO(modal.day, !isHO); setModal(null); }} style={{ width: "100%", marginBottom: 12 }}>{isHO ? "🏠 Požádat o zrušení Home Office" : "🏠 Požádat o Home Office"}</Btn>; })()}
       <div style={{ fontSize: 12, color: "var(--tx3)", margin: "8px 0 6px", textTransform: "uppercase", letterSpacing: 1 }}>Nepřítomnost</div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>{ABS.map(a => <Btn key={a.id} onClick={() => { const d = modal.day; setModal(null); withHalf(a.id, p => addAbs(profile.id, d, a.id, p)); setResolveTarget({ day: d, kind: "absence", empId: profile.id }); }}>{a.icon} {a.label}</Btn>)}</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 16 }}>{ABS.filter(a => !a.hidden).map(a => <Btn key={a.id} onClick={() => { const d = modal.day; setModal(null); withHalf(a.id, (p, tt, tm) => addAbs(profile.id, d, tt || a.id, p, tm)); setResolveTarget({ day: d, kind: "absence", empId: profile.id }); }}>{a.icon} {a.label}</Btn>)}</div>
       {(() => { const me = cs[modal?.day]?.[modal?.shift]?.find(e => e.empId === profile.id); if (!me || me.ho) return null;
         return <><div style={{ fontSize: 12, color: "var(--tx3)", margin: "8px 0 6px", textTransform: "uppercase", letterSpacing: 1 }}>Změnit hodinu</div>
         <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>{SHIFTS.filter(s => s !== modal.shift).map(s => <Btn key={s} onClick={() => { setResolveTarget({ day: modal.day, kind: "shift", empId: profile.id, fromShift: modal.shift, toShift: s }); setModal(null); }} style={{ flex: 1 }}>{s}</Btn>)}</div></>; })()}
@@ -1637,11 +1651,12 @@ export default function App() {
       <NoteInput onSubmit={n => { saveNote(profile.id, modal.day, modal.shift, n); setModal(null); }} />
     </div></Modal>
     <Modal open={modal === "myabsence"} onClose={() => setModal(null)} title="Nepřítomnost">
-      <MyAbsF profile={profile} wd={wd} onSubmit={(d, t) => { setModal(null); withHalf(t, p => addAbs(profile.id, d, t, p)); setResolveTarget({ day: d, kind: "absence", empId: profile.id }); }} />
+      <MyAbsF profile={profile} wd={wd} onSubmit={(d, t) => { setModal(null); withHalf(t, (p, tt, tm) => addAbs(profile.id, d, tt || t, p, tm)); setResolveTarget({ day: d, kind: "absence", empId: profile.id }); }} />
       <div style={{ borderTop: "1px solid var(--brd)", marginTop: 16, paddingTop: 16 }}>
         <Btn ghost onClick={() => setModal("vacrange")} style={{ width: "100%", fontSize: 14 }}>🗓 Dovolená od — do (rozsah)</Btn>
       </div>
     </Modal>
+    <Modal open={!!docSel} onClose={() => setDocSel(null)} title="Lékař — celý den, nebo část?">{docSel && <DoctorF onPick={time => { const d = docSel; setDocSel(null); time ? d.run("time", "half_doctor", time) : d.run(null); }} />}</Modal>
     <Modal open={!!halfSel} onClose={() => setHalfSel(null)} title={halfSel ? `${ABS.find(a => a.id === halfSel.type)?.label} — která polovina?` : ""}>
       {halfSel && <div style={{ display: "grid", gap: 8 }}>
         <p style={{ fontSize: 13, color: "var(--tx2)", margin: "0 0 4px" }}>Člověk v rozvrhu zůstane a zároveň se objeví mezi nepřítomnými — s označením, kterou část dne chybí.</p>
@@ -1657,7 +1672,7 @@ export default function App() {
         </> : <>
           <p style={{ fontSize: 13, color: "var(--tx2)", marginTop: 0 }}>Vyber typ nepřítomnosti:</p>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-            {ABS.filter(a => a.id !== "half_ho").map(a => <Btn key={a.id} ghost onClick={() => { const sel = vacSel; setVacSel(null); withHalf(a.id, p => addAbsRange(sel.iso, sel.iso, a.id, sel.empId, p)); }} style={{ borderColor: a.color, color: a.color }}>{a.icon} {a.label}</Btn>)}
+            {ABS.filter(a => a.id !== "half_ho" && !a.hidden).map(a => <Btn key={a.id} ghost onClick={() => { const sel = vacSel; setVacSel(null); withHalf(a.id, (p, tt, tm) => addAbsRange(sel.iso, sel.iso, tt || a.id, sel.empId, p, tm)); }} style={{ borderColor: a.color, color: a.color }}>{a.icon} {a.label}</Btn>)}
           </div>
         </>}
       </>}

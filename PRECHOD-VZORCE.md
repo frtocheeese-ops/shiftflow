@@ -1234,3 +1234,26 @@ odhalí (ověřeno sabotáží: bez `--panel` test selže).
 - Testy: rozvrh (uložená směna pozorovatele se nepočítá do kanceláře), Tým (sekce,
   přepínač, admin bez karty), struktura (filtry, napojení), pravidla (člen nesmí, admin
   smí — běží na emulátoru v CI). 94 testů.
+
+---
+
+## Aktualizace v56 — Lékař: celý den, nebo část dne; Dovolená ukazuje všechny nepřítomnosti
+
+**Lékař část dne.** Po výběru „Lékař" (všech 5 míst zadání: formulář admina, vlastní
+nepřítomnost, akce u buňky, akce u dne, tabulka Dovolená) se otevře okno `DoctorF`:
+„Celý den" → typ `doctor` jako dosud; „Jen část dne" s časy od–do → typ `half_doctor`
+(v `ABS` s `hidden: true`, v nabídkách se nezobrazuje). Funguje jako půlden: člověk
+zůstává ve směně, záznam nese `halfTime` (např. „09:00–11:00"), `withDefaults` ho při
+přepočtu zachová, `HalfTag` ukáže 🏥 a čas. **Do pokrytí se počítá jako přítomný**
+(`dayStats`: krátká návštěva pokrytí neohrozí) — kvůli hodině u lékaře appka nenavrhuje
+přesuny. Do čerpání (sick/dovolená/whatever) se nepočítá.
+
+**Dovolená — všechny nepřítomnosti.** Tabulka dřív brala jen `vacation`/`half_vacation`,
+ostatní typy (Sick Day, Lékař, Whatever, Školení, Služební cesta) tiše přeskočila —
+odtud hlášení „Viktorovo volno 27. 11. v Dovolené chybí". Nově všechny typy kromě ½ HO,
+barva podle typu (`ABS.color`), půldny šikmo, v popisku typ a případně čas; legenda
+doplněna. **Počet dní v měsíci a čerpání dál jen z dovolené.**
+
+Testy: lékař část dne (zůstává, čas se zachová, počítá se do pokrytí; celodenní
+vyřadí), skrytý typ, ShiftCard ukáže čas, struktura (okno, 5 míst zadání, tabulka).
+98 testů.
