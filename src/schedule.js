@@ -66,7 +66,11 @@ export function applyRotations(entries, weekKey, rotations, absences, intake, in
     const find = id => { for (const sh of SHIFTS) { const i = (entries[day][sh] || []).findIndex(e => e.empId === id); if (i >= 0) return { sh, i, en: entries[day][sh][i] }; } return null; };
     const A = find(aId), B = find(bId);
     if (!A || !B) return;                                   // někdo chybí (absence/volno) → nerotujeme
-    if (!A.en.isDefault || !B.en.isDefault) return;          // ruční úprava má přednost
+    // Ruční úprava má přednost: ručně upravený zůstává, kde je. Druhý z dvojice ale jde na SVÉ
+    // rotační místo — dřív se vracel na stálý rozvrh, takže po ruční úpravě jednoho skončili
+    // oba ve stejné směně (10. 11. 2026: Andy ručně z HO do kanceláře → Lochman skočil z 8:00 na 10:00).
+    const manA = !A.en.isDefault, manB = !B.en.isDefault;
+    if (manA && manB) return;                                // oba ručně → rotace se v tom týdnu nepoužije
     if (isFullAbs((absences || {})[`${aId}__${day}`]) || isFullAbs((absences || {})[`${bId}__${day}`])) return; // půlden rotaci nevypíná
     const swapped = rotIsSwapped(weekKey, rot.anchor);
     const targetA = swapped ? shiftB : shiftA, targetB = swapped ? shiftA : shiftB;
@@ -78,13 +82,13 @@ export function applyRotations(entries, weekKey, rotations, absences, intake, in
     const hoZaklad = rot.ho !== false;
     const hoA = hoZaklad && (!jeNastup || vyjimka(aId));
     const hoB = hoZaklad && (!jeNastup || vyjimka(bId));
-    entries[day][A.sh] = entries[day][A.sh].filter(e => e.empId !== aId);
-    entries[day][B.sh] = entries[day][B.sh].filter(e => e.empId !== bId);
+    if (!manA) entries[day][A.sh] = entries[day][A.sh].filter(e => e.empId !== aId);
+    if (!manB) entries[day][B.sh] = entries[day][B.sh].filter(e => e.empId !== bId);
     if (!entries[day][targetA]) entries[day][targetA] = [];
     if (!entries[day][targetB]) entries[day][targetB] = [];
     const half = en => en.halfAbs ? { halfAbs: en.halfAbs, halfPart: en.halfPart || "first", ...(en.halfTime ? { halfTime: en.halfTime } : {}) } : {};
-    entries[day][targetA].push({ empId: aId, ho: hoA, isDefault: true, rot: true, ...half(A.en) });
-    entries[day][targetB].push({ empId: bId, ho: hoB, isDefault: true, rot: true, ...half(B.en) });
+    if (!manA) entries[day][targetA].push({ empId: aId, ho: hoA, isDefault: true, rot: true, ...half(A.en) });
+    if (!manB) entries[day][targetB].push({ empId: bId, ho: hoB, isDefault: true, rot: true, ...half(B.en) });
   });
   return entries;
 }
@@ -92,9 +96,23 @@ export function applyRotations(entries, weekKey, rotations, absences, intake, in
 /* Doplní do uloženého týdne členy, kteří v něm ještě nefigurují (typicky nový kolega,
    který přišel až po materializaci týdne) — podle jejich stálého rozvrhu.
    JEDINÝ zdroj pravdy pro mřížku, engine, návrhy i statistiky, aby se nerozcházely. */
+// Pojistka: člověk smí být v jednom dni jen jednou. Kdyby ho uložená data obsahovala vícekrát
+// (chybný nebo zdvojený zápis), ponechá se jeden záznam — přednost má ruční úprava, pak první.
+export function dedupeDays(merged) {
+  DAYS.forEach(day => {
+    const keep = {};
+    SHIFTS.forEach(sh => (merged[day]?.[sh] || []).forEach((en, i) => {
+      const k = keep[en.empId];
+      if (!k || (k.en.isDefault && !en.isDefault)) keep[en.empId] = { sh, i, en };
+    }));
+    SHIFTS.forEach(sh => { if (merged[day]?.[sh]) merged[day][sh] = merged[day][sh].filter((en, i) => keep[en.empId].sh === sh && keep[en.empId].i === i); });
+  });
+  return merged;
+}
 export function withDefaults(entries, absences, emps, weekKey, rotations, intake, intakeAllow) {
   const merged = entries ? dc(entries) : buildDef(emps);
   DAYS.forEach(day => { if (!merged[day]) merged[day] = {}; SHIFTS.forEach(sh => { if (!merged[day][sh]) merged[day][sh] = []; }); });
+  dedupeDays(merged);
   // Minulé týdny jsou historie — ty se aktuálním stálým rozvrhem nepřepisují (jinak by se
   // měnily i odpracované směny ve statistikách). Obnovuje se jen tento a budoucí týdny.
   const isPast = weekKey && weekKey < localISO(getMon(new Date()));
@@ -257,7 +275,9 @@ export function analyzeWeek(cs, absences, employees, rulesIn, intake = {}, intak
 export function applyAlt(s, alt) {
   if (alt.kind === "pullHO") {
     let en = null;
-    SHIFTS.forEach(sh => { const arr = s[alt.day]?.[sh]; if (!arr) return; const i = arr.findIndex(e => e.empId === alt.empId && e.ho); if (i >= 0) en = arr.splice(i, 1)[0]; });
+    // Odebrat KAŽDÝ záznam člověka v tom dni (ne jen HO): druhé provedení téhož návrhu
+    // (dvojité klepnutí, dvě zařízení) ho dřív nenašlo a přidalo podruhé (16. 11. 2026: Stibor 2×).
+    SHIFTS.forEach(sh => { const arr = s[alt.day]?.[sh]; if (!arr) return; for (let i = arr.length - 1; i >= 0; i--) if (arr[i].empId === alt.empId) { const [x] = arr.splice(i, 1); if (!en || x.ho) en = x; } });
     if (!en) en = { empId: alt.empId };
     en.ho = false; en.isDefault = false;
     if (!s[alt.day]) s[alt.day] = {}; if (!s[alt.day][alt.toShift]) s[alt.day][alt.toShift] = [];

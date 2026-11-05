@@ -1257,3 +1257,27 @@ doplněna. **Počet dní v měsíci a čerpání dál jen z dovolené.**
 Testy: lékař část dne (zůstává, čas se zachová, počítá se do pokrytí; celodenní
 vyřadí), skrytý typ, ShiftCard ukáže čas, struktura (okno, 5 míst zadání, tabulka).
 98 testů.
+
+---
+
+## Aktualizace v57 — rotace po ruční úpravě, zdvojený člověk ve dni
+
+Diagnostika na skutečných datech (jednorázově, šifrovaně — repozitář je veřejný; větev
+`diag-data` po použití smazána):
+
+**1. 10. 11. 2026 Andy i Lochman na 10:00.** Rotace (Út, Andy/Lochman) správně dala
+Lochmana na 8:00 HO, Andyho na 10:00 HO. Admin pak Andyho ručně přepnul do kanceláře
+(stejný čas). Pravidlo „ruční úprava jednoho z dvojice rotaci vypne" vrátilo Lochmana
+na STÁLÝ rozvrh (Út 10:00) → oba na 10:00, na 8:00 nikdo z dvojice.
+**Oprava (`applyRotations`):** ručně upravený zůstává, kde je; druhý z dvojice jde na
+SVÉ rotační místo. Rotace se nepoužije jen tehdy, jsou-li ručně upravení oba.
+
+**2. 16. 11. 2026 Olda Stibor 2× na 10:00.** Přijetí návrhu `pullHO` (z HO do kanceláře)
+hledalo člověka jen mezi HO záznamy; druhé provedení téhož návrhu (dvojité klepnutí /
+dvě zařízení) ho nenašlo a přidalo nový záznam. **Oprava (`applyAlt`):** odebere každý
+záznam člověka v dni, pak přidá jeden → opakované provedení nic nezdvojí.
+**Pojistka (`dedupeDays` ve `withDefaults`):** člověk je v dni jen jednou (přednost
+ruční úprava) — opraví i již uložená zdvojená data bez ručního zásahu.
+
+Testy: rotace (sabotáží ověřeno, že staré chování test odhalí), deduplikace, dvojí
+provedení návrhu. 101 testů.

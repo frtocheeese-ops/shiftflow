@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   SHIFTS, DAYS, buildDef, personalOf, withDefaults, applyRotations, rotIsSwapped,
-  dayStats, analyzeWeek, applyAlt, getMon, localISO, computeFairness, ABS,
+  dayStats, analyzeWeek, applyAlt, getMon, localISO, computeFairness, ABS, dedupeDays,
 } from "./schedule.js";
 import { TEAM_WEEK } from "./test-fixtures.mjs";
 
@@ -253,4 +253,34 @@ test("typ Lékař (část dne) je v nabídkách skrytý — vybírá se přes L�
   const h = ABS.find(a => a.id === "half_doctor");
   assert.ok(h && h.hidden === true);
   assert.ok(ABS.filter(a => !a.hidden).some(a => a.id === "doctor"));
+});
+
+test("rotace: ručně upravený zůstává, druhý z dvojice jde na své rotační místo (nevrací se na stálý rozvrh)", () => {
+  // W0 (neprohozený): rotačně Lochman 08:00 HO, Andy 10:00 HO; Lochmanův stálý rozvrh je ale Út 10:00.
+  // Admin ručně dá Andyho do kanceláře (stejný čas) → Lochman musí zůstat na 08:00, ne skočit na stálé 10:00.
+  const stored = empty();
+  stored["Út"]["10:00"].push({ empId: "andy", ho: false, isDefault: false, rot: true });
+  stored["Út"]["08:00"].push({ empId: "loch", ho: true, isDefault: true, rot: true });
+  const w = withDefaults(stored, {}, pair(), W0, ROT);
+  const a = find(w, "Út", "andy"), l = find(w, "Út", "loch");
+  assert.equal(a.sh, "10:00"); assert.equal(a.e.ho, false);                   // ruční úprava zůstala
+  assert.equal(l.sh, "08:00"); assert.equal(l.e.ho, true);                     // Lochman nezůstal na stálém 10:00
+});
+
+test("duplicita: člověk je v dni jen jednou, přednost má ruční úprava", () => {
+  const m = empty();
+  m.Po["08:00"].push({ empId: "a", isDefault: true });
+  m.Po["10:00"].push({ empId: "a", isDefault: false }, { empId: "a", isDefault: false }, { empId: "b", isDefault: true });
+  dedupeDays(m);
+  const all = SHIFTS.flatMap(sh => m.Po[sh].map(e => [sh, e.empId]));
+  assert.deepEqual(all.filter(([, id]) => id === "a"), [["10:00", "a"]]);
+  assert.equal(m.Po["10:00"].filter(e => e.empId === "b").length, 1);
+});
+
+test("přijetí návrhu z HO do kanceláře dvakrát po sobě člověka nezdvojí", () => {
+  const s = empty(); s.Po["08:00"].push({ empId: "a", ho: true, isDefault: true });
+  const alt = { kind: "pullHO", day: "Po", empId: "a", toShift: "10:00" };
+  applyAlt(s, alt); applyAlt(s, alt);
+  assert.equal(s.Po["10:00"].filter(e => e.empId === "a").length, 1);
+  assert.equal(s.Po["08:00"].length, 0); assert.equal(s.Po["10:00"][0].ho, false);
 });
