@@ -51,7 +51,7 @@ samostatných chyb (viz PRECHOD-VZORCE.md v16, v18, v20, v21, v28).
 
 ## Invarianty (to, co musí vždy platit)
 
-1. **Ruční úprava má přednost.** Záznam s `isDefault: false` se nikdy nepřepíše stálým
+1. **Ruční úprava má přednost.** Záznam s `isDefault: false` se nikdy nepřepíše stálým U rotace: ručně upravený zůstává, druhý z dvojice jde na své rotační místo (ne na stálý rozvrh). Člověk je v jednom dni vždy jen jednou (`dedupeDays`).
    rozvrhem ani rotací.
 2. **Celodenní vs. půldenní absence.** Celodenní absence člověka ze dne vyřadí. Půlden
    (`half_*`) ho ve směně **nechá** a označí (`halfAbs`, `halfPart`). Rozlišuje `isFullAbs()`.
